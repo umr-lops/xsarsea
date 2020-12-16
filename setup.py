@@ -7,7 +7,7 @@ setup(
     url='https://gitlab.ifremer.fr/sarlib/xsarsea',
     use_scm_version=True,
     setup_requires=['setuptools_scm'],
-    install_requires=[],
+    install_requires=['numpy'],
     license='GPL',
     author='Olivier Archer',
     author_email='Olivier.Archer@ifremer.fr',
