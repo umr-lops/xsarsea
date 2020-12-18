@@ -7,7 +7,8 @@ Welcome to xsarsea's documentation!
 =====================================
 
 .. automodule:: xsarsea
-    :members:
+   :members:
+   :ignore-module-all:
 
 .. toctree::
    :maxdepth: 2

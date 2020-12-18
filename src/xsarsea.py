@@ -1,5 +1,3 @@
-__all__ = ["__version__", "cmodIfr2"]
-
 import logging
 from pkg_resources import get_distribution
 import numpy as np
@@ -18,7 +16,7 @@ def cmodIfr2(wind_speed, wind_dir, inc_angle):
     wind_speed : float or numpy-like
         wind speed (m/s)
     wind_dir : float or numpy-like
-        wind dir (deg)
+        wind dir, relative to antenna ?? (deg)
     inc_angle : float or numpy-like
         inc angle (deg)
 
@@ -117,3 +115,26 @@ def cmodIfr2(wind_speed, wind_dir, inc_angle):
     b0 = np.power(10.0, (ALPH + BETA * np.sqrt(wind)))
     sig = b0 * (1.0 + b1 * cosi + np.tanh(b2) * cos2i)
     return sig
+
+
+def sigma0_detrend(sigma0, inc_angle, wind_speed_gmf=10, wind_dir_gmf=45):
+    """compute `sigma0_detrend` from `sigma0` and `inc_angle`
+
+    Parameters
+    ----------
+    sigma0 : numpy-like
+        linear sigma0
+    inc_angle : numpy-like
+        incidence angle (deg). Must be same shape as `sigma0`
+    wind_speed_gmf : int, optional
+        wind speed (m/s) used by gmf, by default 10
+    wind_dir_gmf : int, optional
+        wind dir (deg relative to antenna) used by , by default 45
+
+    Returns
+    -------
+    numpy-like
+        sigma0 detrend.
+    """
+    sigma0_gmf = cmodIfr2(wind_speed_gmf, wind_dir_gmf, inc_angle)
+    return np.sqrt(sigma0 / (sigma0_gmf / np.nanmean(sigma0_gmf)))
