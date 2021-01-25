@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 setup(
     name='xsarsea',
     package_dir={'': 'src'},
-    packages=find_packages(),
+    packages=find_packages('src'),
     url='https://gitlab.ifremer.fr/sarlib/xsarsea',
     use_scm_version=True,
     setup_requires=['setuptools_scm'],
