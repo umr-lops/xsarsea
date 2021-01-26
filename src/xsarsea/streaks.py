@@ -1,3 +1,10 @@
+"""
+implemented from:
+'W. Koch, "Directional analysis of SAR images aiming at wind direction," IEEE Trans. Geosci. Remote Sens., vol. 42, no. 4, pp. 702-710, 2004.'
+https://ieeexplore.ieee.org/document/1288365
+https://www.climate-service-center.de/imperia/md/content/gkss/institut_fuer_kuestenforschung/ksd/paper/kochw_ieee_2004.pdf
+"""
+
 import numpy as np
 from scipy import signal
 import xarray as xr
@@ -47,6 +54,7 @@ def localGrad(I):
     Parameters
     ----------
     I: xarray.DataArray with dims['atrack', 'xtrack']
+        ( from ref article, it's should be 100m resolution )
 
     Returns
     -------
@@ -72,6 +80,7 @@ def localGrad(I):
         I.data.map_overlap(convolve2d, in2=D, depth={'atrack': D.shape[0], 'xtrack': D.shape[0]}, boundary='symm'),
         dims=("atrack", "xtrack"), coords={"atrack": I.atrack, "xtrack": I.xtrack})
     grad.name = 'grad'
+    grad = grad.persist()  # persist into memory, to speedup depending vars computations
     grad12 = grad ** 2  # squared
     grad12.name = 'grad12'
     grad2 = R2(grad12, {'atrack': 2, 'xtrack': 2})
