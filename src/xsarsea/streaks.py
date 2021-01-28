@@ -10,6 +10,7 @@ from scipy import signal
 import xarray as xr
 import dask.array as da
 import warnings
+import numba
 
 #  check map_overlap convolve vs numpy convolve  (memory++ !). TODO: will be deprecated once fixed.
 check_convolve = False
@@ -115,3 +116,53 @@ def localGrad(I):
     c.name = 'c'
 
     return grad, grad12, grad2, grad3, c
+
+
+def _grad_hist_one_box(g2, c, angles_bins, grads):
+    """
+    internal function that compute histogram from localGrad for only on small box.
+    this function will be converted to gufunc by numba.
+
+    Parameters
+    ----------
+    g2: numpy.ndarray
+        2D array of g2 values from localGrad
+    c: numpy.ndarray
+        2D array of g2 values from localGrad
+    angles_bins: numpy.ndarray
+        1D array of regulary spaced angles from ]-180,  180[
+    grads: numpy.ndarray
+        *returned* 1D array with same shape as angles_bins, with histogram values
+    """
+    c_ravel = c.ravel()
+    g2_ravel = g2.ravel()
+    theta = np.arctan2(g2_ravel.imag, g2_ravel.real)
+
+    # weighted gradients classes
+    degree = np.degrees(theta)
+
+    # so given an angle deg, the corresponding index in angles_bin is np.round((deg-angles_start)/angles_step)
+    angles_step = angles_bins[1] - angles_bins[0]
+    angles_start = angles_bins[0]
+
+    grads[:] = np.complex128(0)
+
+    r = np.abs(g2_ravel) / (np.abs(g2_ravel) + np.median(np.abs(g2_ravel)) + 0.00001)
+    r[r > 1] = 0
+    for j in range(0, len(degree)):
+        deg = degree[j]
+        if not np.isnan(deg) and not np.isnan(r[j]) and not np.isnan(c_ravel[j]) and np.abs(
+                g2_ravel[j]) != 0:  # evite d avoir des NaN
+            # k is the deg index in angles_bins
+            k = int(np.round((deg - angles_start) / angles_step))
+
+            grads[k] = grads[k] + r[j] * c_ravel[j] * g2_ravel[j] / np.abs(g2_ravel[j])
+            # print('k %s for deg %s' % (k, deg))
+            # print('grads[%d]=%f' % (k, grads[k]))
+            print(c_ravel[j])
+
+# gufunc version of  _grad_hist_one_box that works one many boxes
+# g2 and c have shape like [ x, y, bx, by], where bx and by are box shape
+_grad_hist_gufunc = numba.guvectorize([(numba.complex128[:,:], numba.float64[:,:], numba.float64[:], numba.complex128[:])], '(n,m),(n,m),(p)->(p)',nopython=True)(grad_hist)
+
+
