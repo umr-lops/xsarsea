@@ -9,6 +9,10 @@ import numpy as np
 from scipy import signal
 import xarray as xr
 import dask.array as da
+import warnings
+
+#  check map_overlap convolve vs numpy convolve  (memory++ !). TODO: will be deprecated once fixed.
+check_convolve = False
 
 
 def R2(image, reduc):
@@ -27,23 +31,41 @@ def R2(image, reduc):
     """
 
     B2 = np.mat('[1,2,1; 2,4,2; 1,2,1]', float) * 1 / 16
+    B2 = np.array(B2)
     B4 = signal.convolve(B2, B2)
-    depth = {'atrack': B2.shape[0], 'xtrack': B2.shape[0]}
+    depth = {'atrack': B4.shape[0], 'xtrack': B4.shape[1]}
     dataarray = lambda x: xr.DataArray(x, dims=("atrack", "xtrack"),
                                        coords={"atrack": image.atrack, "xtrack": image.xtrack})
 
-    def convolve2d(in1=None, in2=None):
-        return signal.convolve2d(in1, in2, mode='same', boundary='symm')
+    # we will call this function instead of signal.convolve2d,
+    # because there is a conflict on `boundary` kwargs with map_overlap
+    def convolve2d(in1=None, in2=None, mode='same'):
+        return signal.convolve2d(in1, in2, mode=mode, boundary='symm')
 
-    _image = dataarray(image.data.map_overlap(convolve2d, in2=B4, depth=depth, boundary=np.nan))
-    num = dataarray(da.ones_like(_image).map_overlap(convolve2d, in2=B4, depth=depth, boundary=np.nan))
+    # pre smooth
+    _image = dataarray(image.data.map_overlap(convolve2d, in2=B2, depth=depth, boundary=0))
+    num = dataarray(da.ones_like(_image).map_overlap(convolve2d, in2=B2, depth=depth, boundary=1))
     image = _image / num
 
+    if check_convolve:  # TODO: remove after fix
+        # we check convolve2d called by map_overlap vs numpy
+        num = num.persist()
+        num_overlap = num.values
+        num_numpy = convolve2d(np.ones_like(_image), B4)
+        bool_diff = num_numpy != num_overlap
+        if np.count_nonzero(bool_diff) == 0:
+            warnings.warn('check convolve2d map_overlap vs numpy ok')
+        else:
+            raise RuntimeError('check convolve2d map_overlap vs numpy failed')
+
+    # resample
     image = image.coarsen(reduc, boundary='pad').mean()
-    _image = dataarray(image.data.map_overlap(convolve2d, in2=B2, depth=depth, boundary=np.nan))
-    num = dataarray(da.ones_like(_image).map_overlap(convolve2d, in2=B2, depth=depth, boundary=np.nan))
 
+    # post-smooth
+    _image = dataarray(image.data.map_overlap(convolve2d, in2=B2, depth=depth, boundary=0))
+    num = dataarray(da.ones_like(_image).map_overlap(convolve2d, in2=B2, depth=depth, boundary=1))
     image = _image / num
+
     return image
 
 
@@ -89,7 +111,7 @@ def localGrad(I):
     grad3.name = 'grad3'
     # grad quality
     c = abs(grad2) / (grad3 + 0.00001)
-    c = c.where(c > 1).fillna(0)
+    c = c.where(c <= 1).fillna(0)
     c.name = 'c'
 
     return grad, grad12, grad2, grad3, c
