@@ -12,9 +12,38 @@ import dask.array as da
 import warnings
 import numba
 
-#  check map_overlap convolve vs numpy convolve  (memory++ !). TODO: will be deprecated once fixed.
-check_convolve = False
+# map_overlap convolve vs numpy convolve  (memory++ !). TODO: will be deprecated once fixed.
+dask_convolve = True
 
+def convolve2d(in1, in2, boundary='symm', fillvalue=0, dask=dask_convolve):
+    """
+    wrapper around scipy.signal.convolve2d for in1 as xarray.DataArray
+    mode is forced to 'same', so axes are not changed.
+    """
+
+    try:
+        _ = in1.data.map_overlap
+        parallel = True
+    except:
+        parallel = False
+
+    # dict mapping boundary convolve to map_overlap option
+    boundary_map = {
+        'symm' : 'reflect',
+        'wrap' : 'periodic',
+        'fill' : fillvalue
+    }
+
+    res = in1.copy()
+    if parallel and dask:
+        # wrapper so every args except in1 are by default
+        def _conv2d(in1,in2=in2,mode='same', boundary=boundary, fillvalue=fillvalue):
+            return signal.convolve2d(in1, in2, mode=mode, boundary=boundary)
+        res.data = in1.data.map_overlap(_conv2d, in2.shape, boundary=boundary_map[boundary])
+    else:
+        res.data = signal.convolve2d(in1.data, in2, mode='same', boundary=boundary)
+
+    return res
 
 def R2(image, reduc, dask=False):
     """
@@ -34,63 +63,22 @@ def R2(image, reduc, dask=False):
     B2 = np.mat('[1,2,1; 2,4,2; 1,2,1]', float) * 1 / 16
     B2 = np.array(B2)
     B4 = signal.convolve(B2, B2)
-    depth = {'atrack': B4.shape[0], 'xtrack': B4.shape[1]}
-    dataarray = lambda x, i: xr.DataArray(x, dims=("atrack", "xtrack"),
-                                       coords={"atrack": i.atrack, "xtrack": i.xtrack})
+    ones_like = lambda x: xr.DataArray(da.ones_like(x), dims=x.dims,
+                                       coords=x.coords)
 
-    # we will call this function instead of signal.convolve2d,
-    # because there is a conflict on `boundary` kwargs with map_overlap
-    def convolve2d(in1=None, in2=None, mode='same'):
-        return signal.convolve2d(in1, in2, mode=mode, boundary='symm')
-
-    def apply_convolve2d_dask(in1=None, in2=None, depth=0, boundary=0):
-        return in1.map_overlap(convolve2d, in2=in2, depth=depth, boundary=boundary)
-
-    def apply_convolve2d_nodask(in1=None, in2=None, depth=0, boundary=0):
-        in1 = in1.compute()
-        res = convolve2d(in1, in2)
-        return res
-
-    if not dask:
-        apply_convolve2d = apply_convolve2d_nodask
-    else:
-        apply_convolve2d = apply_convolve2d_dask
-
-
-    image_da = da.array(image.data)
 
     # pre smooth
-    _image_da = apply_convolve2d(image_da, B4, depth=depth, boundary=0)
-    num_da = apply_convolve2d(da.ones_like(_image_da), B4, depth=depth, boundary=1)
-    #_image = dataarray(image.data.map_overlap(convolve2d, in2=B4, depth=depth, boundary=0))
-    #num = dataarray(da.ones_like(_image).map_overlap(convolve2d, in2=B4, depth=depth, boundary=1))
-    image_da = _image_da / num_da
-
-    if check_convolve:  # TODO: remove after fix
-        # we check convolve2d called by map_overlap vs numpy
-        num_da = num_da.persist()
-        num_overlap = num_da.values
-        num_numpy = convolve2d(np.ones_like(_image_da), B4)
-        bool_diff = num_numpy != num_overlap
-        if np.count_nonzero(bool_diff) == 0:
-            warnings.warn('check convolve2d map_overlap vs numpy ok')
-        else:
-            raise RuntimeError('check convolve2d map_overlap vs numpy failed')
-
-    image.data = da.array(image_da)
+    _image = convolve2d(image, B4, boundary='symm')
+    num = convolve2d(ones_like(_image), B4, boundary='symm')
+    image = _image / num
 
     # resample
     image = image.coarsen(reduc, boundary='pad').mean()
 
     # post-smooth
-    image_da = da.array(image.data)
-    _image_da = apply_convolve2d(image_da, B2, depth=depth, boundary=0)
-    num_da = apply_convolve2d(da.ones_like(_image_da), B2, depth=depth, boundary=1)
-    #_image = dataarray(image.data.map_overlap(convolve2d, in2=B2, depth=depth, boundary=0))
-    #num = dataarray(da.ones_like(_image).map_overlap(convolve2d, in2=B2, depth=depth, boundary=1))
-    image_da = _image_da / num_da
-
-    image.data = da.array(image_da)
+    _image = convolve2d(image, B2, boundary='symm')
+    num = convolve2d(ones_like(_image), B2, boundary='symm')
+    image = _image / num
 
     return image
 
