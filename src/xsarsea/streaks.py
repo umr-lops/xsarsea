@@ -15,6 +15,7 @@ import numba
 # map_overlap convolve vs numpy convolve  (memory++ !). TODO: will be deprecated once fixed.
 dask_convolve = True
 
+
 def convolve2d(in1, in2, boundary='symm', fillvalue=0, dask=dask_convolve):
     """
     wrapper around scipy.signal.convolve2d for in1 as xarray.DataArray
@@ -29,21 +30,23 @@ def convolve2d(in1, in2, boundary='symm', fillvalue=0, dask=dask_convolve):
 
     # dict mapping boundary convolve to map_overlap option
     boundary_map = {
-        'symm' : 'reflect',
-        'wrap' : 'periodic',
-        'fill' : fillvalue
+        'symm': 'reflect',
+        'wrap': 'periodic',
+        'fill': fillvalue
     }
 
     res = in1.copy()
     if parallel and dask:
         # wrapper so every args except in1 are by default
-        def _conv2d(in1,in2=in2,mode='same', boundary=boundary, fillvalue=fillvalue):
+        def _conv2d(in1, in2=in2, mode='same', boundary=boundary, fillvalue=fillvalue):
             return signal.convolve2d(in1, in2, mode=mode, boundary=boundary)
+
         res.data = in1.data.map_overlap(_conv2d, in2.shape, boundary=boundary_map[boundary])
     else:
         res.data = signal.convolve2d(in1.data, in2, mode='same', boundary=boundary)
 
     return res
+
 
 def R2(image, reduc, dask=False):
     """
@@ -65,7 +68,6 @@ def R2(image, reduc, dask=False):
     B4 = signal.convolve(B2, B2)
     ones_like = lambda x: xr.DataArray(da.ones_like(x), dims=x.dims,
                                        coords=x.coords)
-
 
     # pre smooth
     _image = convolve2d(image, B4, boundary='symm')
@@ -170,12 +172,62 @@ def _grad_hist_one_box(g2, c, angles_bins, grads):
             k = int(np.round((deg - angles_start) / angles_step))
 
             grads[k] = grads[k] + r[j] * c_ravel[j] * g2_ravel[j] / np.abs(g2_ravel[j])
-            # print('k %s for deg %s' % (k, deg))
-            # print('grads[%d]=%f' % (k, grads[k]))
-            print(c_ravel[j])
+
 
 # gufunc version of  _grad_hist_one_box that works one many boxes
 # g2 and c have shape like [ x, y, bx, by], where bx and by are box shape
-_grad_hist_gufunc = numba.guvectorize([(numba.complex128[:,:], numba.float64[:,:], numba.float64[:], numba.complex128[:])], '(n,m),(n,m),(p)->(p)',nopython=True)(_grad_hist_one_box)
+_grad_hist_gufunc = numba.guvectorize(
+    [(numba.complex128[:, :], numba.float64[:, :], numba.float64[:], numba.complex128[:])], '(n,m),(n,m),(p)->(p)',
+    nopython=True)(_grad_hist_one_box)
 
 
+def grad_hist(g2, c, window, n_angles=72):
+    """
+    compute gradient histogram from g2 and c by n_angles bins
+
+    Parameters
+    ----------
+    g2: xarray.DataArray
+        2D array from localGrad
+    c: xarray.DataArray
+        2D array from localGrad, same shape as g2
+    window: dict
+        window size ie {'atrack': 40, 'xtrack': 40}
+    n_angles: angles bins count
+
+    Returns
+    -------
+    xarray.DataArray
+        shape will be reduced by window size, and an 'angle' dim will be added (of size n_angles)
+
+    """
+
+    angles_bins = np.linspace(-180, 180, n_angles + 1)  # one extra bin
+    angles_bins = (angles_bins[1:] + angles_bins[:-1]) / 2  # supress extra bin (middle)
+
+    # make a rolling dataset with window
+    window_dims = {k: "k_%s" % k for k in window.keys()}
+    ds = xr.merge([g2.rename('g2'), c.rename('c')]).rolling(window, center=True).construct(window_dims).sel(
+        {k: slice(window[k] // 2, None, window[k]) for k in window.keys()})
+
+    # FIXME: hard to make xr.apply_ufunc works with dask. If ok, following will be not required
+    ds = ds.persist()
+    ds = ds.compute()
+
+    hist = xr.apply_ufunc(
+        _grad_hist_gufunc, ds['g2'], ds['c'], angles_bins,
+        input_core_dims=[window_dims.values(), window_dims.values(), "angles"],
+        exclude_dims=set(window_dims.values()),
+        output_core_dims=[['angles']],
+        # doesn't works with dask
+        #dask='parallelized',
+        # dask_gufunc_kwargs={
+        #    'output_sizes': {
+        #        'angles': angles_bins.size
+        #    }
+        #},
+        #output_dtypes=[np.float64]
+    )
+    hist = hist.rename('angles_hist').assign_coords(angles=angles_bins)
+
+    return hist
