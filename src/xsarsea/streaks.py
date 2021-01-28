@@ -16,7 +16,7 @@ import numba
 check_convolve = False
 
 
-def R2(image, reduc):
+def R2(image, reduc, dask=False):
     """
     resample image by factor
 
@@ -35,37 +35,62 @@ def R2(image, reduc):
     B2 = np.array(B2)
     B4 = signal.convolve(B2, B2)
     depth = {'atrack': B4.shape[0], 'xtrack': B4.shape[1]}
-    dataarray = lambda x: xr.DataArray(x, dims=("atrack", "xtrack"),
-                                       coords={"atrack": image.atrack, "xtrack": image.xtrack})
+    dataarray = lambda x, i: xr.DataArray(x, dims=("atrack", "xtrack"),
+                                       coords={"atrack": i.atrack, "xtrack": i.xtrack})
 
     # we will call this function instead of signal.convolve2d,
     # because there is a conflict on `boundary` kwargs with map_overlap
     def convolve2d(in1=None, in2=None, mode='same'):
         return signal.convolve2d(in1, in2, mode=mode, boundary='symm')
 
+    def apply_convolve2d_dask(in1=None, in2=None, depth=0, boundary=0):
+        return in1.map_overlap(convolve2d, in2=in2, depth=depth, boundary=boundary)
+
+    def apply_convolve2d_nodask(in1=None, in2=None, depth=0, boundary=0):
+        in1 = in1.compute()
+        res = convolve2d(in1, in2)
+        return res
+
+    if not dask:
+        apply_convolve2d = apply_convolve2d_nodask
+    else:
+        apply_convolve2d = apply_convolve2d_dask
+
+
+    image_da = da.array(image.data)
+
     # pre smooth
-    _image = dataarray(image.data.map_overlap(convolve2d, in2=B2, depth=depth, boundary=0))
-    num = dataarray(da.ones_like(_image).map_overlap(convolve2d, in2=B2, depth=depth, boundary=1))
-    image = _image / num
+    _image_da = apply_convolve2d(image_da, B4, depth=depth, boundary=0)
+    num_da = apply_convolve2d(da.ones_like(_image_da), B4, depth=depth, boundary=1)
+    #_image = dataarray(image.data.map_overlap(convolve2d, in2=B4, depth=depth, boundary=0))
+    #num = dataarray(da.ones_like(_image).map_overlap(convolve2d, in2=B4, depth=depth, boundary=1))
+    image_da = _image_da / num_da
 
     if check_convolve:  # TODO: remove after fix
         # we check convolve2d called by map_overlap vs numpy
-        num = num.persist()
-        num_overlap = num.values
-        num_numpy = convolve2d(np.ones_like(_image), B4)
+        num_da = num_da.persist()
+        num_overlap = num_da.values
+        num_numpy = convolve2d(np.ones_like(_image_da), B4)
         bool_diff = num_numpy != num_overlap
         if np.count_nonzero(bool_diff) == 0:
             warnings.warn('check convolve2d map_overlap vs numpy ok')
         else:
             raise RuntimeError('check convolve2d map_overlap vs numpy failed')
 
+    image.data = da.array(image_da)
+
     # resample
     image = image.coarsen(reduc, boundary='pad').mean()
 
     # post-smooth
-    _image = dataarray(image.data.map_overlap(convolve2d, in2=B2, depth=depth, boundary=0))
-    num = dataarray(da.ones_like(_image).map_overlap(convolve2d, in2=B2, depth=depth, boundary=1))
-    image = _image / num
+    image_da = da.array(image.data)
+    _image_da = apply_convolve2d(image_da, B2, depth=depth, boundary=0)
+    num_da = apply_convolve2d(da.ones_like(_image_da), B2, depth=depth, boundary=1)
+    #_image = dataarray(image.data.map_overlap(convolve2d, in2=B2, depth=depth, boundary=0))
+    #num = dataarray(da.ones_like(_image).map_overlap(convolve2d, in2=B2, depth=depth, boundary=1))
+    image_da = _image_da / num_da
+
+    image.data = da.array(image_da)
 
     return image
 
@@ -163,6 +188,6 @@ def _grad_hist_one_box(g2, c, angles_bins, grads):
 
 # gufunc version of  _grad_hist_one_box that works one many boxes
 # g2 and c have shape like [ x, y, bx, by], where bx and by are box shape
-_grad_hist_gufunc = numba.guvectorize([(numba.complex128[:,:], numba.float64[:,:], numba.float64[:], numba.complex128[:])], '(n,m),(n,m),(p)->(p)',nopython=True)(grad_hist)
+_grad_hist_gufunc = numba.guvectorize([(numba.complex128[:,:], numba.float64[:,:], numba.float64[:], numba.complex128[:])], '(n,m),(n,m),(p)->(p)',nopython=True)(_grad_hist_one_box)
 
 
