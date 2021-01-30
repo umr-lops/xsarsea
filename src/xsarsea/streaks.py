@@ -41,6 +41,11 @@ def convolve2d(in1, in2, boundary='symm', fillvalue=0, dask=dask_convolve):
         def _conv2d(in1, in2=in2, mode='same', boundary=boundary, fillvalue=fillvalue):
             return signal.convolve2d(in1, in2, mode=mode, boundary=boundary)
 
+        # make sure the smallest in1 chunk size is >= in2.shape.
+        min_in1_chunk = tuple([min(c) for c in in1.chunks])
+        if np.min(np.array(min_in1_chunk) - np.array(in2.shape)) < 0:
+            in1.data = in1.data.rechunk(chunks=[int(np.median(c)) for c in in1.chunks], balance=True)
+
         res.data = in1.data.map_overlap(_conv2d, in2.shape, boundary=boundary_map[boundary])
     else:
         res.data = signal.convolve2d(in1.data, in2, mode='same', boundary=boundary)
@@ -220,13 +225,13 @@ def grad_hist(g2, c, window, n_angles=72):
         exclude_dims=set(window_dims.values()),
         output_core_dims=[['angles']],
         # doesn't works with dask
-        #dask='parallelized',
-        # dask_gufunc_kwargs={
-        #    'output_sizes': {
-        #        'angles': angles_bins.size
-        #    }
-        #},
-        #output_dtypes=[np.float64]
+        dask='parallelized',
+        dask_gufunc_kwargs={
+            'output_sizes': {
+                'angles': angles_bins.size
+            }
+        },
+        output_dtypes=[np.complex128]
     )
     hist = hist.rename('angles_hist').assign_coords(angles=angles_bins)
 
