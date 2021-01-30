@@ -159,7 +159,7 @@ def _grad_hist_one_box(g2, c, angles_bins, grads):
     theta = np.arctan2(g2_ravel.imag, g2_ravel.real)
 
     # weighted gradients classes
-    degree = np.degrees(theta)
+    degree = np.degrees(theta) - 180
 
     # so given an angle deg, the corresponding index in angles_bin is np.round((deg-angles_start)/angles_step)
     angles_step = angles_bins[1] - angles_bins[0]
