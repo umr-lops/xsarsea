@@ -53,7 +53,7 @@ def convolve2d(in1, in2, boundary='symm', fillvalue=0, dask=dask_convolve):
     return res
 
 
-def R2(image, reduc, dask=False):
+def R2(image, reduc):
     """
     resample image by factor
 
@@ -236,3 +236,43 @@ def grad_hist(g2, c, window, n_angles=72):
     hist = hist.rename('angles_hist').assign_coords(angles=angles_bins)
 
     return hist
+
+
+def grad_hist_smooth(hist):
+    """
+    Smooth hist returned by grad_hist with kernels Bx Bx2 Bx4 Bx8.
+    Histogram coordinates are angles, so begin and end are circulary wrapped.
+
+    Parameters
+    ----------
+    hist: xarray.DatArray, with 'angles' dim.
+
+    Returns
+    -------
+    xarray.DataArray
+      same as hist, but smoothed.
+
+    """
+    Bx = np.array([1, 2, 1], float) * 1 / 4
+    Bx2 = np.array([1, 0, 2, 0, 1], float) * 1 / 4
+    Bx4 = np.array([1, 0, 0, 0, 2, 0, 0, 0, 1], float) * 1 / 4
+    Bx8 = np.array([1, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 1], float) * 1 / 4
+    Bs = [Bx, Bx2, Bx4, Bx8]
+
+    # circular wrap
+    maxsize_B = max([len(B) for B in Bs])
+    smooth_hist = hist.pad({'angles': maxsize_B}, mode='wrap')
+
+    for B in Bs:
+        smooth_hist = xr.apply_ufunc(
+            signal.convolve, smooth_hist, B, kwargs={'mode': 'same'},
+            input_core_dims=[["angles"], ["kernel_len"]],
+            output_core_dims=[['angles']],
+            vectorize=True,
+            output_dtypes=[np.complex128])
+
+    # unwrap
+    smooth_hist = smooth_hist.isel(angles=slice(maxsize_B, -maxsize_B))
+
+    return smooth_hist
+
