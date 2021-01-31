@@ -16,6 +16,56 @@ import numba
 dask_convolve = True
 
 
+def streaks_direction(sigma0_detrend):
+    """
+
+    Parameters
+    ----------
+    sigma0_detrend: xarray.DataArray
+        detrended sigma0, at 100m resolution (I1 in Koch(2004))
+
+    Returns
+    -------
+    xarray.DataArray
+        streaks direction, in range [-180,180], at 16km resolution.
+        0 deg is azimuth satelite track (not north)
+
+    Notes
+    -----
+        100m resolution `sigma0_detrend` is not checked.
+        Koch(2004) say it should be 100m
+
+
+    """
+
+    sigma0_detrend = sigma0_detrend.fillna(0).clip(0, None)
+
+    # lower the resolution by a factor 2, without moire effects
+    i2 = R2(sigma0_detrend, {'atrack': 2, 'xtrack': 2})
+    i2 = i2.fillna(0).clip(0, None)
+
+    ampl = np.sqrt(i2)
+    G1, G12, G2, G3, c = localGrad(ampl)
+
+    hist = grad_hist(G2, c, window={'atrack': 40, 'xtrack': 40}, n_angles=72)
+
+    smooth_hist = grad_hist_smooth(hist)
+
+    grad_dir = find_gradient(smooth_hist)
+
+    # streaks dir is orthogonal to gradient dir
+    streaks_dir = 90 - grad_dir
+
+    # streaks dir is only defined on [-180,180] range (ie no arrow head)
+    streaks_dir = xr.where(streaks_dir >= 0, streaks_dir - 90, streaks_dir + 90) % 360 - 180
+
+    # many computations where done to compute streaks_dir.
+    # it's small, so we can persist it into memory to speed up future computation
+    streaks_dir = streaks_dir.persist()
+
+    return streaks_dir
+
+
 def convolve2d(in1, in2, boundary='symm', fillvalue=0, dask=dask_convolve):
     """
     wrapper around scipy.signal.convolve2d for in1 as xarray.DataArray
