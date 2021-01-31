@@ -16,12 +16,12 @@ import numba
 dask_convolve = True
 
 
-def streaks_direction(sigma0_detrend):
+def streaks_direction(sigma0):
     """
 
     Parameters
     ----------
-    sigma0_detrend: xarray.DataArray
+    sigma0: xarray.DataArray
         detrended sigma0, at 100m resolution (I1 in Koch(2004))
 
     Returns
@@ -38,10 +38,24 @@ def streaks_direction(sigma0_detrend):
 
     """
 
-    sigma0_detrend = sigma0_detrend.fillna(0).clip(0, None)
+    if 'pol' in sigma0.dims:
+        streaks_dir_list = []
+        for pol in sigma0.pol:
+            streaks_dir_list.append(_streaks_direction_by_pol(sigma0.sel(pol=pol))
+                                    .assign_coords({'pol': pol}))
+        streaks_dir = xr.concat(streaks_dir_list, 'pol')
+    else:
+        streaks_dir = _streaks_direction_by_pol(sigma0)
+    return streaks_dir
+
+
+def _streaks_direction_by_pol(sigma0):
+    # internal vectorized function, see streaks_direction
+
+    sigma0 = sigma0.fillna(0).clip(0, None)
 
     # lower the resolution by a factor 2, without moire effects
-    i2 = R2(sigma0_detrend, {'atrack': 2, 'xtrack': 2})
+    i2 = R2(sigma0, {'atrack': 2, 'xtrack': 2})
     i2 = i2.fillna(0).clip(0, None)
 
     ampl = np.sqrt(i2)
