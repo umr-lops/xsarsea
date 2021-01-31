@@ -8,7 +8,7 @@ logger = logging.getLogger("xsarsea")
 logger.addHandler(logging.NullHandler())
 
 
-def cmodIfr2(wind_speed, wind_dir, inc_angle):
+def cmodIfr2(wind_speed, wind_dir, inc_angle, subsample=True):
     """get nrcs from wind speed, dir, and inc angle
 
     Parameters
@@ -19,6 +19,10 @@ def cmodIfr2(wind_speed, wind_dir, inc_angle):
         wind dir, relative to antenna ?? (deg)
     inc_angle : float or numpy-like
         inc angle (deg)
+    subsample:
+        if True (by default), and inc_angle is an xarray.DataArray with dim ('atrack','xtrack'),
+        inc_angle will be subsampled, then cmodIfr2 reinterpolated to original size.
+        subsampling give good quality cmod if inc_angle are close from each other.
 
     Returns
     -------
@@ -26,6 +30,21 @@ def cmodIfr2(wind_speed, wind_dir, inc_angle):
         simulated nrcs (linear)
     """
     # wind_speed = vent_fictif(wind_speed)
+
+    if subsample:
+        inc_angle_ori = inc_angle
+
+        try:
+            # cmodIfr2 doesn't need high resolution.
+            # lower resolution is faster
+            inc_angle_lr = inc_angle.interp(
+                atrack=np.linspace(inc_angle.atrack[0], inc_angle.atrack[-1], 400),
+                xtrack=np.linspace(inc_angle.xtrack[0], inc_angle.xtrack[-1], 400))
+        except:
+            inc_angle_lr = None
+
+        if inc_angle_lr is not None:
+            inc_angle = inc_angle_lr
 
     C = np.zeros(26)
 
@@ -86,8 +105,8 @@ def cmodIfr2(wind_speed, wind_dir, inc_angle):
     pt2 = 2 * tetanor * pt1 - pt0
     # pt3 = 2 * tetanor * pt2 - pt1
     b1 = C[8] + C[9] * pv1 \
-        + (C[10] + C[11] * pv1) * pt1 \
-        + (C[12] + C[13] * pv1) * pt2
+         + (C[10] + C[11] * pv1) * pt1 \
+         + (C[12] + C[13] * pv1) * pt2
     tetamin = 18.0
     tetamax = 58.0
     tetanor = (2.0 * T - (tetamin + tetamax)) / (tetamax - tetamin)
@@ -103,17 +122,21 @@ def cmodIfr2(wind_speed, wind_dir, inc_angle):
     pt2 = 2 * tetanor * pt1 - pt0
     # pt3 = 2 * tetanor * pt2 - pt1
     result = (
-        C[14]
-        + C[15] * pt1
-        + C[16] * pt2
-        + (C[17] + C[18] * pt1 + C[19] * pt2) * pv1
-        + (C[20] + C[21] * pt1 + C[22] * pt2) * pv2
-        + (C[23] + C[24] * pt1 + C[25] * pt2) * pv3
+            C[14]
+            + C[15] * pt1
+            + C[16] * pt2
+            + (C[17] + C[18] * pt1 + C[19] * pt2) * pv1
+            + (C[20] + C[21] * pt1 + C[22] * pt2) * pv2
+            + (C[23] + C[24] * pt1 + C[25] * pt2) * pv3
     )
     b2 = result
 
     b0 = np.power(10.0, (ALPH + BETA * np.sqrt(wind)))
     sig = b0 * (1.0 + b1 * cosi + np.tanh(b2) * cos2i)
+
+    if subsample and inc_angle_lr is not None:
+        # retinterp to original resolution
+        sig = sig.interp(atrack=inc_angle_ori.atrack, xtrack=inc_angle_ori.xtrack)
     return sig
 
 
@@ -136,5 +159,7 @@ def sigma0_detrend(sigma0, inc_angle, wind_speed_gmf=10, wind_dir_gmf=45):
     numpy-like
         sigma0 detrend.
     """
+
     sigma0_gmf = cmodIfr2(wind_speed_gmf, wind_dir_gmf, inc_angle)
+
     return np.sqrt(sigma0 / (sigma0_gmf / np.nanmean(sigma0_gmf)))
