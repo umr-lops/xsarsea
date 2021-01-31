@@ -269,20 +269,22 @@ def grad_hist(g2, c, window, n_angles=72):
     ds = ds.persist()
     ds = ds.compute()
 
-    hist = xr.apply_ufunc(
-        _grad_hist_gufunc, ds['g2'], ds['c'], angles_bins,
-        input_core_dims=[window_dims.values(), window_dims.values(), "angles"],
-        exclude_dims=set(window_dims.values()),
-        output_core_dims=[['angles']],
-        # doesn't works with dask
-        dask='parallelized',
-        dask_gufunc_kwargs={
-            'output_sizes': {
-                'angles': angles_bins.size
-            }
-        },
-        output_dtypes=[np.complex128]
-    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        hist = xr.apply_ufunc(
+            _grad_hist_gufunc, ds['g2'], ds['c'], angles_bins,
+            input_core_dims=[window_dims.values(), window_dims.values(), "angles"],
+            exclude_dims=set(window_dims.values()),
+            output_core_dims=[['angles']],
+            # doesn't works with dask
+            dask='parallelized',
+            dask_gufunc_kwargs={
+                'output_sizes': {
+                    'angles': angles_bins.size
+                }
+            },
+            output_dtypes=[np.complex128]
+        )
     hist = hist.rename('angles_hist').assign_coords(angles=angles_bins)
 
     return hist
