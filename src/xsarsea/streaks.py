@@ -10,11 +10,9 @@ from scipy import signal
 import xarray as xr
 import dask.array as da
 import warnings
-import numba
 
 # map_overlap convolve vs numpy convolve  (memory++ !). TODO: will be deprecated once fixed.
 dask_convolve = True
-
 
 def streaks_direction(sigma0):
     """
@@ -76,7 +74,7 @@ def _streaks_direction_by_pol(sigma0):
 
     # many computations where done to compute streaks_dir.
     # it's small, so we can persist it into memory to speed up future computation
-    streaks_dir = streaks_dir.persist()
+    # streaks_dir = streaks_dir.persist()
 
     return streaks_dir
 
@@ -188,7 +186,7 @@ def localGrad(I):
         I.data.map_overlap(convolve2d, in2=D, depth={'atrack': D.shape[0], 'xtrack': D.shape[0]}, boundary='symm'),
         dims=("atrack", "xtrack"), coords={"atrack": I.atrack, "xtrack": I.xtrack})
     grad.name = 'grad'
-    grad = grad.persist()  # persist into memory, to speedup depending vars computations
+    # grad = grad.persist()  # persist into memory, to speedup depending vars computations
     grad12 = grad ** 2  # squared
     grad12.name = 'grad12'
     grad2 = R2(grad12, {'atrack': 2, 'xtrack': 2})
@@ -246,10 +244,19 @@ def _grad_hist_one_box(g2, c, angles_bins, grads):
 
 # gufunc version of  _grad_hist_one_box that works one many boxes
 # g2 and c have shape like [ x, y, bx, by], where bx and by are box shape
-_grad_hist_gufunc = numba.guvectorize(
-    [(numba.complex128[:, :], numba.float64[:, :], numba.float64[:], numba.complex128[:])], '(n,m),(n,m),(p)->(p)',
-    nopython=True)(_grad_hist_one_box)
-
+if False:
+    # FIXME : dask has a bug with numba on distributed cluster
+    # once fixed uptream, numba could be reactivated here
+    # see https://github.com/dask/distributed/issues/3450 and https://github.com/numba/numba/pull/6234
+    import numba
+    _grad_hist_gufunc = numba.guvectorize(
+        [(numba.complex128[:, :], numba.float64[:, :], numba.float64[:], numba.complex128[:])], '(n,m),(n,m),(p)->(p)',
+        nopython=True)(_grad_hist_one_box)
+else:
+    def _grad_hist_gufunc(g2, c, angles_bins):
+        grads = angles_bins.astype(np.complex128)
+        _grad_hist_one_box(g2, c, angles_bins, grads)
+        return grads
 
 def grad_hist(g2, c, window, n_angles=72):
     """
@@ -275,20 +282,24 @@ def grad_hist(g2, c, window, n_angles=72):
     angles_bins = np.linspace(-180, 180, n_angles + 1)  # one extra bin
     angles_bins = (angles_bins[1:] + angles_bins[:-1]) / 2  # supress extra bin (middle)
 
-    # make a rolling dataset with window
-    # FIXME: .compute() is here to avoid small chunks, and fix xr.apply_ufunc with dask
     window_dims = {k: "k_%s" % k for k in window.keys()}
-    ds = xr.merge([g2.rename('g2'), c.rename('c')]).compute().rolling(window, center=True).construct(window_dims).sel(
+    ds = xr.merge([g2.rename('g2'), c.rename('c')])
+
+    # allow automatic rechunk
+    # hopefully, chunks will be larger than window size (FIXME)
+    ds = ds.chunk({n: None for n in window.keys()})
+
+    ds_box = ds.rolling(window, center=True).construct(window_dims).sel(
         {k: slice(window[k] // 2, None, window[k]) for k in window.keys()})
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)
         hist = xr.apply_ufunc(
-            _grad_hist_gufunc, ds['g2'], ds['c'], angles_bins,
-            input_core_dims=[window_dims.values(), window_dims.values(), "angles"],
+            _grad_hist_gufunc, ds_box['g2'], ds_box['c'], angles_bins,
+            input_core_dims=[window_dims.values(), window_dims.values(), ["angles"]],
             exclude_dims=set(window_dims.values()),
             output_core_dims=[['angles']],
-            # doesn't works with dask
+            vectorize=True,  # FIXME should be False once _grad_hist_gufunc is a numba gufunc (see above)
             dask='parallelized',
             dask_gufunc_kwargs={
                 'output_sizes': {
@@ -329,11 +340,19 @@ def grad_hist_smooth(hist):
 
     for B in Bs:
         smooth_hist = xr.apply_ufunc(
-            signal.convolve, smooth_hist, B, kwargs={'mode': 'same'},
+            signal.convolve, smooth_hist.chunk({'angles': -1}), B, kwargs={'mode': 'same'},
             input_core_dims=[["angles"], ["kernel_len"]],
             output_core_dims=[['angles']],
             vectorize=True,
-            output_dtypes=[np.complex128])
+            output_dtypes=[np.complex128],
+            dask='parallelized',
+            #dask_gufunc_kwargs={
+            #    'output_sizes': {
+            #        'angles': angles_bins.size
+            #    }
+            #},
+            #output_dtypes=[np.complex128]
+        )
 
     # unwrap
     smooth_hist = smooth_hist.isel(angles=slice(maxsize_B, -maxsize_B))
