@@ -20,8 +20,8 @@ import xsarsea
 
 project = 'xsarsea'
 copyright = '2020, Ifremer LOPS/SIAM'
-author = 'Olivier Archer, Alexandre Le Vieux'
-version = xsarsea.__version__
+author = 'Olivier Archer, Alexandre Levieux'
+version = xsarsea.xsarsea.__version__
 
 # -- General configuration ---------------------------------------------------
 
