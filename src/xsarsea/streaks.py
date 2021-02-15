@@ -11,9 +11,6 @@ import xarray as xr
 import dask.array as da
 import warnings
 
-# map_overlap convolve vs numpy convolve  (memory++ !). TODO: will be deprecated once fixed.
-dask_convolve = True
-
 def streaks_direction(sigma0):
     """
 
@@ -35,7 +32,6 @@ def streaks_direction(sigma0):
 
 
     """
-
     if 'pol' in sigma0.dims:
         streaks_dir_list = []
         for pol in sigma0.pol:
@@ -79,7 +75,7 @@ def _streaks_direction_by_pol(sigma0):
     return streaks_dir
 
 
-def convolve2d(in1, in2, boundary='symm', fillvalue=0, dask=dask_convolve):
+def convolve2d(in1, in2, boundary='symm', fillvalue=0, dask=True):
     """
     wrapper around scipy.signal.convolve2d for in1 as xarray.DataArray
     mode is forced to 'same', so axes are not changed.
@@ -107,9 +103,13 @@ def convolve2d(in1, in2, boundary='symm', fillvalue=0, dask=dask_convolve):
         # make sure the smallest in1 chunk size is >= in2.shape.
         min_in1_chunk = tuple([min(c) for c in in1.chunks])
         if np.min(np.array(min_in1_chunk) - np.array(in2.shape)) < 0:
-            in1.data = in1.data.rechunk(chunks=[int(np.median(c)) for c in in1.chunks], balance=True)
-
-        res.data = in1.data.map_overlap(_conv2d, in2.shape, boundary=boundary_map[boundary])
+            raise IndexError("""Some chunks are too small (%s).
+            all chunks must be >= %s.
+            Tip : you use `xsar.open_dataset` try to pass `chunks={'atrack' : %d , 'xtrack': %d}`
+            (if you hit this message several times, multiply the value by the previous ones)
+            You can also to .compute() the variable before convolve2d 
+            """ % (str(in1.chunks), str(in2.shape), in2.shape[0], in2.shape[1]))
+        res.data = in1.data.map_overlap(_conv2d, depth=in2.shape, boundary=boundary_map[boundary])
     else:
         res.data = signal.convolve2d(in1.data, in2, mode='same', boundary=boundary)
 
@@ -143,7 +143,7 @@ def R2(image, reduc):
     image = _image / num
 
     # resample
-    image = image.coarsen(reduc, boundary='pad').mean()
+    image = image.coarsen(reduc, boundary='trim').mean()
 
     # post-smooth
     _image = convolve2d(image, B2, boundary='symm')
@@ -284,13 +284,19 @@ def grad_hist(g2, c, window, n_angles=72):
 
     window_dims = {k: "k_%s" % k for k in window.keys()}
     ds = xr.merge([g2.rename('g2'), c.rename('c')])
-
-    # allow automatic rechunk
-    # hopefully, chunks will be larger than window size (FIXME)
-    ds = ds.chunk({n: None for n in window.keys()})
-
-    ds_box = ds.rolling(window, center=True).construct(window_dims).sel(
-        {k: slice(window[k] // 2, None, window[k]) for k in window.keys()})
+    try:
+        ds_box = ds.rolling(window, center=True).construct(window_dims).sel(
+            {k: slice(window[k] // 2, None, window[k]) for k in window.keys()})
+    except ValueError as e:
+        # too small chunk. adapt message from rolling to usefull infos
+        minchunk = { d:  g2.chunks[g2.get_axis_num(d)] for d in window.keys() }
+        minwin = { d: window[d] // 2 for d in window.keys()}
+        raise ValueError("""Some chunks are too small (%s).
+            all chunks must be >= %s.
+            Tip : if you use `xsar.open_dataset` try to pass `chunks={'atrack' : %d , 'xtrack': %d}`
+            (if you hit this message several times, multiply the value by the previous ones)
+            You can also to .compute() the variable before convolve2d 
+            """ % (((str(minchunk)) , str(minwin)) + (tuple(minwin.values()))) )
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)
