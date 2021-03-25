@@ -4,11 +4,11 @@ cmod, detrend, and others sar processing tools over ocean.
 
 # Instalation
 
-xsar_sea need [xsarlib](https://gitlab.ifremer.fr/sarlib/saroumane/-/blob/develop/README.md)  instalation
+xsar_sea need [xsar](https://gitlab.ifremer.fr/sarlib/saroumane/-/blob/develop/README.md)  instalation
 
 now you can install xsarsea
 
-```onda activate xsar```
+```conda activate xsar```
 
 for user:
 ```
