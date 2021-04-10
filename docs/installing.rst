@@ -13,13 +13,15 @@ Before installing, be sure to activate the xsar conda environement:
 
     conda activate xsar
 
-user instalation:
+user instalation
+................
 
 .. code-block:: shell
 
     pip install git+https://gitlab.ifremer.fr/sarlib/xsarsea.git
 
-developement installation:
+developement installation
+.........................
 
 .. code-block:: shell
 
@@ -28,10 +30,10 @@ developement installation:
     pip install -e .
     pip install -r requirements.txt
 
-Update xsar
-###########
+Update xsarsea
+##############
 
-To update xsar installation, just rerun `pip install`, in yout already activated conda environment.
+To update xsar installation, just rerun `pip install`, in your already activated conda environment.
 
 .. code-block:: shell
 
