@@ -89,7 +89,7 @@ html_theme_options = {
 # If true, links to the reST sources are added to the pages.
 html_show_sourcelink = False
 
-nbsphinx_execute = 'always'
+# nbsphinx_execute = 'always'
 
 nbsphinx_prolog = """
 Download this notebook from gitlab_.

@@ -14,23 +14,23 @@ Documentation
 Getting Started
 ...............
 
-* :doc:`installing`
-* :doc:`examples`
+:doc:`installing`
+~~~~~~~~~~~~~~~~~
 
 Examples
 ........
 
-Followings examples show how to:
+Those examples show how to:
     * `Detrend sigma0`_ (also called *roughness* or *nice display*)
-    * `Wind streaks direction`_ (⚠️work in progress⚠)
-
+    * `Wind streaks direction`_ (⚠️work in progress ⚠️)
 
 * :doc:`examples/xsarsea`
 
 Help & Reference
 ................
 
-* :doc:`basic_api`
+:doc:`basic_api`
+~~~~~~~~~~~~~~~~
 
 Get in touch
 ------------
@@ -48,7 +48,6 @@ Last documentation build: |today|
    :caption: Getting Started
 
    installing
-   examples
 
 .. toctree::
    :maxdepth: 3
