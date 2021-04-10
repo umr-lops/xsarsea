@@ -31,7 +31,10 @@ version = xsarsea.xsarsea.__version__
 extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.napoleon',
-    'sphinx_rtd_theme'
+    'sphinx_rtd_theme',
+    'nbsphinx',
+    'jupyter_sphinx',
+    'sphinxcontrib.programoutput'
 ]
 
 # order by source
@@ -69,7 +72,31 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 # html_theme = 'alabaster'
 html_theme = 'sphinx_rtd_theme'
 
+html_style = 'css/xsarsea.css'
+
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
+
+html_theme_options = {
+    'logo_only': False,
+    'display_version': True,
+    'navigation_depth': 4,  # FIXME: doesn't work as expeted: should expand side menu
+    'collapse_navigation': False # FIXME: same as above
+}
+
+# If true, links to the reST sources are added to the pages.
+html_show_sourcelink = False
+
+nbsphinx_execute = 'always'
+
+nbsphinx_prolog = """
+Download this notebook from gitlab_.
+
+.. _gitlab: https://gitlab.ifremer.fr/sarlib/xsarsea/-/tree/develop/docs/{{ env.doc2path(env.docname, base=False) }}
+
+----
+"""
+
+today_fmt = '%b %d %Y at %H:%M'

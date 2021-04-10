@@ -2,6 +2,9 @@
 # for mandatory packages, see setup.py
 # https://packaging.python.org/discussions/install-requires-vs-requirements/
 jupyter
+jupyter_contrib_nbextensions
 sphinx
 numpydoc
 sphinx-rtd-theme
+nbsphinx
+jupyter-sphinx
