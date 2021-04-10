@@ -25,7 +25,7 @@ Followings examples show how to:
     * `Wind streaks direction`_ (⚠️work in progress⚠)
 
 
-* :doc:`examples/detrend`
+* :doc:`examples/xsarsea`
 
 Help & Reference
 ................
@@ -55,7 +55,7 @@ Last documentation build: |today|
    :hidden:
    :caption: Examples
 
-   examples/detrend
+   examples/xsarsea
 
 .. toctree::
    :maxdepth: 1
@@ -67,5 +67,5 @@ Last documentation build: |today|
 .. _xarray: http://xarray.pydata.org
 .. _gitLab: https://gitlab.ifremer.fr/sarlib/xsarsea
 .. _xsar: https://cyclobs.ifremer.fr/static/sarwing_datarmor/xsar
-.. _Detrend sigma0: examples/detrend.ipynb#Sigma0-detrending
-.. _Wind streaks direction: examples/detrend.ipynb#Wind-streaks-direction
+.. _Detrend sigma0: examples/xsarsea.ipynb#Sigma0-detrending
+.. _Wind streaks direction: examples/xsarsea.ipynb#Wind-streaks-direction
