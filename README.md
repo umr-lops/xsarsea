@@ -4,7 +4,7 @@ cmod, detrend, and others sar processing tools over ocean.
 
 # Instalation
 
-xsar_sea need [xsar](https://gitlab.ifremer.fr/sarlib/saroumane/-/blob/develop/README.md)  instalation
+xsarsea is best used with  [xsar](https://github.com/oarcher/xsar) 
 
 now you can install xsarsea
 
@@ -12,12 +12,12 @@ now you can install xsarsea
 
 for user:
 ```
-pip install git+https://gitlab.ifremer.fr/sarlib/xsarsea.git
+pip install git+https://github.com/oarcher/xsarsea.git
 ```
 
 for developement:
 ```
-git clone https://gitlab.ifremer.fr/sarlib/xsarsea.git
+pip install git+https://github.com/oarcher/xsarsea.git
 cd xsarsea
 pip install -r requirements.txt
 pip install -e .
