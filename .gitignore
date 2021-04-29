@@ -131,11 +131,6 @@ tmp/
 .vscode/
 
 #.idea/
-/.idea/deployment.xml
-/.idea/dictionaries/oarcher.xml
-/.idea/misc.xml
-/.idea/other.xml
-/.idea/inspectionProfiles/profiles_settings.xml
-/.idea/shelf/
-/.idea/workspace.xml
+/.idea/
+
 dask-worker-space/
