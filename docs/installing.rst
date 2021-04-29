@@ -18,14 +18,14 @@ user instalation
 
 .. code-block:: shell
 
-    pip install git+https://gitlab.ifremer.fr/sarlib/xsarsea.git
+    pip install git+https://github.com/oarcher/xsarsea.git
 
 developement installation
 .........................
 
 .. code-block:: shell
 
-    git clone https://gitlab.ifremer.fr/sarlib/xsarsea.git
+    git clone https://github.com/oarcher/xsarsea.git
     cd xsarsea
     pip install -e .
     pip install -r requirements.txt
@@ -37,7 +37,7 @@ To update xsar installation, just rerun `pip install`, in your already activated
 
 .. code-block:: shell
 
-    pip install -U git+https://gitlab.ifremer.fr/sarlib/xsarsea.git
+    pip install -U git+https://github.com/oarcher/xsarsea.git
 
 
 .. _xsar: https://cyclobs.ifremer.fr/static/sarwing_datarmor/xsar
