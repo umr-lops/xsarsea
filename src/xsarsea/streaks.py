@@ -10,6 +10,7 @@ from scipy import signal
 import xarray as xr
 import dask.array as da
 import warnings
+import numba
 
 def streaks_direction(sigma0):
     """
@@ -32,6 +33,8 @@ def streaks_direction(sigma0):
 
 
     """
+    # will work in-memory for numba ufunc
+    sigma0 = sigma0.compute()
     if 'pol' in sigma0.dims:
         streaks_dir_list = []
         for pol in sigma0.pol:
@@ -68,10 +71,6 @@ def _streaks_direction_by_pol(sigma0):
     # streaks dir is only defined on [-180,180] range (ie no arrow head)
     streaks_dir = xr.where(streaks_dir >= 0, streaks_dir - 90, streaks_dir + 90) % 360 - 180
 
-    # many computations where done to compute streaks_dir.
-    # it's small, so we can persist it into memory to speed up future computation
-    # streaks_dir = streaks_dir.persist()
-
     return streaks_dir
 
 
@@ -105,10 +104,7 @@ def convolve2d(in1, in2, boundary='symm', fillvalue=0, dask=True):
         if np.min(np.array(min_in1_chunk) - np.array(in2.shape)) < 0:
             raise IndexError("""Some chunks are too small (%s).
             all chunks must be >= %s.
-            Tip : you use `xsar.open_dataset` try to pass `chunks={'atrack' : %d , 'xtrack': %d}`
-            (if you hit this message several times, multiply the value by the previous ones)
-            You can also to .compute() the variable before convolve2d 
-            """ % (str(in1.chunks), str(in2.shape), in2.shape[0], in2.shape[1]))
+            """ % (str(in1.chunks), str(in2.shape)))
         res.data = in1.data.map_overlap(_conv2d, depth=in2.shape, boundary=boundary_map[boundary])
     else:
         res.data = signal.convolve2d(in1.data, in2, mode='same', boundary=boundary)
@@ -134,8 +130,11 @@ def R2(image, reduc):
     B2 = np.mat('[1,2,1; 2,4,2; 1,2,1]', float) * 1 / 16
     B2 = np.array(B2)
     B4 = signal.convolve(B2, B2)
-    ones_like = lambda x: xr.DataArray(da.ones_like(x), dims=x.dims,
-                                       coords=x.coords)
+    try:
+        image.data.map_overlap
+        ones_like = lambda x: xr.DataArray(da.ones_like(x), dims=x.dims, coords=x.coords)
+    except:
+        ones_like = xr.ones_like
 
     # pre smooth
     _image = convolve2d(image, B4, boundary='symm')
@@ -178,15 +177,9 @@ def localGrad(I):
     i = complex(0, 1)
     D = Dx + i * Dy
 
-    def convolve2d(in1=None, in2=None):
-        return signal.convolve2d(in1, in2, mode='same', boundary='symm')
-
     # local gradient
-    grad = xr.DataArray(
-        I.data.map_overlap(convolve2d, in2=D, depth={'atrack': D.shape[0], 'xtrack': D.shape[0]}, boundary='symm'),
-        dims=("atrack", "xtrack"), coords={"atrack": I.atrack, "xtrack": I.xtrack})
+    grad = convolve2d(in1=I,in2=D)
     grad.name = 'grad'
-    # grad = grad.persist()  # persist into memory, to speedup depending vars computations
     grad12 = grad ** 2  # squared
     grad12.name = 'grad12'
     grad2 = R2(grad12, {'atrack': 2, 'xtrack': 2})
@@ -244,19 +237,10 @@ def _grad_hist_one_box(g2, c, angles_bins, grads):
 
 # gufunc version of  _grad_hist_one_box that works one many boxes
 # g2 and c have shape like [ x, y, bx, by], where bx and by are box shape
-if False:
-    # FIXME : dask has a bug with numba on distributed cluster
-    # once fixed uptream, numba could be reactivated here
-    # see https://github.com/dask/distributed/issues/3450 and https://github.com/numba/numba/pull/6234
-    import numba
-    _grad_hist_gufunc = numba.guvectorize(
-        [(numba.complex128[:, :], numba.float64[:, :], numba.float64[:], numba.complex128[:])], '(n,m),(n,m),(p)->(p)',
-        nopython=True)(_grad_hist_one_box)
-else:
-    def _grad_hist_gufunc(g2, c, angles_bins):
-        grads = angles_bins.astype(np.complex128)
-        _grad_hist_one_box(g2, c, angles_bins, grads)
-        return grads
+_grad_hist_gufunc = numba.guvectorize(
+    [(numba.complex128[:, :], numba.float64[:, :], numba.float64[:], numba.complex128[:])], '(n,m),(n,m),(p)->(p)',
+    nopython=True)(_grad_hist_one_box)
+
 
 def grad_hist(g2, c, window, n_angles=72):
     """
@@ -292,11 +276,8 @@ def grad_hist(g2, c, window, n_angles=72):
         minchunk = { d:  g2.chunks[g2.get_axis_num(d)] for d in window.keys() }
         minwin = { d: window[d] // 2 for d in window.keys()}
         raise ValueError("""Some chunks are too small (%s).
-            all chunks must be >= %s.
-            Tip : if you use `xsar.open_dataset` try to pass `chunks={'atrack' : %d , 'xtrack': %d}`
-            (if you hit this message several times, multiply the value by the previous ones)
-            You can also to .compute() the variable before convolve2d 
-            """ % (((str(minchunk)) , str(minwin)) + (tuple(minwin.values()))) )
+            all chunks must be >= %s. 
+            """ % (str(minchunk) , str(minwin)))
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)
@@ -305,13 +286,7 @@ def grad_hist(g2, c, window, n_angles=72):
             input_core_dims=[window_dims.values(), window_dims.values(), ["angles"]],
             exclude_dims=set(window_dims.values()),
             output_core_dims=[['angles']],
-            vectorize=True,  # FIXME should be False once _grad_hist_gufunc is a numba gufunc (see above)
-            dask='parallelized',
-            dask_gufunc_kwargs={
-                'output_sizes': {
-                    'angles': angles_bins.size
-                }
-            },
+            vectorize=False,
             output_dtypes=[np.complex128]
         )
     hist = hist.rename('angles_hist').assign_coords(angles=angles_bins)
@@ -346,18 +321,11 @@ def grad_hist_smooth(hist):
 
     for B in Bs:
         smooth_hist = xr.apply_ufunc(
-            signal.convolve, smooth_hist.chunk({'angles': -1}), B, kwargs={'mode': 'same'},
+            signal.convolve, smooth_hist, B, kwargs={'mode': 'same'},
             input_core_dims=[["angles"], ["kernel_len"]],
             output_core_dims=[['angles']],
             vectorize=True,
             output_dtypes=[np.complex128],
-            dask='parallelized',
-            #dask_gufunc_kwargs={
-            #    'output_sizes': {
-            #        'angles': angles_bins.size
-            #    }
-            #},
-            #output_dtypes=[np.complex128]
         )
 
     # unwrap
