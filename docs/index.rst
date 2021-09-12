@@ -26,6 +26,8 @@ Those examples show how to:
 
 * :doc:`examples/xsarsea`
 
+* :doc:`examples/streaks`
+
 Help & Reference
 ................
 
@@ -35,7 +37,7 @@ Help & Reference
 Get in touch
 ------------
 
-- Report bugs, suggest features or view the source code on `gitLab`_.
+- Report bugs, suggest features or view the source code on `github`_.
 
 ----------------------------------------------
 
@@ -55,6 +57,7 @@ Last documentation build: |today|
    :caption: Examples
 
    examples/xsarsea
+   examples/streaks
 
 .. toctree::
    :maxdepth: 1
@@ -64,7 +67,7 @@ Last documentation build: |today|
    basic_api
 
 .. _xarray: http://xarray.pydata.org
-.. _gitLab: https://gitlab.ifremer.fr/sarlib/xsarsea
+.. _github: https://github.com/umr-lops/xsarsea
 .. _xsar: https://cyclobs.ifremer.fr/static/sarwing_datarmor/xsar
 .. _Detrend sigma0: examples/xsarsea.ipynb#Sigma0-detrending
-.. _Wind streaks direction: examples/xsarsea.ipynb#Wind-streaks-direction
+.. _Wind streaks direction: examples/streaks.ipynb#Streaks-analysis

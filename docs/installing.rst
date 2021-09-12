@@ -18,14 +18,15 @@ user instalation
 
 .. code-block:: shell
 
-    pip install git+https://github.com/oarcher/xsarsea.git
+    conda install -c conda-forge opencv
+    pip install git+https://github.com/umr-lops/xsarsea.git
 
 developement installation
 .........................
 
 .. code-block:: shell
 
-    git clone https://github.com/oarcher/xsarsea.git
+    git clone https://github.com/umr-lops/xsarsea.git
     cd xsarsea
     pip install -e .
     pip install -r requirements.txt

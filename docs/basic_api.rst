@@ -8,8 +8,8 @@ sigma0_detrend
 .. automodule:: xsarsea
     :members: sigma0_detrend
 
-streaks_direction
-=================
+gradients
+=========
 
-.. automodule:: xsarsea.streaks
-    :members: streaks_direction
+.. automodule:: xsarsea.gradients
+    :members: Gradients, MultiGradients, MultiGradientsViewer

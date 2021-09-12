@@ -8,3 +8,5 @@ numpydoc
 sphinx-rtd-theme
 nbsphinx
 jupyter-sphinx
+holoviews
+panel
