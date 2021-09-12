@@ -38,7 +38,7 @@ To update xsar installation, just rerun `pip install`, in your already activated
 
 .. code-block:: shell
 
-    pip install -U git+https://github.com/oarcher/xsarsea.git
+    pip install -U git+https://github.com/umr-lops/xsarsea.git
 
 
 .. _xsar: https://cyclobs.ifremer.fr/static/sarwing_datarmor/xsar

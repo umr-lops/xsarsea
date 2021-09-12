@@ -4,7 +4,7 @@ cmod, detrend, and others sar processing tools over ocean.
 
 # Instalation
 
-xsarsea is best used with  [xsar](https://github.com/oarcher/xsar) 
+xsarsea is best used with  [xsar](https://github.com/umr-lops/xsar) 
 
 now you can install xsarsea
 
@@ -12,12 +12,12 @@ now you can install xsarsea
 
 for user:
 ```
-pip install git+https://github.com/oarcher/xsarsea.git
+pip install git+https://github.com/umr-lops/xsarsea.git
 ```
 
 for developement:
 ```
-pip install git+https://github.com/oarcher/xsarsea.git
+pip install git+https://github.com/umr-lops/xsarsea.git
 cd xsarsea
 pip install -r requirements.txt
 pip install -e .
