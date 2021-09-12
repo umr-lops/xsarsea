@@ -95,9 +95,9 @@ html_show_sourcelink = False
 # nbsphinx_execute = 'always'
 
 nbsphinx_prolog = """
-Download this notebook from gitlab_.
+Download this notebook from github_.
 
-.. _gitlab: https://gitlab.ifremer.fr/sarlib/xsarsea/-/tree/develop/docs/{{ env.doc2path(env.docname, base=False) }}
+.. _github: https://github.com/umr-lops/xsarsea/tree/master/docs/{{ env.doc2path(env.docname, base=False) }}
 
 ----
 """
