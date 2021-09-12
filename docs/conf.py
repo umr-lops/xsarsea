@@ -40,6 +40,9 @@ extensions = [
 # order by source
 autodoc_member_order = 'bysource'
 
+# document class and __init__ method
+autoclass_content = 'both'
+
 # Napoleon settings
 napoleon_google_docstring = True
 napoleon_numpy_docstring = True
