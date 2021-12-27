@@ -8,6 +8,13 @@ logger = logging.getLogger("xsarsea")
 logger.addHandler(logging.NullHandler())
 
 
+try:
+    from xsar.utils import timing
+except ImportError:
+    # null decorator
+    def timing(func):
+        return func
+
 def cmodIfr2(wind_speed, wind_dir, inc_angle, subsample=True):
     """get nrcs from wind speed, dir, and inc angle
 
@@ -139,7 +146,7 @@ def cmodIfr2(wind_speed, wind_dir, inc_angle, subsample=True):
         sig = sig.interp(atrack=inc_angle_ori.atrack, xtrack=inc_angle_ori.xtrack)
     return sig
 
-
+@timing
 def sigma0_detrend(sigma0, inc_angle, wind_speed_gmf=10, wind_dir_gmf=45):
     """compute `sigma0_detrend` from `sigma0` and `inc_angle`
 
