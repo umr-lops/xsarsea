@@ -8,6 +8,9 @@ https://ieeexplore.ieee.org/document/1288365
 https://www.climate-service-center.de/imperia/md/content/gkss/institut_fuer_kuestenforschung/ksd/paper/kochw_ieee_2004.pdf
 
 """
+
+__all__ = ['Gradients', 'Gradients2D', 'circ_smooth', 'PlotGradients', 'histogram_plot']
+
 import numpy as np
 from scipy import signal
 import xarray as xr
@@ -42,9 +45,21 @@ from abc import ABC, abstractmethod
 
 
 class Gradients2D:
-    """class Gradients2D"""
-    def __init__(self, sigma0, window_size=160, window_step=None, windows_at=None, attrs=None):
-        """constructor Gradients2D"""
+    """Low level gradients analysis class, for mono pol (2D) sigma0, and single windows size"""
+
+    def __init__(self, sigma0, window_size=160, window_step=None, windows_at=None):
+        """
+
+        Parameters
+        ----------
+        sigma0: xarray.DataArray
+            mono-pol, at medium resolution (like 100m)
+        window_size: int
+            window size, in pixel. If sigma0 resolution is 100m, 160 will make a 16000m window size.
+        window_step: float
+            stepping of windows sliding. (0.5 is half of the windows, 1 is for non overlapping windows)
+        windows_at: dict
+        """
         if window_step is not None and windows_at is not None:
             raise ValueError('window_step and window_at are mutually exclusive')
         if window_step is None and windows_at is None:
@@ -60,8 +75,36 @@ class Gradients2D:
         self._window_dims = {k: "k_%s" % k for k in self._spatial_dims}
 
         self.n_angles = 72
+        """Bin angles count, in the range [-pi/2, pi/2] (can be changed)"""
         self.window_step = window_step
-        self.windows_at = windows_at
+        self._windows_at = windows_at
+
+    @property
+    def histogram(self):
+        """
+        direction histogram as a xarray.Dataset, for all windows from `self.stepping_gradients`.
+        This is the main attribute needed by user.
+        """
+        angles_bins = np.linspace(-np.pi / 2, np.pi / 2, self.n_angles + 1)  # one extra bin
+        angles_bins = (angles_bins[1:] + angles_bins[:-1]) / 2  # suppress extra bin (middle)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            stepping_gradients = self.stepping_gradients
+            grad_hist, ratio = xr.apply_ufunc(
+                gradient_histogram,
+                stepping_gradients['G2'], stepping_gradients['c'], angles_bins,
+                input_core_dims=[self._window_dims.values(), self._window_dims.values(), ["angles"]],
+                exclude_dims=set(self._window_dims.values()),
+                output_core_dims=[['angles'], []],
+                vectorize=True,
+                output_dtypes=[np.float, np.float]
+            )
+            grad_hist = grad_hist.rename('quality').assign_coords(angles=angles_bins)
+            ratio = ratio.rename('used_ratio').fillna(0)
+        _histogram = xr.merge((grad_hist, ratio))
+        # normalize histogram so values are independents from window size
+        _histogram['quality'] = _histogram['quality'] / self.window_pixels
+        return _histogram
 
     @property
     def window_pixels(self):
@@ -87,7 +130,7 @@ class Gradients2D:
 
     @property
     def local_gradients(self):
-        """local gradients_list from amplitude as an xarray.Dataset
+        """local gradients from amplitude as an xarray.Dataset
         ( reduced by a factor 2 from self.ampl, so a factor 4 from self.sigma0),
         with 'G2' variable that is a complex number whose argument is the direction and module the gradient weight,
         and 'c' variable that is a quality index"""
@@ -99,10 +142,20 @@ class Gradients2D:
         return self.local_gradients.rolling(self.window, center=True).construct(self._window_dims)
 
     @property
-    def stepping_gradients(self):
-        if self.windows_at is None and self.window_step is not None:
+    def windows_at(self):
+        """
+        dict
+
+            Dict `{'atrack': dataarray, 'xtrack': dataarray}`
+            of windows center coordinates where locals histograms are computed.
+
+            By default, those coordinates are computed by sliding windows with a step from `windows_step`
+
+            This property can be set by user.
+        """
+        if self._windows_at is None and self.window_step is not None:
             # windows_at computed from window_step
-            self.windows_at = {
+            self._windows_at = {
                 k: self.sigma0[k].isel(
                     {
                         k: np.linspace(
@@ -114,37 +167,30 @@ class Gradients2D:
                 )
                 for k in self.window.keys()
             }
-        return self.rolling_gradients.sel(self.windows_at, method='nearest')
+        return self._windows_at
+
+    @windows_at.setter
+    def windows_at(self, windows_at):
+        self._windows_at = windows_at
 
     @property
-    def histogram(self):
-        """
-        direction histogram as a xarray.Dataset, for all windows from `self.stepping_gradients`
-        """
-        angles_bins = np.linspace(-np.pi / 2, np.pi / 2, self.n_angles + 1)  # one extra bin
-        angles_bins = (angles_bins[1:] + angles_bins[:-1]) / 2  # suppress extra bin (middle)
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", RuntimeWarning)
-            stepping_gradients = self.stepping_gradients
-            grad_hist, ratio = xr.apply_ufunc(
-                gradient_histogram,
-                stepping_gradients['G2'], stepping_gradients['c'], angles_bins,
-                input_core_dims=[self._window_dims.values(), self._window_dims.values(), ["angles"]],
-                exclude_dims=set(self._window_dims.values()),
-                output_core_dims=[['angles'], []],
-                vectorize=True,
-                output_dtypes=[np.float, np.float]
-            )
-            grad_hist = grad_hist.rename('quality').assign_coords(angles=angles_bins)
-            ratio = ratio.rename('used_ratio').fillna(0)
-        _histogram = xr.merge((grad_hist, ratio))
-        # normalize histogram so values are independents from window size
-        _histogram['quality'] = _histogram['quality'] / self.window_pixels
-        return _histogram
+    def stepping_gradients(self):
+        return self.rolling_gradients.sel(self.windows_at, method='nearest')
 
 
 class StackedGradients:
+    """
+    Intermediate class between Gradients2D and Gradients.
+    (several Gradient2D are stacked along a `stacked` dimension.
+    """
     def __init__(self, gradients):
+        """
+        Parameters
+        ----------
+        gradients: list of `Gradients2D` objects.
+            All windows will be aligned onto the first `Gradients2D` instance.
+            (i.e. `windows_at` attr from others will be set from the 1st one)
+        """
         # reference gradient is first gradient
         self._ref_gradient = gradients[0]
         self._others_gradients = gradients[1:]
@@ -154,6 +200,7 @@ class StackedGradients:
 
     @property
     def histogram(self):
+        """Like `Gradients2D.histogram`, but with an added `stacked` dimension"""
         ref_hist = self._ref_gradient.histogram
         aligned_hists = [
             g.histogram.interp(
@@ -165,9 +212,36 @@ class StackedGradients:
 
 
 class Gradients:
-    """class Gradients"""
-    def __init__(self, sigma0, downscales_factors=[1], windows_sizes=[160], window_step=1):
-        """constructor Gradients"""
+    """Gradients class to compute weighted direction histogram at multiscale and multi resolution """
+
+    def __init__(self, sigma0, windows_sizes=[160], downscales_factors=[1],  window_step=1):
+        """
+
+        Parameters
+        ----------
+        sigma0 : xarray.DataArray
+
+            sigma0 at medium resolution (i.e 100m), with optional 'pol' dimension.
+
+        windows_sizes: list of int
+
+            list of windows size, like `[160, 320]`.
+
+            to have 16km and 32km windows size (if input sigma0 resolution is 100m)
+
+        downscales_factors: list of int
+
+            list of downscale factors, like `[1,2]`
+
+            (for 100m and 200m multi resolution  if input sigma0 resolution is 100m)
+
+        window_step: float
+
+            The overlapping factor for windows slidind. 0.5 is for half overlaping, 1 is no overlaping.
+
+            Note that this overlapping is only for  `windows_sizes[0]` : others windows sizes are aligned with the 1st one.
+
+        """
         self._drop_pol = False
         if 'pol' not in sigma0.dims:
             sigma0 = sigma0.expand_dims('pol')
@@ -195,9 +269,6 @@ class Gradients:
                         Gradients2D(
                             sigma0_resampled.assign_coords(window_size=ws),
                             window_size=ws // df,  # adjust by df, so window_size refer to full scale sigma0
-                            attrs={
-                                'pol': p, 'window_size': ws, 'downscale_factor': df
-                            }
                         )
                     )
 
@@ -209,6 +280,21 @@ class Gradients:
     @property
     @timing
     def histogram(self):
+        """
+        xarray.Dataset
+
+            With dims:
+
+            - atrack, xtrack : windows centers
+
+            - pol, if sigma0 was provided with pol dim
+
+            - window_size : as `windows_sizes` parameter
+
+            - downscale_factor: as `downscales_factors` parameters
+
+            - angles: histogram dimension (binned angles)
+        """
         stacked_hist = self.stacked_gradients.histogram
         hist = xr.merge(
             [
@@ -221,7 +307,6 @@ class Gradients:
 
         return hist
 
-
     @staticmethod
     def _sigma0_resample(sigma0, factor):
         if factor == 1:
@@ -230,8 +315,20 @@ class Gradients:
         __sigma0.values[::] = cv2.resize(sigma0.values, __sigma0.shape[::-1], cv2.INTER_AREA)
         return __sigma0
 
+
 class PlotGradients:
+    """Plotting class"""
     def __init__(self, gradients_hist):
+        """
+
+        Parameters
+        ----------
+        gradients_hist : xarray.Dataset
+
+            from `Gradients2D.histogram` or mean from `Gradients.histogram`.
+
+            TODO: allow non mean histogram, with multiples dims.
+        """
         self.gradients_hist = gradients_hist
         self._spatial_dims = ['atrack', 'xtrack']
         self._non_spatial_dims = list(set(gradients_hist.dims) - set(self._spatial_dims))
@@ -243,6 +340,7 @@ class PlotGradients:
         self.peak['quality'] = self.gradients_hist['quality'].isel(angles=iangle)
 
     def vectorfield(self):
+        """Show gradients as a `hv.VectorField` object"""
         return hv.VectorField(
             self.peak,
             vdims=['angle', 'quality'],
@@ -251,13 +349,14 @@ class PlotGradients:
         ).opts(pivot='mid', arrow_heads=False, magnitude='quality')
 
     def iplot(self):
+        """Interactive plot, if running in a live notebook"""
         vectorfield = self.vectorfield()
 
         # get mouse pointer from vectorfield
         self._mouse_stream = hv.streams.Tap(x=0, y=0, source=vectorfield)
         # self._mouse_stream = hv.streams.PointerXY(x=0, y=0, source=vectorfield)
 
-        atrack = self.peak.atrack.values[self.peak.atrack.size//2]
+        atrack = self.peak.atrack.values[self.peak.atrack.size // 2]
         xtrack = self.peak.xtrack.values[self.peak.xtrack.size // 2]
         # connect mouse to self._pipe_stream ( to draw histogram at mouse position)
         self._pipe_stream = hv.streams.Pipe(data=[atrack, xtrack])
@@ -306,9 +405,7 @@ class PlotGradients:
         # get histogram
         hist_at = self.gradients_hist['quality'].sel(atrack=atrack, xtrack=xtrack, method='nearest', tolerance=2000)
 
-        plot_list = [ histogram_plot(hist_at) ]
-
-
+        plot_list = [histogram_plot(hist_at)]
 
         # vectors plots
         # grad_dir = xr.merge(
@@ -558,14 +655,16 @@ def circ_smooth(hist):
 
 def histogram_plot(hist_at):
     """
-    Circular histogram plot
+    Circular histogram plot, as a `hv.Path` object.
+
     Parameters
     ----------
-    hist_at
+    hist_at: xarray.Dataset
+        Only one histogram (i.e. at one (atrack,xtrack) position.
 
     Returns
     -------
-
+    hv.Path
     """
     # convert histogram to circular histogram
     # convert to complex
