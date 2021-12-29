@@ -99,11 +99,11 @@ class Gradients2D:
                 vectorize=True,
                 output_dtypes=[np.float, np.float]
             )
-            grad_hist = grad_hist.rename('quality').assign_coords(angles=angles_bins)
+            grad_hist = grad_hist.rename('weight').assign_coords(angles=angles_bins)
             ratio = ratio.rename('used_ratio').fillna(0)
         _histogram = xr.merge((grad_hist, ratio))
         # normalize histogram so values are independents from window size
-        _histogram['quality'] = _histogram['quality'] / self.window_pixels
+        _histogram['weight'] = _histogram['weight'] / self.window_pixels
         return _histogram
 
     @property
@@ -334,22 +334,29 @@ class PlotGradients:
         self._non_spatial_dims = list(set(gradients_hist.dims) - set(self._spatial_dims))
 
         # get maximum histogram
-        iangle = np.abs(self.gradients_hist['quality']).fillna(0).argmax(dim='angles')
+        iangle = np.abs(self.gradients_hist['weight']).fillna(0).argmax(dim='angles')
         self.peak = self.gradients_hist.angles.isel(angles=iangle).to_dataset(name='angle')
         self.peak['used_ratio'] = self.gradients_hist['used_ratio']
-        self.peak['quality'] = self.gradients_hist['quality'].isel(angles=iangle)
+        self.peak['weight'] = self.gradients_hist['weight'].isel(angles=iangle)
 
     def vectorfield(self):
         """Show gradients as a `hv.VectorField` object"""
-        return hv.VectorField(
+        vf = hv.VectorField(
             self.peak,
-            vdims=['angle', 'quality'],
+            vdims=['angle', 'weight'],
             kdims=['atrack', 'xtrack'],
             label='mean'
-        ).opts(pivot='mid', arrow_heads=False, magnitude='quality')
+        ).opts(pivot='mid', arrow_heads=False, magnitude='weight')
+        return vf
 
-    def iplot(self):
-        """Interactive plot, if running in a live notebook"""
+    def linked_plots(self):
+        """
+
+        Returns
+        -------
+            (vector_field, histogram_plot)
+        2 holoviews objects connected by mouse.
+        """
         vectorfield = self.vectorfield()
 
         # get mouse pointer from vectorfield
@@ -360,6 +367,7 @@ class PlotGradients:
         xtrack = self.peak.xtrack.values[self.peak.xtrack.size // 2]
         # connect mouse to self._pipe_stream ( to draw histogram at mouse position)
         self._pipe_stream = hv.streams.Pipe(data=[atrack, xtrack])
+        self._hv_window = hv.Points(self._pipe_stream.data, kdims=['atrack', 'xtrack'])
 
         def send_mouse(x=0, y=0):
             self._pipe_stream.send((x, y))
@@ -368,19 +376,20 @@ class PlotGradients:
             # this is returned to DynamicMap
             return self._hv_window
 
-        # set DynamicMap, callback, and streams
-        # return pn.Row(
-        #    hv.DynamicMap(self.histogram_plot, streams=[self._pipe_stream]).opts(frame_width=400, frame_height=400,
-        #                                                                         axiswise=True),
-        #    (hv.DynamicMap(send_mouse, streams=[self._mouse_stream]) * vectorfield).opts(frame_width=600,
-        #                                                                                 frame_height=600,
-        #                                                                                 axiswise=True)
-        # )
-        return hv.DynamicMap(self.histogram_plot, streams=[self._pipe_stream]).opts(frame_width=400, frame_height=400,
-                                                                                    axiswise=True) + \
-               (hv.DynamicMap(send_mouse, streams=[self._mouse_stream]) * vectorfield).opts(frame_width=600,
-                                                                                            frame_height=600,
-                                                                                            axiswise=True)
+        # vectorfield will send mouse position
+        vf = (
+                hv.DynamicMap(send_mouse, streams=[self._mouse_stream]) \
+                * vectorfield
+        ).opts(axiswise=True)
+
+        # hist get position from mouse
+        hist = hv.DynamicMap(
+            self.histogram_plot,
+            streams=[self._pipe_stream]
+        ).opts(frame_width=200, frame_height=200, aspect='equal')
+
+        return vf, hist
+
 
     def _histogram_plot_at(self, atrack=None, xtrack=None, data=None):
         # called by histogram_plot to normalize coords
@@ -403,7 +412,7 @@ class PlotGradients:
         atrack, xtrack = self._histogram_plot_at(atrack=atrack, xtrack=xtrack, data=data)
 
         # get histogram
-        hist_at = self.gradients_hist['quality'].sel(atrack=atrack, xtrack=xtrack, method='nearest', tolerance=2000)
+        hist_at = self.gradients_hist['weight'].sel(atrack=atrack, xtrack=xtrack, method='nearest', tolerance=2000)
 
         plot_list = [histogram_plot(hist_at)]
 
@@ -575,7 +584,7 @@ def gradient_histogram(g2, c, angles_bins):
         Returns
         -------
         tuple ( numpy.ndarray, float)
-            * 1D numpy.ndarray with same shape as angles_bins, with histogram quality values
+            * 1D numpy.ndarray with same shape as angles_bins, with histogram weight values
             * used ratio
         """
     # pixel count in the box
