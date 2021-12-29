@@ -2,6 +2,9 @@ import logging
 from pkg_resources import get_distribution
 import numpy as np
 
+# allow nan without warnings
+np.errstate(invalid='ignore')
+
 __version__ = get_distribution("xsarsea").version
 
 logger = logging.getLogger("xsarsea")
