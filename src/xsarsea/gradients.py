@@ -47,17 +47,25 @@ from abc import ABC, abstractmethod
 class Gradients2D:
     """Low level gradients analysis class, for mono pol (2D) sigma0, and single windows size"""
 
-    def __init__(self, sigma0, window_size=160, window_step=None, windows_at=None):
+    def __init__(self, sigma0, window_size=1600, window_step=None, windows_at=None):
         """
 
         Parameters
         ----------
         sigma0: xarray.DataArray
+
             mono-pol, at medium resolution (like 100m)
+
         window_size: int
-            window size, in pixel. If sigma0 resolution is 100m, 160 will make a 16000m window size.
+
+            window size, axtrack coordinate (so it's independent of sigma0 resolution).
+
+            if sensor pixel size is 10m, 1600 will set a 16km window size (i.e 160 pixels if sigma0 is 100m, or 80 pixels if sigma0 res is 200m).
+
         window_step: float
+
             stepping of windows sliding. (0.5 is half of the windows, 1 is for non overlapping windows)
+
         windows_at: dict
         """
         if window_step is not None and windows_at is not None:
@@ -71,6 +79,7 @@ class Gradients2D:
         # image will be resampled by a factor 4 before rolling window
         # so, to get a windows of 16 km for a 100m pixel, window size will be 40*40 ( not 160*160 )
         self.window_size = window_size
+        # with coords to pixels: int(np.mean(tuple( window_size / np.unique(np.diff(ax))[0] for ax in [self.sigma0.atrack, self.sigma0.xtrack])))
 
         self._window_dims = {k: "k_%s" % k for k in self._spatial_dims}
 
@@ -103,20 +112,14 @@ class Gradients2D:
             ratio = ratio.rename('used_ratio').fillna(0)
         _histogram = xr.merge((grad_hist, ratio))
         # normalize histogram so values are independents from window size
-        _histogram['weight'] = _histogram['weight'] / self.window_pixels
+        window_pixels = mul(*(stepping_gradients[k].size for k in self._window_dims.values()))
+        _histogram['weight'] = _histogram['weight'] / window_pixels
         return _histogram
 
     @property
     def window_pixels(self):
         # pixel count per window
         return reduce(mul, self.window.values())
-
-    @property
-    def window(self):
-        # return kernel window size for rolling gradients
-        # image will be resampled by a factor 4 before rolling window
-        # so, to get a windows of 16 km for a 100m pixel, window size will be 40*40 ( not 160*160 )
-        return {k: self.window_size // 4 for k in self._spatial_dims}
 
     @property
     def i2(self):
@@ -139,7 +142,13 @@ class Gradients2D:
     @property
     def rolling_gradients(self):
         """rolling window over `self.local_gradient` (all, with step 1)"""
-        return self.local_gradients.rolling(self.window, center=True).construct(self._window_dims)
+        lg = self.local_gradients
+        # self.window_size is in axtrack coordinate, and we want it in pixels of lg
+        window_size = np.mean(
+            tuple(self.window_size / np.unique(np.diff(ax))[0] for ax in [lg.atrack, lg.xtrack])
+        )
+        window = {k: int(window_size)  for k in self._spatial_dims}
+        return lg.rolling(window, center=True).construct(self._window_dims)
 
     @property
     def windows_at(self):
@@ -155,17 +164,21 @@ class Gradients2D:
         """
         if self._windows_at is None and self.window_step is not None:
             # windows_at computed from window_step
+            # self.window_size is in axtrack coordinate, and we want it in pixels of self.sigma0
+            window_size = np.mean(
+                tuple(self.window_size / np.unique(np.diff(ax))[0] for ax in [self.sigma0.atrack, self.sigma0.xtrack])
+            )
             self._windows_at = {
                 k: self.sigma0[k].isel(
                     {
                         k: np.linspace(
                             1, self.sigma0[k].size,
-                            num=int(self.sigma0[k].size / (self.window[k] / (1 / self.window_step)) / 4),
+                            num=int(self.sigma0[k].size / (window_size / (1 / self.window_step))),
                             dtype=int
                         ) - 1
                     }
                 )
-                for k in self.window.keys()
+                for k in self._spatial_dims
             }
         return self._windows_at
 
@@ -214,7 +227,7 @@ class StackedGradients:
 class Gradients:
     """Gradients class to compute weighted direction histogram at multiscale and multi resolution """
 
-    def __init__(self, sigma0, windows_sizes=[160], downscales_factors=[1],  window_step=1):
+    def __init__(self, sigma0, windows_sizes=[1600], downscales_factors=[1],  window_step=1):
         """
 
         Parameters
