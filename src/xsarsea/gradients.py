@@ -76,10 +76,8 @@ class Gradients2D:
 
         self._spatial_dims = ['atrack', 'xtrack']
 
-        # image will be resampled by a factor 4 before rolling window
-        # so, to get a windows of 16 km for a 100m pixel, window size will be 40*40 ( not 160*160 )
+        # window size, in axtrack coordinate
         self.window_size = window_size
-        # with coords to pixels: int(np.mean(tuple( window_size / np.unique(np.diff(ax))[0] for ax in [self.sigma0.atrack, self.sigma0.xtrack])))
 
         self._window_dims = {k: "k_%s" % k for k in self._spatial_dims}
 
@@ -352,6 +350,11 @@ class PlotGradients:
         self.peak['used_ratio'] = self.gradients_hist['used_ratio']
         self.peak['weight'] = self.gradients_hist['weight'].isel(angles=iangle)
 
+        # linked plots variables
+        self._hv_window = None
+        self._pipe_stream = None
+
+
     def vectorfield(self):
         """Show gradients as a `hv.VectorField` object"""
         vf = hv.VectorField(
@@ -456,7 +459,23 @@ class PlotGradients:
         #
         ## windows shapes will be read by self.iplot() to draw shapes on global map
         # self._hv_window = hv.Path(self.get_nearest_window(atrack, xtrack))
-        self._hv_window = hv.Points((atrack, xtrack), kdims=['atrack', 'xtrack'])
+
+        try:
+            # get window using window_size
+            ws = self.gradients_hist['window_size'].item()
+        except KeyError:
+            # get windows from neighbors
+            ws = np.diff(
+                np.array(
+                    [[self.gradients_hist[ax].isel({ax: i}).item() for i in [0, 1]] for ax in ['atrack', 'xtrack']]
+                )
+            ).mean()
+
+        # get windows coordinates
+        amin, amax, xmin, xmax = (
+            atrack - ws/2, atrack + ws/2, xtrack - ws/2, xtrack + ws/2
+        )
+        self._hv_window = hv.Path([[(amin, xmin), (amin, xmax), (amax, xmax), (amax, xmin), (amin, xmin)]])
 
         return hv.Overlay(plot_list).opts(xlabel='atrack %d' % atrack, ylabel='xtrack %d' % xtrack)
 
