@@ -9,16 +9,19 @@ https://www.climate-service-center.de/imperia/md/content/gkss/institut_fuer_kues
 
 """
 
-__all__ = ['Gradients', 'Gradients2D', 'circ_smooth', 'PlotGradients', 'histogram_plot']
+__all__ = ['Gradients', 'Gradients2D', 'circ_smooth', 'PlotGradients', 'circ_hist']
 
 import numpy as np
 from scipy import signal
 import xarray as xr
 import warnings
 import cv2
-from functools import reduce
+from functools import reduce, partial
 from operator import mul
+from itertools import product
+from multiprocessing import Pool
 import pandas as pd
+import time
 
 try:
     from xsar.utils import timing
@@ -87,6 +90,7 @@ class Gradients2D:
         self._windows_at = windows_at
 
     @property
+    @timing
     def histogram(self):
         """
         direction histogram as a xarray.Dataset, for all windows from `self.stepping_gradients`.
@@ -145,7 +149,7 @@ class Gradients2D:
         window_size = np.mean(
             tuple(self.window_size / np.unique(np.diff(ax))[0] for ax in [lg.atrack, lg.xtrack])
         )
-        window = {k: int(window_size)  for k in self._spatial_dims}
+        window = {k: int(window_size) for k in self._spatial_dims}
         return lg.rolling(window, center=True).construct(self._window_dims)
 
     @property
@@ -194,6 +198,7 @@ class StackedGradients:
     Intermediate class between Gradients2D and Gradients.
     (several Gradient2D are stacked along a `stacked` dimension.
     """
+
     def __init__(self, gradients):
         """
         Parameters
@@ -209,23 +214,38 @@ class StackedGradients:
         for g in self._others_gradients:
             g.windows_at = self._ref_gradient.windows_at
 
+    @staticmethod
+    def _stackable(atrack, xtrack, g):
+        # internal method for Pool().map
+        return g.histogram.interp(atrack=atrack, xtrack=xtrack, method='nearest')
+
     @property
     def histogram(self):
         """Like `Gradients2D.histogram`, but with an added `stacked` dimension"""
+
         ref_hist = self._ref_gradient.histogram
-        aligned_hists = [
-            g.histogram.interp(
-                atrack=ref_hist.atrack,
-                xtrack=ref_hist.xtrack
-            ) for g in self._others_gradients
-        ]
+
+        # list of gradients, with same axtrack (parallelized)
+        with Pool() as p:
+            aligned_hists = p.map(
+                partial(self._stackable, ref_hist.atrack, ref_hist.xtrack),
+                self._others_gradients
+            )
+
+        # list of gradients, with same axtrack (non parallelized)
+        # aligned_hists = [
+        #    g.histogram.interp(
+        #        atrack=ref_hist.atrack,
+        #        xtrack=ref_hist.xtrack
+        #    ) for g in self._others_gradients
+        # ]
         return xr.concat([ref_hist] + aligned_hists, dim='stacked')
 
 
 class Gradients:
     """Gradients class to compute weighted direction histogram at multiscale and multi resolution """
 
-    def __init__(self, sigma0, windows_sizes=[1600], downscales_factors=[1],  window_step=1):
+    def __init__(self, sigma0, windows_sizes=[1600], downscales_factors=[1], window_step=1):
         """
 
         Parameters
@@ -261,12 +281,6 @@ class Gradients:
 
         # added dims to histogram
         self._add_dims = ['pol', 'downscale_factor', 'window_size']
-
-        self._dims_values = {
-            'pol': sigma0.pol.values,
-            'window_size': windows_sizes,
-            'downscale_factor': downscales_factors
-        }
 
         self.gradients_list = []
 
@@ -329,6 +343,7 @@ class Gradients:
 
 class PlotGradients:
     """Plotting class"""
+
     def __init__(self, gradients_hist):
         """
 
@@ -338,146 +353,182 @@ class PlotGradients:
 
             from `Gradients2D.histogram` or mean from `Gradients.histogram`.
 
-            TODO: allow non mean histogram, with multiples dims.
         """
         self.gradients_hist = gradients_hist
         self._spatial_dims = ['atrack', 'xtrack']
-        self._non_spatial_dims = list(set(gradients_hist.dims) - set(self._spatial_dims))
+        # non spatial dims, probably like  ['pol' 'window_dims' 'downscale_factor']
+        self._non_spatial_dims = list(set(gradients_hist.dims) - set(self._spatial_dims) - set(['angles']))
+
+        # list of dicts, where keys are from self._non_spatial_dims, and values are all possible values for key
+        # so by looping this list, all gradients for all non-spatial dims can be accessed
+        self.combine_all = [
+            dict(zip(self._non_spatial_dims, comb)) for comb in list(
+                product(*[self.gradients_hist[k].values for k in self._non_spatial_dims])
+            )
+        ]
+
+        # styles: only one style allowed per dim
+        self.dim_styles = {
+            'pol': {'line_dash': ['solid', 'dotted']},
+            'downscale_factor': {'line_width': [1, 2, 3, 4]},
+            'window_size': {'line_color': ['blue', 'red', 'yellow', 'green']}
+        }
+
+        self.styles_names = []
+
+        # add variables named like style, ie self.gradients_hist['line_color']
+        # the values are the style values, and the dim name is the dim the style belong to
+        for dim, style_dict in self.dim_styles.items():
+            for style_name, style_values in style_dict.items():
+                try:
+                    self.gradients_hist[style_name] = (dim, style_values[:self.gradients_hist[dim].size])
+                    self.styles_names.append(style_name)
+                except (KeyError, ValueError):
+                    # dim is not in self.gradients_hist: ignore
+                    pass
+
 
         # get maximum histogram
-        iangle = np.abs(self.gradients_hist['weight']).fillna(0).argmax(dim='angles')
-        self.peak = self.gradients_hist.angles.isel(angles=iangle).to_dataset(name='angle')
-        self.peak['used_ratio'] = self.gradients_hist['used_ratio']
-        self.peak['weight'] = self.gradients_hist['weight'].isel(angles=iangle)
+        hist = self.gradients_hist
+        iangle = np.abs(hist['weight']).fillna(0).argmax(dim='angles')
+        self.peak = hist.angles.isel(angles=iangle).to_dataset(name='angle')
+        self.peak['used_ratio'] = hist['used_ratio']
+        self.peak['weight'] = hist['weight'].isel(angles=iangle)
 
-        # linked plots variables
-        self._hv_window = None
-        self._pipe_stream = None
+        # add styles to self.peak
+        for style_name in self.styles_names:
+            self.peak[style_name] = self.gradients_hist[style_name]
+
+        self._vectorfield = None
 
 
-    def vectorfield(self):
+    def _get_style(self, ds):
+        # return style for ds, using variables from self.styles_names
+        # style is only returned if dim len is 1
+        return {st: ds[st].values.item() for st in self.styles_names if (st in ds) and (ds[st].size == 1)}
+
+    def vectorfield(self, tap=False):
         """Show gradients as a `hv.VectorField` object"""
-        vf = hv.VectorField(
-            self.peak,
-            vdims=['angle', 'weight'],
-            kdims=['atrack', 'xtrack'],
-            label='mean'
-        ).opts(pivot='mid', arrow_heads=False, magnitude='weight')
-        return vf
+        if self._vectorfield is None:
+            vf_list = []
+            for sel_one2D in self.combine_all:
+                peak2D = self.peak.sel(sel_one2D)
+                style = self._get_style(peak2D)
+                vf_list.append(
+                    hv.VectorField(
+                        peak2D,
+                        vdims=['angle', 'weight'],
+                        kdims=['atrack', 'xtrack'],
+                    ).opts(pivot='mid', arrow_heads=False, magnitude='weight', aspect='equal', **style)
+                )
 
-    def linked_plots(self):
-        """
+            # manual legend, to have a style per dimension
+            legends = []
+            dummy_line = [(0, 0), (0.01, 0)]
+            for st in self.styles_names:
+                label = self.peak[st].dims[0]
+                for item in self.peak[st]:
+                    style = {'line_dash': 'solid', 'line_width': 1, 'line_color': 'k'}
+                    style.update({st: item.item()})
+                    legends.append(
+                        hv.Curve(
+                            dummy_line,
+                            label="%s %s" % (label, item[label].item())
+                        ).redim.label(x='atrack', y='xtrack').opts(**style)
+                    )
+            self._vectorfield = hv.Overlay(vf_list + legends)
 
-        Returns
-        -------
-            (vector_field, histogram_plot)
-        2 holoviews objects connected by mouse.
-        """
-        vectorfield = self.vectorfield()
+        if tap:
+            atrack = self.peak.atrack.values[self.peak.atrack.size // 2]
+            xtrack = self.peak.xtrack.values[self.peak.xtrack.size // 2]
+            self._mouse_stream = hv.streams.Tap(x=atrack, y=xtrack, source=self._vectorfield)
+            return self._vectorfield * hv.DynamicMap(self._get_windows, streams=[self._mouse_stream])
 
-        # get mouse pointer from vectorfield
-        self._mouse_stream = hv.streams.Tap(x=0, y=0, source=vectorfield)
-        # self._mouse_stream = hv.streams.PointerXY(x=0, y=0, source=vectorfield)
+        return self._vectorfield
 
-        atrack = self.peak.atrack.values[self.peak.atrack.size // 2]
-        xtrack = self.peak.xtrack.values[self.peak.xtrack.size // 2]
-        # connect mouse to self._pipe_stream ( to draw histogram at mouse position)
-        self._pipe_stream = hv.streams.Pipe(data=[atrack, xtrack])
-        self._hv_window = hv.Points(self._pipe_stream.data, kdims=['atrack', 'xtrack'])
+    def mouse_histogram(self, source=None):
+        assert self._mouse_stream is not None
+        if source is None:
+            source = self
+        return hv.DynamicMap(source.histogram_plot, streams=[self._mouse_stream])
 
-        def send_mouse(x=0, y=0):
-            self._pipe_stream.send((x, y))
-            # the callback self.histogram_plot has been called,
-            # and has set self._hv_window, corresponding to used window to compute gradient.
-            # this is returned to DynamicMap
-            return self._hv_window
-
-        # vectorfield will send mouse position
-        vf = (
-                hv.DynamicMap(send_mouse, streams=[self._mouse_stream]) \
-                * vectorfield
-        ).opts(axiswise=True)
-
-        # hist get position from mouse
-        hist = hv.DynamicMap(
-            self.histogram_plot,
-            streams=[self._pipe_stream]
-        ).opts(frame_width=200, frame_height=200, aspect='equal')
-
-        return vf, hist
-
-
-    def _histogram_plot_at(self, atrack=None, xtrack=None, data=None):
+    def _get_axtrack(self, atrack=None, xtrack=None, data=None):
         # called by histogram_plot to normalize coords
         if data is not None:
             # called by hv streams (like a mouse tap)
             atrack = data[0]
             xtrack = data[1]
-        nearest_center = self.peak.sel(atrack=atrack, xtrack=xtrack, method='nearest', tolerance=2000)
+        nearest_center = self.peak.sel(atrack=atrack, xtrack=xtrack, method='nearest', tolerance=1e6)
         atrack = nearest_center.atrack.values.item()
         xtrack = nearest_center.xtrack.values.item()
-        # will have to contain windows as hv.Path
-        # self._hv_window = None
-        # self._hv_window = hv.Points((atrack, xtrack), kdims=['atrack', 'xtrack'])
         return atrack, xtrack
 
-    def histogram_plot(self, atrack=None, xtrack=None, data=None):
-        """plot histogram at atrack, xtrack"""
+    def _get_windows(self, atrack=None, xtrack=None, x=None, y=None):
+
+        if x is not None:
+            atrack = x
+        if y is not None:
+            xtrack = y
 
         # atrack and xtrack are from mouse or user. get the nearest where histogram is defined
-        atrack, xtrack = self._histogram_plot_at(atrack=atrack, xtrack=xtrack, data=data)
+        atrack, xtrack = self._get_axtrack(atrack=atrack, xtrack=xtrack)
+
+        windows_list = []
+        try:
+            ws_list = self.gradients_hist['window_size' ]
+        except KeyError:
+            # no 'window_size'. compute it from axtrack neighbors
+            ws_list = [
+                np.diff(
+                    np.array(
+                        [[self.gradients_hist[ax].isel({ax: i}).item() for i in [0, 1]] for ax in ['atrack', 'xtrack']]
+                    )
+                ).mean()
+            ]
+
+        for ws in ws_list:
+            # window as a hv.Path object corresponding to window_size
+            amin, amax, xmin, xmax = (
+                atrack - ws / 2, atrack + ws / 2, xtrack - ws / 2, xtrack + ws / 2
+            )
+            try:
+                style = self._get_style(self.gradients_hist.sel(window_size=ws))
+            except (IndexError, KeyError):
+                style = {}
+            windows_list.append(
+                hv.Path([[(amin, xmin), (amin, xmax), (amax, xmax), (amax, xmin), (amin, xmin)]]).opts(**style)
+            )
+
+        return hv.Overlay(windows_list)
+
+
+    def histogram_plot(self, atrack=None, xtrack=None, x=None, y=None):
+        """plot histogram at atrack, xtrack"""
+
+        if x is not None:
+            atrack = x
+        if y is not None:
+            xtrack = y
+
+        # atrack and xtrack are from mouse or user. get the nearest where histogram is defined
+        atrack, xtrack = self._get_axtrack(atrack=atrack, xtrack=xtrack)
 
         # get histogram
-        hist_at = self.gradients_hist['weight'].sel(atrack=atrack, xtrack=xtrack, method='nearest', tolerance=2000)
+        hist_at = self.gradients_hist.sel(atrack=atrack, xtrack=xtrack, method='nearest', tolerance=500)
 
-        plot_list = [histogram_plot(hist_at)]
+        hp_list = []
+        for sel_one2D in self.combine_all:
+            hist2D_at = hist_at.sel(sel_one2D)
+            hist2D360 = circ_hist(hist2D_at['weight'])
+            style = self._get_style(hist2D_at)
+            hp_list.append(
+                hv.Path(hist2D360, kdims=['atrack_g', 'xtrack_g']).opts(
+                    axiswise=False,
+                    framewise=False,
+                    aspect='equal', **style)
+            )
 
-        # vectors plots
-        # grad_dir = xr.merge(
-        #    [
-        #        -xr.ufuncs.angle(grad['grad']).rename('grad_dir_rad'),
-        #        np.abs(grad['grad']).rename('grad_weight')
-        #    ])
-        # try:
-        #    peaks = grad_dir.peak.values
-        # except AttributeError:
-        #    grad_dir = grad_dir.expand_dims('peak')
-        #
-        # for peak, alpha in zip(grad_dir.peak.values, self._peak_alpha):
-        #    peak_ds = grad_dir.sel(peak=peak)
-        #    plot_list.append(
-        #        hv.VectorField(
-        #            (0, 0, peak_ds['grad_dir_rad'].item(), peak_ds['grad_weight'].item())
-        #        ).opts(
-        #            arrow_heads=False,
-        #            rescale_lengths=False,
-        #            alpha=alpha,
-        #            magnitude='Magnitude',
-        #            **self.attrs['plot_style']
-        #        )
-        #    )
-        #
-        ## windows shapes will be read by self.iplot() to draw shapes on global map
-        # self._hv_window = hv.Path(self.get_nearest_window(atrack, xtrack))
-
-        try:
-            # get window using window_size
-            ws = self.gradients_hist['window_size'].item()
-        except KeyError:
-            # get windows from neighbors
-            ws = np.diff(
-                np.array(
-                    [[self.gradients_hist[ax].isel({ax: i}).item() for i in [0, 1]] for ax in ['atrack', 'xtrack']]
-                )
-            ).mean()
-
-        # get windows coordinates
-        amin, amax, xmin, xmax = (
-            atrack - ws/2, atrack + ws/2, xtrack - ws/2, xtrack + ws/2
-        )
-        self._hv_window = hv.Path([[(amin, xmin), (amin, xmax), (amax, xmax), (amax, xmin), (amin, xmin)]])
-
-        return hv.Overlay(plot_list).opts(xlabel='atrack %d' % atrack, ylabel='xtrack %d' % xtrack)
+        return hv.Overlay(hp_list).opts(xlabel='atrack %d' % atrack, ylabel='xtrack %d' % xtrack, width=200, height=200)
 
 
 def local_gradients(I):
@@ -643,7 +694,7 @@ def gradient_histogram(g2, c, angles_bins):
 
     r = abs_g2 / (abs_g2 + np.median(abs_g2))
 
-    grads_all = r * c  # * g2 / abs_g2
+    grads_all = r * c
     # filter nan
     mask = ~np.isnan(k_all) & ~np.isnan(grads_all)
     grads_all = grads_all[mask]
@@ -694,9 +745,9 @@ def circ_smooth(hist):
     return smooth_hist
 
 
-def histogram_plot(hist_at):
+def circ_hist(hist_at):
     """
-    Circular histogram plot, as a `hv.Path` object.
+    convert xarray.Dataset `hist_at` with angles modulo pi to a pandas.Dataframe modulo 2pi
 
     Parameters
     ----------
@@ -705,29 +756,22 @@ def histogram_plot(hist_at):
 
     Returns
     -------
-    hv.Path
+    pd.DataFrame, with columns ['atrack_g', 'xtrack_g']
     """
     # convert histogram to circular histogram
     # convert to complex
     hist_at = hist_at * np.exp(1j * hist_at.angles)
 
-    # construct a dataframe, with central symmetry, to get 360°
-    # columns are  ['atrack_g', 'xtrack_g'], and rows are path points
-    hist360_pts = pd.DataFrame(
-        np.array(
-            [
-                np.concatenate([np.real(hist_at.values), -np.real(hist_at.values)]),
-                np.concatenate([np.imag(hist_at.values), -np.imag(hist_at.values)])
-            ]).T,
-        columns=['atrack_g', 'xtrack_g']
-    )
-    # close path
-    hist360_pts = hist360_pts.append(hist360_pts.iloc[0])
+    # central symmetry, to get 360°
+    hist_at = xr.concat([hist_at, -hist_at], 'angles').drop_vars(['atrack', 'xtrack'])
+    hist_at['angles'] = np.angle(hist_at)
+    hist_at['atrack_g'] = np.real(hist_at)
+    hist_at['xtrack_g'] = np.imag(hist_at)
 
-    # histogram plot
-    return hv.Path(hist360_pts, kdims=['atrack_g', 'xtrack_g']).opts(
-        axiswise=False,
-        framewise=False,
-        aspect='equal',
-        # **self.attrs['plot_style']
-    )
+    # convert to dataframe (weight no longer needed)
+    circ_hist_pts = hist_at.to_dataframe('tmp')[['atrack_g', 'xtrack_g']]
+
+    # close path
+    circ_hist_pts = circ_hist_pts.append(circ_hist_pts.iloc[0])
+
+    return circ_hist_pts

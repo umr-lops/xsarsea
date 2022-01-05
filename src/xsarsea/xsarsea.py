@@ -3,6 +3,7 @@ from pkg_resources import get_distribution
 import numpy as np
 
 # allow nan without warnings
+# some dask warnings are still non filtered: https://github.com/dask/dask/issues/3245
 np.errstate(invalid='ignore')
 
 __version__ = get_distribution("xsarsea").version
