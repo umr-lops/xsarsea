@@ -407,7 +407,7 @@ class PlotGradients:
         # style is only returned if dim len is 1
         return {st: ds[st].values.item() for st in self.styles_names if (st in ds) and (ds[st].size == 1)}
 
-    def vectorfield(self, tap=False):
+    def vectorfield(self, tap=True):
         """Show gradients as a `hv.VectorField` object"""
         if self._vectorfield is None:
             vf_list = []
