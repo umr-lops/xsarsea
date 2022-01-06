@@ -436,7 +436,7 @@ class PlotGradients:
                             label="%s %s" % (label, item[label].item())
                         ).redim.label(x='atrack', y='xtrack').opts(**style)
                     )
-            self._vectorfield = hv.Overlay(vf_list + legends)
+            self._vectorfield = hv.Overlay(vf_list + legends).opts(active_tools=['wheel_zoom', 'pan'])
 
         if tap:
             atrack = self.peak.atrack.values[self.peak.atrack.size // 2]
@@ -450,7 +450,7 @@ class PlotGradients:
         assert self._mouse_stream is not None
         if source is None:
             source = self
-        return hv.DynamicMap(source.histogram_plot, streams=[self._mouse_stream])
+        return hv.DynamicMap(source.histogram_plot, streams=[self._mouse_stream]).opts(active_tools=['wheel_zoom'])
 
     def _get_axtrack(self, atrack=None, xtrack=None, data=None):
         # called by histogram_plot to normalize coords
