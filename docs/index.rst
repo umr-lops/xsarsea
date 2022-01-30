@@ -22,7 +22,8 @@ Examples
 
 Those examples show how to:
     * `Detrend sigma0`_ (also called *roughness* or *nice display*)
-    * `Wind streaks direction`_ (⚠️work in progress ⚠️)
+    * `Wind streaks direction`_
+
 
 * :doc:`examples/xsarsea`
 
@@ -71,3 +72,4 @@ Last documentation build: |today|
 .. _xsar: https://cyclobs.ifremer.fr/static/sarwing_datarmor/xsar
 .. _Detrend sigma0: examples/xsarsea.ipynb#Sigma0-detrending
 .. _Wind streaks direction: examples/streaks.ipynb#Streaks-analysis
+

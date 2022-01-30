@@ -12,4 +12,4 @@ gradients
 =========
 
 .. automodule:: xsarsea.gradients
-    :members: Gradients, MultiGradients, MultiGradientsViewer
+    :members: Gradients2D, Gradients, PlotGradients, circ_smooth, histogram_plot
