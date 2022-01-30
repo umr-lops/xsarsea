@@ -167,20 +167,15 @@ class Gradients2D:
         if self._windows_at is None and self.window_step is not None:
             # windows_at computed from window_step
             # self.window_size is in axtrack coordinate, and we want it in pixels of self.sigma0
-            window_size = np.mean(
-                tuple(self.window_size / np.unique(np.diff(ax))[0] for ax in [self.sigma0.atrack, self.sigma0.xtrack])
-            )
-            self._windows_at = {
-                k: self.sigma0[k].isel(
-                    {
-                        k: np.linspace(
-                            1, self.sigma0[k].size,
-                            num=int(self.sigma0[k].size / (window_size / (1 / self.window_step))),
-                            dtype=int
-                        ) - 1
-                    }
+            window_size = int(
+                np.mean(
+                    tuple(self.window_size / np.unique(np.diff(ax))[0] for ax in [self.sigma0.atrack, self.sigma0.xtrack])
                 )
-                for k in self._spatial_dims
+            )
+            ds = self.sigma0.isel(atrack=slice(0, None, int(window_size)), xtrack=slice(0, None, int(window_size)))
+            self._windows_at = {
+                'atrack': ds.atrack,
+                'xtrack': ds.xtrack
             }
         return self._windows_at
 
@@ -190,7 +185,12 @@ class Gradients2D:
 
     @property
     def stepping_gradients(self):
-        return self.rolling_gradients.sel(self.windows_at, method='nearest')
+        # do not call .interp, it's exact, but slow and take much memory
+        # return self.rolling_gradients.interp(self.windows_at, method='nearest')
+        sg = self.rolling_gradients.sel(self.windows_at, method='nearest')
+        sg['atrack'] = self.windows_at['atrack']
+        sg['xtrack'] = self.windows_at['xtrack']
+        return sg
 
 
 class StackedGradients:
@@ -225,20 +225,13 @@ class StackedGradients:
 
         ref_hist = self._ref_gradient.histogram
 
-        # list of gradients, with same axtrack (parallelized)
-        with Pool() as p:
-            aligned_hists = p.map(
-                partial(self._stackable, ref_hist.atrack, ref_hist.xtrack),
-                self._others_gradients
-            )
-
         # list of gradients, with same axtrack (non parallelized)
-        # aligned_hists = [
-        #    g.histogram.interp(
-        #        atrack=ref_hist.atrack,
-        #        xtrack=ref_hist.xtrack
-        #    ) for g in self._others_gradients
-        # ]
+        aligned_hists = [
+            g.histogram.interp(
+                atrack=ref_hist.atrack,
+                xtrack=ref_hist.xtrack
+            ) for g in self._others_gradients
+        ]
         return xr.concat([ref_hist] + aligned_hists, dim='stacked')
 
 
@@ -256,9 +249,9 @@ class Gradients:
 
         windows_sizes: list of int
 
-            list of windows size, like `[160, 320]`.
+            list of windows size, like `[1600, 3200]`.
 
-            to have 16km and 32km windows size (if input sigma0 resolution is 100m)
+            to have 16km and 32km windows size (if sensor sigma0 resolution is 10m)
 
         downscales_factors: list of int
 
@@ -293,7 +286,7 @@ class Gradients:
                     self.gradients_list.append(
                         Gradients2D(
                             sigma0_resampled.assign_coords(window_size=ws),
-                            window_size=ws // df,  # adjust by df, so window_size refer to full scale sigma0
+                            window_size=ws,
                         )
                     )
 
