@@ -23,6 +23,48 @@ LUT_file_name_cp_mouche = 'LUT_CP_GMF_MS1AHW_2D_80ms.pkl'  # High Wind
 # LUT_path2 = "/home/datawork-cersat-public/cache/project/sarwing/GMFS/v1.6/"
 
 
+def format_angle(angle, cycle=360, compass_format=False):
+    r"""
+    This routine performs modulo operation on input angle given the value
+    of cycle. The output value is then either formatted between 0 and
+    cycle (when compass_format keyword is set) or between -cycle/2 and
+    cycle/2.
+
+    :param angle: The angle to be formatted (expressed in degrees)
+    :param cycle: The modulo value (set to 360° if not defined)
+    :param compass_format: If set to True, then the output value will be
+                           formatted between 0 and cycle, else it will be between -cycle/2
+                           and cycle/2
+
+    Procedure:
+        1. The angle value is transformed as follows:
+            .. math:: angle = Mod(angle,cycle)
+            .. math:: angle = \lbrace^{angle+cycle, \qquad if \qquad angle<=cycle/2}_{angle-cycle, \qquad if \qquad angle>cycle/2}
+        2. Finally, the returned value of angle is given by:
+            .. math:: angle = \lbrace^{angle+cycle, \qquad if \qquad compass_{format}=True}_{angle, \qquad else}
+
+    """
+    # stretch angles between [-180, 180] or [0, 360]
+    theta = np.mod(angle, cycle)
+    try:
+        theta[theta <= cycle/2] += cycle
+        theta[theta > cycle/2] -= cycle
+
+        if (compass_format):
+            theta[theta < 0] += cycle
+    except TypeError:
+        if theta <= cycle/2:
+            theta += cycle
+        if theta > cycle/2:
+            theta -= cycle
+
+        if (compass_format):
+            if theta < 0:
+                theta += cycle
+
+    return theta
+
+
 class WindInversion:
     """
     WindInversion class
@@ -161,47 +203,32 @@ class WindInversion:
                               vectorize=True)
 
     def get_wind_from_cost_function(self, J, wspd_LUT):
-        J[np.isnan(J)] = +9999.
-        ind = np.where(J == J.min())
-        if len(ind[0]) > 1:
+        """
+        J[np.isnan(J)] = +9999999999.
+        ind = np.where(J == np.min(J))
+        if len(ind[0]) != 1:
             wspd_du2 = np.array([0])
         else:
             wspd_du2 = wspd_LUT[ind]
         return wspd_du2
+        """
 
-    def spd_dir_to_UV(self, _spd, _dir, ground_heading=None):
+        ind = np.where(J == J.min())
+        if len(ind[0]) == 1:
+            # print(ind, wspd_LUT[ind[0]])
+            return wspd_LUT[ind]
+        else:
+            return np.array([0])
 
+    def spd_dir_to_UV(self, _spd, _dir, ground_heading):
+        """
         if ground_heading is not None:
             return _spd*np.cos((_dir-ground_heading+90)/180.*np.pi), _spd*np.sin((_dir-ground_heading+90)/180.*np.pi)
+
         else:
             return _spd*np.cos(_dir/180.*np.pi), _spd*np.sin(_dir/180.*np.pi)
-
-    def perform_co_inversion_1pt(self, sigco, theta, ground_heading, ecmwf_u, ecmwf_v):
-
-        du = 2
-        dv = 2
-        dsig = 0.1
-
-        inc_LUT = self.LUT_co['CMOD5n']['INC']
-        wspd_LUT = self.LUT_co['CMOD5n']['WSPD']
-        sigma0_LUT = self.LUT_co['CMOD5n']['NRCS']
-        ZON_LUT = self.LUT_co['CMOD5n']['ZON']
-        MER_LUT = self.LUT_co['CMOD5n']['MER']
-
-        index_inc = np.argmin(abs(inc_LUT-theta))
-
-        # Cost functions ======================================
-
-        ecmwf_wsp, ecmwf_dir = self.UV_to_spd_dir(ecmwf_u, ecmwf_v)
-
-        mu, mv = self.spd_dir_to_UV(
-            ecmwf_wsp, ecmwf_dir, ground_heading=ground_heading)
-
-        Jwind = ((ZON_LUT-mu)/du)**2+((MER_LUT-mv)/dv)**2
-        Jsig = ((sigma0_LUT[index_inc, :, :]-sigco)/dsig)**2
-        J = Jwind+Jsig
-
-        return self.get_wind_from_cost_function(J, wspd_LUT)
+        """
+        return _spd*np.cos((_dir-ground_heading+90)/180.*np.pi), _spd*np.sin((_dir-ground_heading+90)/180.*np.pi)
 
     def perform_mouche_inversion_1pt(self, sigco, sigcr, nesz_cr,  theta, track, ecmwf_wsp, ecmwf_dir, du=2, dv=2, dsig=0.1,  dsig_crpol=0.1):
 
@@ -238,6 +265,45 @@ class WindInversion:
         if (wsp_mouche < 5 or wsp_first_guess < 5):
             wsp_mouche = wsp_first_guess
 
+    def perform_co_inversion_1pt(self, sigco, theta, ecmwf_wsp, ground_heading, ori_u, ori_v):
+
+        du = 2
+        dv = 2
+        dsig = 0.1
+
+        inc_LUT = self.LUT_co['CMOD5n']['INC']
+        wspd_LUT = self.LUT_co['CMOD5n']['WSPD']
+        sigma0_LUT = self.LUT_co['CMOD5n']['NRCS']
+
+        ZON_LUT = self.LUT_co['CMOD5n']['ZON']
+        MER_LUT = self.LUT_co['CMOD5n']['MER']
+
+        index_inc = np.argmin(abs(inc_LUT-theta))
+
+        ext_ancillary_wind_direction = 90. - \
+            np.rad2deg(np.arctan2(ori_v, ori_u))
+
+        # save the direction in meteorological conventionfor for export
+        ext_ancillary_wind_direction = format_angle(
+            ext_ancillary_wind_direction + 180, compass_format=True)
+
+        # Cost functions ======================================
+        mu = ecmwf_wsp * \
+            np.cos(np.radians(ext_ancillary_wind_direction - ground_heading + 90.))
+        mv = ecmwf_wsp * \
+            np.sin(np.radians(ext_ancillary_wind_direction - ground_heading + 90.))
+
+        # mu, mv = self.spd_dir_to_UV(
+        #    ecmwf_wsp, ext_ancillary_wind_direction, ground_heading=ground_heading)
+
+        Jwind = ((ZON_LUT-mu)/du)**2+((MER_LUT-mv)/dv)**2
+        Jsig = ((sigma0_LUT[index_inc, :, :]-sigco)/dsig)**2
+        J = Jwind+Jsig
+
+        # Solutions 1 ==================================
+
+        return self.get_wind_from_cost_function(J, wspd_LUT)
+
     def perform_co_inversion(self):
         """
 
@@ -248,10 +314,22 @@ class WindInversion:
         xarray.Dataset
         """
 
+        # sarwing way :
+        """
+        ext_ancillary_wind_direction = 90. - \
+            np.rad2deg(np.arctan2(wind_v, wind_u))
+        # save the direction in meteorological conventionfor for export
+        self.ext_ancillary_wind_direction = format_angle(
+            ext_ancillary_wind_direction + 180, compass_format=True)
+        """
+
+        # ecmwf_dir_img = ecmwf_dir-self.ds_xsar["ground_heading"]
         return xr.apply_ufunc(self.perform_co_inversion_1pt,
                               self.ds_xsar.sigma0.isel(pol=0).compute(),
                               self.ds_xsar.incidence.compute(),
+                              self.ds_xsar.ecmwf_0100_1h_WSPD.compute(),
                               self.ds_xsar.ground_heading.compute(),
                               self.ds_xsar.ecmwf_0100_1h_U10.compute(),
                               self.ds_xsar.ecmwf_0100_1h_V10.compute(),
+
                               vectorize=True)
