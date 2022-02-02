@@ -203,73 +203,42 @@ class WindInversion:
                               vectorize=True)
 
     def get_wind_from_cost_function(self, J, wspd_LUT):
-        """
-        J[np.isnan(J)] = +9999999999.
-        ind = np.where(J == np.min(J))
-        if len(ind[0]) != 1:
-            wspd_du2 = np.array([0])
-        else:
-            wspd_du2 = wspd_LUT[ind]
-        return wspd_du2
-        """
-
         ind = np.where(J == J.min())
         if len(ind[0]) == 1:
-            # print(ind, wspd_LUT[ind[0]])
             return wspd_LUT[ind]
+        elif len(ind[0]) > 1:
+            # sometimes there are 2 minimums (indices could be 0 & 360, so its could be due to LUTS) :
+            # we take the first indice
+            return wspd_LUT[np.array([ind[0][0]]), np.array([ind[1][0]])]
         else:
-            return np.array([0])
+            return np.array([np.nan])
 
-    def spd_dir_to_UV(self, _spd, _dir, ground_heading):
-        """
-        if ground_heading is not None:
-            return _spd*np.cos((_dir-ground_heading+90)/180.*np.pi), _spd*np.sin((_dir-ground_heading+90)/180.*np.pi)
+    def perform_mouche_inversion_1pt(self, sigco, sigcr, nesz_cr,  theta, ground_heading, ecmwf_wsp, ori_u, ori_v, du=2, dv=2, dsig=0.1):
 
-        else:
-            return _spd*np.cos(_dir/180.*np.pi), _spd*np.sin(_dir/180.*np.pi)
-        """
-        return _spd*np.cos((_dir-ground_heading+90)/180.*np.pi), _spd*np.sin((_dir-ground_heading+90)/180.*np.pi)
-
-    def perform_mouche_inversion_1pt(self, sigco, sigcr, nesz_cr,  theta, track, ecmwf_wsp, ecmwf_dir, du=2, dv=2, dsig=0.1,  dsig_crpol=0.1):
-
-        # ===============================================
-        # Dual-Polarization Channel
-        # ===============================================
-
-        LUT_co = self.get_LUT_co()  # TODO
-        LUT_cr = self.get_LUT_cr()  # TODO
-
-        inc_cp_LUT = LUT_cr['H14E']['INC']
-        wspd_cp_LUT = LUT_cr['H14E']['WSPD']
-        sigma0_cp_LUT2 = LUT_cr['MS1A']['NRCS']
-
+        inc_cp_LUT = self.LUT_cr['H14E']['INC']
+        wspd_cp_LUT = self.LUT_cr['H14E']['WSPD']
+        sigma0_cp_LUT2 = self.LUT_cr['MS1A']['NRCS']
         index_cp_inc = np.argmin(abs(inc_cp_LUT-theta))
 
-        wsp_mouche = 0
         wsp_first_guess = self.perform_co_inversion_1pt(
-            sigco, theta, track, ecmwf_wsp, ecmwf_dir, LUT_co, du, dv, dsig)
+            sigco, theta, ground_heading, ecmwf_wsp, ori_u, ori_v, du, dv, dsig)
+
         du10_fg = 2
 
-        # full xarray here
-        sigcr_flatten = self.noise_flattening(self, nesz_cr, theta)
-
-        # select le bon point
-        dsigcrpol = (1./(sigcr/sigcr_flatten))**2.
-
+        dsigcrpol = (1./((10**(sigcr/10))/nesz_cr))**2.
         # returning solution
         J_wind = ((wspd_cp_LUT-wsp_first_guess)/du10_fg)**2.
         J_sigcrpol2 = ((sigma0_cp_LUT2[index_cp_inc, :]-sigcr)/dsigcrpol)**2
         J_final2 = J_sigcrpol2 + J_wind
-        wsp_mouche = self.getWindFromCostFunction(J_final2, wspd_cp_LUT)
 
-        if (wsp_mouche < 5 or wsp_first_guess < 5):
-            wsp_mouche = wsp_first_guess
+        wsp_mouche = self.get_wind_from_cost_function(J_final2, wspd_cp_LUT)
 
-    def perform_co_inversion_1pt(self, sigco, theta, ecmwf_wsp, ground_heading, ori_u, ori_v):
+        if (wsp_mouche < 5 or wsp_first_guess < 5 or np.isnan(wsp_mouche)):
+            return wsp_first_guess
 
-        du = 2
-        dv = 2
-        dsig = 0.1
+        return wsp_mouche
+
+    def perform_co_inversion_1pt(self, sigco, theta, ground_heading, ecmwf_wsp, ori_u, ori_v, du=2, dv=2, dsig=0.1):
 
         inc_LUT = self.LUT_co['CMOD5n']['INC']
         wspd_LUT = self.LUT_co['CMOD5n']['WSPD']
@@ -287,14 +256,10 @@ class WindInversion:
         ext_ancillary_wind_direction = format_angle(
             ext_ancillary_wind_direction + 180, compass_format=True)
 
-        # Cost functions ======================================
         mu = ecmwf_wsp * \
             np.cos(np.radians(ext_ancillary_wind_direction - ground_heading + 90.))
         mv = ecmwf_wsp * \
             np.sin(np.radians(ext_ancillary_wind_direction - ground_heading + 90.))
-
-        # mu, mv = self.spd_dir_to_UV(
-        #    ecmwf_wsp, ext_ancillary_wind_direction, ground_heading=ground_heading)
 
         Jwind = ((ZON_LUT-mu)/du)**2+((MER_LUT-mv)/dv)**2
         Jsig = ((sigma0_LUT[index_inc, :, :]-sigco)/dsig)**2
@@ -309,27 +274,51 @@ class WindInversion:
 
         Parameters
         ----------
+
         Returns
         -------
-        xarray.Dataset
-        """
-
-        # sarwing way :
-        """
-        ext_ancillary_wind_direction = 90. - \
-            np.rad2deg(np.arctan2(wind_v, wind_u))
-        # save the direction in meteorological conventionfor for export
-        self.ext_ancillary_wind_direction = format_angle(
-            ext_ancillary_wind_direction + 180, compass_format=True)
+        copol_wspd: xarray.DataArray
+            DataArray with dims `('atrack','xtrack')`.
         """
 
         # ecmwf_dir_img = ecmwf_dir-self.ds_xsar["ground_heading"]
         return xr.apply_ufunc(self.perform_co_inversion_1pt,
-                              self.ds_xsar.sigma0.isel(pol=0).compute(),
+                              10*np.log10(self.ds_xsar.sigma0.isel(pol=0)
+                                          ).compute(),
                               self.ds_xsar.incidence.compute(),
-                              self.ds_xsar.ecmwf_0100_1h_WSPD.compute(),
                               self.ds_xsar.ground_heading.compute(),
+
+                              self.ds_xsar.ecmwf_0100_1h_WSPD.compute(),
                               self.ds_xsar.ecmwf_0100_1h_U10.compute(),
                               self.ds_xsar.ecmwf_0100_1h_V10.compute(),
+                              vectorize=True)
 
+    def perform_mouche_inversion(self):
+        """
+        Parameters
+
+        ----------
+
+        Returns
+        -------
+        dualpol_wspd: xarray.DataArray
+            DataArray with dims `('atrack','xtrack')`.
+        """
+
+        # Perform noise_flatteing
+        noise_flatened = self.noise_flattening(self.ds_xsar.sigma0.isel(pol=1).compute(),
+                                               self.ds_xsar.incidence.compute())
+
+        # ecmwf_dir_img = ecmwf_dir-self.ds_xsar["ground_heading"]
+        return xr.apply_ufunc(self.perform_mouche_inversion_1pt,
+                              10*np.log10(self.ds_xsar.sigma0.isel(pol=0)
+                                          ).compute(),
+                              10*np.log10(self.ds_xsar.sigma0.isel(pol=1)
+                                          ).compute(),
+                              noise_flatened.compute(),
+                              self.ds_xsar.incidence.compute(),
+                              self.ds_xsar.ground_heading.compute(),
+                              self.ds_xsar.ecmwf_0100_1h_WSPD.compute(),
+                              self.ds_xsar.ecmwf_0100_1h_U10.compute(),
+                              self.ds_xsar.ecmwf_0100_1h_V10.compute(),
                               vectorize=True)
