@@ -213,32 +213,7 @@ class WindInversion:
         else:
             return np.array([np.nan])
 
-    def perform_mouche_inversion_1pt(self, sigco, sigcr, nesz_cr,  theta, ground_heading, ecmwf_wsp, ori_u, ori_v, du=2, dv=2, dsig=0.1):
-
-        inc_cp_LUT = self.LUT_cr['H14E']['INC']
-        wspd_cp_LUT = self.LUT_cr['H14E']['WSPD']
-        sigma0_cp_LUT2 = self.LUT_cr['MS1A']['NRCS']
-        index_cp_inc = np.argmin(abs(inc_cp_LUT-theta))
-
-        wsp_first_guess = self.perform_co_inversion_1pt(
-            sigco, theta, ground_heading, ecmwf_wsp, ori_u, ori_v, du, dv, dsig)
-
-        du10_fg = 2
-
-        dsigcrpol = (1./((10**(sigcr/10))/nesz_cr))**2.
-        # returning solution
-        J_wind = ((wspd_cp_LUT-wsp_first_guess)/du10_fg)**2.
-        J_sigcrpol2 = ((sigma0_cp_LUT2[index_cp_inc, :]-sigcr)/dsigcrpol)**2
-        J_final2 = J_sigcrpol2 + J_wind
-
-        wsp_mouche = self.get_wind_from_cost_function(J_final2, wspd_cp_LUT)
-
-        if (wsp_mouche < 5 or wsp_first_guess < 5 or np.isnan(wsp_mouche)):
-            return wsp_first_guess
-
-        return wsp_mouche
-
-    def perform_co_inversion_1pt(self, sigco, theta, ground_heading, ecmwf_wsp, ori_u, ori_v, du=2, dv=2, dsig=0.1):
+    def perform_copol_inversion_1pt(self, sigco, theta, ground_heading, ecmwf_wsp, ori_u, ori_v, du=2, dv=2, dsig=0.1):
 
         inc_LUT = self.LUT_co['CMOD5n']['INC']
         wspd_LUT = self.LUT_co['CMOD5n']['WSPD']
@@ -265,11 +240,92 @@ class WindInversion:
         Jsig = ((sigma0_LUT[index_inc, :, :]-sigco)/dsig)**2
         J = Jwind+Jsig
 
-        # Solutions 1 ==================================
+        return self.get_wind_from_cost_function(J, wspd_LUT)
+
+    def perform_copol_inversion_1pt(self, sigco, theta, ground_heading, ecmwf_wsp, ori_u, ori_v, du=2, dv=2, dsig=0.1):
+
+        inc_LUT = self.LUT_co['CMOD5n']['INC']
+        wspd_LUT = self.LUT_co['CMOD5n']['WSPD']
+        sigma0_LUT = self.LUT_co['CMOD5n']['NRCS']
+
+        ZON_LUT = self.LUT_co['CMOD5n']['ZON']
+        MER_LUT = self.LUT_co['CMOD5n']['MER']
+
+        index_inc = np.argmin(abs(inc_LUT-theta))
+
+        ext_ancillary_wind_direction = 90. - \
+            np.rad2deg(np.arctan2(ori_v, ori_u))
+
+        # save the direction in meteorological conventionfor for export
+        ext_ancillary_wind_direction = format_angle(
+            ext_ancillary_wind_direction + 180, compass_format=True)
+
+        mu = ecmwf_wsp * \
+            np.cos(np.radians(ext_ancillary_wind_direction - ground_heading + 90.))
+        mv = ecmwf_wsp * \
+            np.sin(np.radians(ext_ancillary_wind_direction - ground_heading + 90.))
+
+        Jwind = ((ZON_LUT-mu)/du)**2+((MER_LUT-mv)/dv)**2
+        Jsig = ((sigma0_LUT[index_inc, :, :]-sigco)/dsig)**2
+        J = Jwind+Jsig
 
         return self.get_wind_from_cost_function(J, wspd_LUT)
 
-    def perform_co_inversion(self):
+    def perform_crpol_inversion_1pt(self, sigcr, theta, ground_heading, ecmwf_wsp, ori_u, ori_v, du=2, dv=2, dsig=0.1):
+
+        inc_cp_LUT = self.LUT_cr['H14E']['INC']
+        ZON_cp_LUT = self.LUT_cr['H14E']['ZON']
+        MER_cp_LUT = self.LUT_cr['H14E']['MER']
+        wspd_cp_LUT = self.LUT_cr['H14E']['WSPD']
+        #phi_cp_LUT = self.LUT_cr['H14E']['PHI']
+        #sigma0_cp_LUT = self.LUT_cr['H14E']['NRCS']
+        sigma0_cp_LUT2 = self.LUT_cr['MS1A']['NRCS']
+
+        index_cp_inc = np.argmin(abs(inc_cp_LUT-theta))
+
+        ext_ancillary_wind_direction = 90. - \
+            np.rad2deg(np.arctan2(ori_v, ori_u))
+
+        # save the direction in meteorological conventionfor for export
+        ext_ancillary_wind_direction = format_angle(
+            ext_ancillary_wind_direction + 180, compass_format=True)
+        mu = ecmwf_wsp * \
+            np.cos(np.radians(ext_ancillary_wind_direction - ground_heading + 90.))
+        mv = ecmwf_wsp * \
+            np.sin(np.radians(ext_ancillary_wind_direction - ground_heading + 90.))
+
+        Jwind = ((ZON_cp_LUT-mu)/du)**2+((MER_cp_LUT-mv)/dv)**2
+        Jsig_mouche = ((sigma0_cp_LUT2[index_cp_inc, :]-sigcr)/dsig)**2
+        J = Jwind+Jsig_mouche
+
+        return self.get_wind_from_cost_function(J, wspd_cp_LUT)
+
+    def perform_dualpol_inversion_1pt(self, sigco, sigcr, nesz_cr,  theta, ground_heading, ecmwf_wsp, ori_u, ori_v, du=2, dv=2, dsig=0.1):
+
+        inc_cp_LUT = self.LUT_cr['H14E']['INC']
+        wspd_cp_LUT = self.LUT_cr['H14E']['WSPD']
+        sigma0_cp_LUT2 = self.LUT_cr['MS1A']['NRCS']
+        index_cp_inc = np.argmin(abs(inc_cp_LUT-theta))
+
+        wsp_first_guess = self.perform_co_inversion_1pt(
+            sigco, theta, ground_heading, ecmwf_wsp, ori_u, ori_v, du, dv, dsig)
+
+        du10_fg = 2
+
+        dsigcrpol = (1./((10**(sigcr/10))/nesz_cr))**2.
+        # returning solution
+        J_wind = ((wspd_cp_LUT-wsp_first_guess)/du10_fg)**2.
+        J_sigcrpol2 = ((sigma0_cp_LUT2[index_cp_inc, :]-sigcr)/dsigcrpol)**2
+        J_final2 = J_sigcrpol2 + J_wind
+
+        wsp_mouche = self.get_wind_from_cost_function(J_final2, wspd_cp_LUT)
+
+        if (wsp_mouche < 5 or wsp_first_guess < 5 or np.isnan(wsp_mouche)):
+            return wsp_first_guess
+
+        return wsp_mouche
+
+    def perform_copol_inversion(self):
         """
 
         Parameters
@@ -281,8 +337,7 @@ class WindInversion:
             DataArray with dims `('atrack','xtrack')`.
         """
 
-        # ecmwf_dir_img = ecmwf_dir-self.ds_xsar["ground_heading"]
-        return xr.apply_ufunc(self.perform_co_inversion_1pt,
+        return xr.apply_ufunc(self.perform_copol_inversion_1pt,
                               10*np.log10(self.ds_xsar.sigma0.isel(pol=0)
                                           ).compute(),
                               self.ds_xsar.incidence.compute(),
@@ -293,7 +348,29 @@ class WindInversion:
                               self.ds_xsar.ecmwf_0100_1h_V10.compute(),
                               vectorize=True)
 
-    def perform_mouche_inversion(self):
+    def perform_crpol_inversion(self):
+        """
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        copol_wspd: xarray.DataArray
+            DataArray with dims `('atrack','xtrack')`.
+        """
+
+        return xr.apply_ufunc(self.perform_crpol_inversion_1pt,
+                              10*np.log10(self.ds_xsar.sigma0.isel(pol=1)
+                                          ).compute(),
+                              self.ds_xsar.incidence.compute(),
+                              self.ds_xsar.ground_heading.compute(),
+                              self.ds_xsar.ecmwf_0100_1h_WSPD.compute(),
+                              self.ds_xsar.ecmwf_0100_1h_U10.compute(),
+                              self.ds_xsar.ecmwf_0100_1h_V10.compute(),
+                              vectorize=True)
+
+    def perform_dualpol_inversion(self):
         """
         Parameters
 
