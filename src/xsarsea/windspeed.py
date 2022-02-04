@@ -9,6 +9,12 @@ import numpy as np
 import xarray as xr
 import pickle
 import os
+try:
+    from xsar.utils import timing
+except ImportError:
+    # null decorator
+    def timing(func):
+        return func
 
 
 # LUT_path = '/home1/datahome/vlheureu/inversion_Alx/'
@@ -86,7 +92,7 @@ class WindInversion:
         """
         self.ds_xsar = ds_xsar
         self.neszcr_mean = self.ds_xsar.nesz.isel(
-            pol=1).mean(axis=0, skipna=True).compute()
+            pol=1).mean(axis=0, skipna=True)
         self._spatial_dims = ['atrack', 'xtrack']
         self.sarwing_way = sarwing_way
         if self.sarwing_way:  # Sarwing way
@@ -227,10 +233,11 @@ class WindInversion:
             with 'noise_flattened' variable.
         """
 
-        return xr.apply_ufunc(self.perform_noise_flattening_1row, nesz_cr.compute(),
-                              incid.compute(),
+        return xr.apply_ufunc(self.perform_noise_flattening_1row, nesz_cr,
+                              incid,
                               input_core_dims=[["xtrack"], ["xtrack"]],
                               output_core_dims=[["xtrack"]],
+                              dask='parallelized',
                               vectorize=True)
 
     def get_wind_from_cost_function(self, J, wspd_LUT):
@@ -340,6 +347,7 @@ class WindInversion:
 
         return wsp_mouche
 
+    @timing
     def perform_copol_inversion(self):
         """
 
@@ -354,15 +362,17 @@ class WindInversion:
 
         return xr.apply_ufunc(self.perform_copol_inversion_1pt,
                               10*np.log10(self.ds_xsar.sigma0.isel(pol=0)
-                                          ).compute(),
-                              self.ds_xsar.incidence.compute(),
-                              self.ds_xsar.ground_heading.compute(),
+                                          ),
+                              self.ds_xsar.incidence,
+                              self.ds_xsar.ground_heading,
 
-                              self.ds_xsar.ecmwf_0100_1h_WSPD.compute(),
-                              self.ds_xsar.ecmwf_0100_1h_U10.compute(),
-                              self.ds_xsar.ecmwf_0100_1h_V10.compute(),
+                              self.ds_xsar.ecmwf_0100_1h_WSPD,
+                              self.ds_xsar.ecmwf_0100_1h_U10,
+                              self.ds_xsar.ecmwf_0100_1h_V10,
+                              dask='parallelized',
                               vectorize=True)
 
+    @timing
     def perform_crpol_inversion(self):
         """
 
@@ -377,14 +387,16 @@ class WindInversion:
 
         return xr.apply_ufunc(self.perform_crpol_inversion_1pt,
                               10*np.log10(self.ds_xsar.sigma0.isel(pol=1)
-                                          ).compute(),
-                              self.ds_xsar.incidence.compute(),
-                              self.ds_xsar.ground_heading.compute(),
-                              self.ds_xsar.ecmwf_0100_1h_WSPD.compute(),
-                              self.ds_xsar.ecmwf_0100_1h_U10.compute(),
-                              self.ds_xsar.ecmwf_0100_1h_V10.compute(),
+                                          ),
+                              self.ds_xsar.incidence,
+                              self.ds_xsar.ground_heading,
+                              self.ds_xsar.ecmwf_0100_1h_WSPD,
+                              self.ds_xsar.ecmwf_0100_1h_U10,
+                              self.ds_xsar.ecmwf_0100_1h_V10,
+                              dask='parallelized',
                               vectorize=True)
 
+    @timing
     def perform_dualpol_inversion(self):
         """
         Parameters
@@ -398,19 +410,20 @@ class WindInversion:
         """
 
         # Perform noise_flatteing
-        noise_flatened = self.perform_noise_flattening(self.ds_xsar.sigma0.isel(pol=1).compute(),
-                                                       self.ds_xsar.incidence.compute())
+        noise_flatened = self.noise_flattening(self.ds_xsar.sigma0.isel(pol=1),
+                                               self.ds_xsar.incidence)
 
         # ecmwf_dir_img = ecmwf_dir-self.ds_xsar["ground_heading"]
         return xr.apply_ufunc(self.perform_dualpol_inversion_1pt,
                               10*np.log10(self.ds_xsar.sigma0.isel(pol=0)
-                                          ).compute(),
+                                          ),
                               10*np.log10(self.ds_xsar.sigma0.isel(pol=1)
-                                          ).compute(),
-                              noise_flatened.compute(),
-                              self.ds_xsar.incidence.compute(),
-                              self.ds_xsar.ground_heading.compute(),
-                              self.ds_xsar.ecmwf_0100_1h_WSPD.compute(),
-                              self.ds_xsar.ecmwf_0100_1h_U10.compute(),
-                              self.ds_xsar.ecmwf_0100_1h_V10.compute(),
+                                          ),
+                              noise_flatened,
+                              self.ds_xsar.incidence,
+                              self.ds_xsar.ground_heading,
+                              self.ds_xsar.ecmwf_0100_1h_WSPD,
+                              self.ds_xsar.ecmwf_0100_1h_U10,
+                              self.ds_xsar.ecmwf_0100_1h_V10,
+                              dask='parallelized',
                               vectorize=True)
