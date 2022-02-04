@@ -8,10 +8,12 @@ https://agupubs.onlinelibrary.wiley.com/doi/full/10.1029/2006JC003743
 import numpy as np
 import xarray as xr
 import pickle
+import os
+
 
 # LUT_path = '/home1/datahome/vlheureu/inversion_Alx/'
 
-LUT_path = "/home/vincelhx/Documents/ifremer/CDD/"
+LUT_path = "/home/vincelhx/Documents/ifremer/gmfs/GMF_mouche_inversion/"
 # Version a 50 m/s
 LUT_file_name_vv = 'sig_vv_LUT_cmod5n_upto50ms.pkl'
 # LUT_file_name_cp = 'LUT_CP_GMF_H14E_2D.pkl'
@@ -20,7 +22,8 @@ LUT_file_name_cp_hwang = 'LUT_CP_GMF_H14E_2D_80ms.pkl'  # Hwang
 # LUT_file_name_cp_mouche = 'LUT_CP_GMF_MS1An_2D_80ms.pkl' # IEEE 2017
 LUT_file_name_cp_mouche = 'LUT_CP_GMF_MS1AHW_2D_80ms.pkl'  # High Wind
 
-# LUT_path2 = "/home/datawork-cersat-public/cache/project/sarwing/GMFS/v1.6/"
+LUT_co_path_sarwing = "/home/vincelhx/Documents/ifremer/gmfs/GMF_cmod5n/"
+LUT_cr_path_sarwing = "/home/vincelhx/Documents/ifremer/gmfs/GMF_cmodms1ahw/"
 
 
 def format_angle(angle, cycle=360, compass_format=False):
@@ -70,7 +73,7 @@ class WindInversion:
     WindInversion class
     """
 
-    def __init__(self, ds_xsar):
+    def __init__(self, ds_xsar, sarwing_way=False):
         """
         # TODO we start with the full dataset?
 
@@ -85,14 +88,55 @@ class WindInversion:
         self.neszcr_mean = self.ds_xsar.nesz.isel(
             pol=1).mean(axis=0, skipna=True).compute()
         self._spatial_dims = ['atrack', 'xtrack']
+        self.sarwing_way = sarwing_way
+        if self.sarwing_way:  # Sarwing way
+            self.LUT_cr, self.LUT_co = self.get_LUTs_sarwing_way()
 
-        self.LUT_cr, self.LUT_co = self.get_LUTs()
+        else:  # Alexis way
+            self.LUT_cr, self.LUT_co = self.get_LUTs()
 
-    def UV_to_spd_dir(self, _U, _V):
-        return np.sqrt(_U**2+_V**2), np.arctan2(_V, _U) / np.pi*180
+    def get_LUTs_sarwing_way(self):
+        print('... LUT loading sarwing way...')
+
+        # LUT CO
+        LUT_co = {}
+        LUT_co["INC"] = pickle.load(open(os.path.join(
+            LUT_co_path_sarwing, 'incidence_angle.pkl'), 'rb'), encoding='iso-8859-1')
+
+        phi_LUT, wspd_LUT = pickle.load(open(os.path.join(
+            LUT_co_path_sarwing, 'wind_speed_and_direction.pkl'), 'rb'), encoding='iso-8859-1')
+
+        LUT_co["WSPD"], LUT_co["PHI"] = np.meshgrid(
+            wspd_LUT, np.arange(0, 360, 1.))
+
+        LUT_co["ZON"] = LUT_co["WSPD"]*np.cos(LUT_co["PHI"]/180.*np.pi)
+        LUT_co["MER"] = LUT_co["WSPD"]*np.sin(LUT_co["PHI"]/180.*np.pi)
+
+        if (self.ds_xsar.coords["pol"].values[0] == "VV"):
+            print(self.ds_xsar.coords["pol"].values[0])
+            LUT_co["NRCS"] = np.load(
+                os.path.join(LUT_co_path_sarwing, 'sigma.npy'))
+        else:
+            LUT_co["NRCS"] = np.load(
+                os.path.join(LUT_co_path_sarwing, 'sigma_hh_ratio_zhang2.npy'))
+
+        # LUT CR
+        LUT_cr = {}
+
+        LUT_cr["INC"] = pickle.load(open(os.path.join(
+            LUT_cr_path_sarwing, 'incidence_angle.pkl'), 'rb'), encoding='iso-8859-1')
+
+        LUT_cr["WSPD"] = pickle.load(open(os.path.join(
+            LUT_cr_path_sarwing, 'wind_speed.pkl'), 'rb'), encoding='iso-8859-1')
+
+        LUT_cr["NRCS"] = np.load(os.path.join(
+            LUT_cr_path_sarwing, 'sigma.npy'))
+        print('loaded !')
+
+        return LUT_cr, LUT_co
 
     def get_LUTs(self):
-        print('... LUT loading ...')
+        print('... LUT loading Alexis Mouche way...')
 
         # Cross-Pol Hwang GMFnp.sin(phi_LUT/180.*np.pi)
         LUT_co = {},
@@ -103,32 +147,20 @@ class WindInversion:
             0.  # wspd_cp_LUT*np.cos(phi_cp_LUT/180.*np.pi)
         MER_cp_LUT = wspd_cp_LUT * \
             0.  # wspd_cp_LUT*np.sin(phi_cp_LUT/180.*np.pi)
-        phi_cp_LUT = wspd_cp_LUT*0.
+        # phi_cp_LUT = wspd_cp_LUT*0.
         LUT_cr = {}
-        LUT_cr['H14E'] = {}
-        LUT_cr['H14E']['INC'] = inc_cp_LUT
-        LUT_cr['H14E']['ZON'] = ZON_cp_LUT
-        LUT_cr['H14E']['MER'] = MER_cp_LUT
-        LUT_cr['H14E']['WSPD'] = wspd_cp_LUT
-        LUT_cr['H14E']['PHI'] = phi_cp_LUT
-        LUT_cr['H14E']['NRCS'] = sigma0_cp_LUT*0.9
+        LUT_cr['INC'] = inc_cp_LUT
+        LUT_cr['ZON'] = ZON_cp_LUT
+        LUT_cr['MER'] = MER_cp_LUT
+        LUT_cr['WSPD'] = wspd_cp_LUT
+        # LUT_cr['H14E']['PHI'] = phi_cp_LUT
+        # LUT_cr['H14E']['NRCS'] = sigma0_cp_LUT*0.9
 
         # Cross-Pol Mouche GMF
         inc_cp_LUT, wspd_cp_LUT, sigma0_cp_LUT = pickle.load(
             open(LUT_path+LUT_file_name_cp_mouche, 'rb'), encoding='iso-8859-1')
         # wspd_cp_LUT,phi_cp_LUT = np.meshgrid(wspd_cp_LUT,phi_cp_LUT)
-        ZON_cp_LUT = wspd_cp_LUT * \
-            0.  # wspd_cp_LUT*np.cos(phi_cp_LUT/180.*np.pi)
-        MER_cp_LUT = wspd_cp_LUT * \
-            0.  # wspd_cp_LUT*np.sin(phi_cp_LUT/180.*np.pi)
-        phi_cp_LUT = wspd_cp_LUT*0.
-        LUT_cr['MS1A'] = {}
-        LUT_cr['MS1A']['INC'] = inc_cp_LUT
-        LUT_cr['MS1A']['ZON'] = ZON_cp_LUT
-        LUT_cr['MS1A']['MER'] = MER_cp_LUT
-        LUT_cr['MS1A']['WSPD'] = wspd_cp_LUT
-        LUT_cr['MS1A']['PHI'] = phi_cp_LUT
-        LUT_cr['MS1A']['NRCS'] = sigma0_cp_LUT
+        LUT_cr['NRCS'] = sigma0_cp_LUT
 
         # Co-Pol
         inc_LUT, phi_LUT, wspd_LUT, sigma0_LUT = pickle.load(
@@ -137,18 +169,17 @@ class WindInversion:
         ZON_LUT = wspd_LUT*np.cos(phi_LUT/180.*np.pi)
         MER_LUT = wspd_LUT*np.sin(phi_LUT/180.*np.pi)
         LUT_co = {}
-        LUT_co['CMOD5n'] = {}
-        LUT_co['CMOD5n']['INC'] = inc_LUT
-        LUT_co['CMOD5n']['ZON'] = ZON_LUT
-        LUT_co['CMOD5n']['MER'] = MER_LUT
-        LUT_co['CMOD5n']['WSPD'] = wspd_LUT
-        LUT_co['CMOD5n']['PHI'] = phi_LUT
-        LUT_co['CMOD5n']['NRCS'] = sigma0_LUT
+        LUT_co['INC'] = inc_LUT
+        LUT_co['ZON'] = ZON_LUT
+        LUT_co['MER'] = MER_LUT
+        LUT_co['WSPD'] = wspd_LUT
+        # LUT_co['PHI'] = phi_LUT
+        LUT_co['NRCS'] = sigma0_LUT
 
         print('loaded !')
         return LUT_cr, LUT_co
 
-    def noise_flattening_1row(self, nesz_row, incid_row, display=False):
+    def perform_noise_flattening_1row(self, nesz_row, incid_row, display=False):
         """
         TODO : Alexis is selecting peaks with find_peaks for polyfit
         Parameters
@@ -161,7 +192,7 @@ class WindInversion:
             DataArray with dims `('xtrack')`.
         display : boolean
 
-        Returns
+        Returns 
         -------
         xarray.Dataset
         """
@@ -180,7 +211,7 @@ class WindInversion:
             None
         return nesz_flat
 
-    def noise_flattening(self, nesz_cr, incid):
+    def perform_noise_flattening(self, nesz_cr, incid):
         """
 
         Parameters
@@ -196,7 +227,7 @@ class WindInversion:
             with 'noise_flattened' variable.
         """
 
-        return xr.apply_ufunc(self.noise_flattening_1row, nesz_cr.compute(),
+        return xr.apply_ufunc(self.perform_noise_flattening_1row, nesz_cr.compute(),
                               incid.compute(),
                               input_core_dims=[["xtrack"], ["xtrack"]],
                               output_core_dims=[["xtrack"]],
@@ -215,41 +246,11 @@ class WindInversion:
 
     def perform_copol_inversion_1pt(self, sigco, theta, ground_heading, ecmwf_wsp, ori_u, ori_v, du=2, dv=2, dsig=0.1):
 
-        inc_LUT = self.LUT_co['CMOD5n']['INC']
-        wspd_LUT = self.LUT_co['CMOD5n']['WSPD']
-        sigma0_LUT = self.LUT_co['CMOD5n']['NRCS']
-
-        ZON_LUT = self.LUT_co['CMOD5n']['ZON']
-        MER_LUT = self.LUT_co['CMOD5n']['MER']
-
-        index_inc = np.argmin(abs(inc_LUT-theta))
-
-        ext_ancillary_wind_direction = 90. - \
-            np.rad2deg(np.arctan2(ori_v, ori_u))
-
-        # save the direction in meteorological conventionfor for export
-        ext_ancillary_wind_direction = format_angle(
-            ext_ancillary_wind_direction + 180, compass_format=True)
-
-        mu = ecmwf_wsp * \
-            np.cos(np.radians(ext_ancillary_wind_direction - ground_heading + 90.))
-        mv = ecmwf_wsp * \
-            np.sin(np.radians(ext_ancillary_wind_direction - ground_heading + 90.))
-
-        Jwind = ((ZON_LUT-mu)/du)**2+((MER_LUT-mv)/dv)**2
-        Jsig = ((sigma0_LUT[index_inc, :, :]-sigco)/dsig)**2
-        J = Jwind+Jsig
-
-        return self.get_wind_from_cost_function(J, wspd_LUT)
-
-    def perform_copol_inversion_1pt(self, sigco, theta, ground_heading, ecmwf_wsp, ori_u, ori_v, du=2, dv=2, dsig=0.1):
-
-        inc_LUT = self.LUT_co['CMOD5n']['INC']
-        wspd_LUT = self.LUT_co['CMOD5n']['WSPD']
-        sigma0_LUT = self.LUT_co['CMOD5n']['NRCS']
-
-        ZON_LUT = self.LUT_co['CMOD5n']['ZON']
-        MER_LUT = self.LUT_co['CMOD5n']['MER']
+        inc_LUT = self.LUT_co['INC']
+        wspd_LUT = self.LUT_co['WSPD']
+        sigma0_LUT = self.LUT_co['NRCS']
+        ZON_LUT = self.LUT_co['ZON']
+        MER_LUT = self.LUT_co['MER']
 
         index_inc = np.argmin(abs(inc_LUT-theta))
 
@@ -266,19 +267,33 @@ class WindInversion:
             np.sin(np.radians(ext_ancillary_wind_direction - ground_heading + 90.))
 
         Jwind = ((ZON_LUT-mu)/du)**2+((MER_LUT-mv)/dv)**2
-        Jsig = ((sigma0_LUT[index_inc, :, :]-sigco)/dsig)**2
+        #print("Jwind.shape : ", Jwind.shape)
+
+        if self.sarwing_way:
+            gmf_nrcs = np.squeeze(sigma0_LUT[index_inc, :, :])
+            gmf_nrcs = np.concatenate(
+                (gmf_nrcs, gmf_nrcs[::-1, :][1:-1, :]), axis=0)
+            Jsig = ((gmf_nrcs-sigco)/dsig)**2
+
+        else:
+            Jsig = ((sigma0_LUT[index_inc, :, :]-sigco)/dsig)**2
+        #print("Jsig.shape : ", Jsig.shape)
+
         J = Jwind+Jsig
 
         return self.get_wind_from_cost_function(J, wspd_LUT)
 
     def perform_crpol_inversion_1pt(self, sigcr, theta, ground_heading, ecmwf_wsp, ori_u, ori_v, du=2, dv=2, dsig=0.1):
 
+        # TODO ZON_cp_LUT & MER_cp_LUT is 0 so Jwind = (mu/du)**2 + (mv/dv)**2 but in sarwing's invert_crosspol fct its 0
+        # This has no incidence on dualpol inversion
+
         inc_cp_LUT = self.LUT_cr['H14E']['INC']
         ZON_cp_LUT = self.LUT_cr['H14E']['ZON']
         MER_cp_LUT = self.LUT_cr['H14E']['MER']
         wspd_cp_LUT = self.LUT_cr['H14E']['WSPD']
-        #phi_cp_LUT = self.LUT_cr['H14E']['PHI']
-        #sigma0_cp_LUT = self.LUT_cr['H14E']['NRCS']
+        # phi_cp_LUT = self.LUT_cr['H14E']['PHI']
+        # sigma0_cp_LUT = self.LUT_cr['H14E']['NRCS']
         sigma0_cp_LUT2 = self.LUT_cr['MS1A']['NRCS']
 
         index_cp_inc = np.argmin(abs(inc_cp_LUT-theta))
@@ -302,12 +317,12 @@ class WindInversion:
 
     def perform_dualpol_inversion_1pt(self, sigco, sigcr, nesz_cr,  theta, ground_heading, ecmwf_wsp, ori_u, ori_v, du=2, dv=2, dsig=0.1):
 
-        inc_cp_LUT = self.LUT_cr['H14E']['INC']
-        wspd_cp_LUT = self.LUT_cr['H14E']['WSPD']
-        sigma0_cp_LUT2 = self.LUT_cr['MS1A']['NRCS']
+        inc_cp_LUT = self.LUT_cr['INC']
+        wspd_cp_LUT = self.LUT_cr['WSPD']
+        sigma0_cp_LUT2 = self.LUT_cr['NRCS']
         index_cp_inc = np.argmin(abs(inc_cp_LUT-theta))
 
-        wsp_first_guess = self.perform_co_inversion_1pt(
+        wsp_first_guess = self.perform_copol_inversion_1pt(
             sigco, theta, ground_heading, ecmwf_wsp, ori_u, ori_v, du, dv, dsig)
 
         du10_fg = 2
@@ -383,11 +398,11 @@ class WindInversion:
         """
 
         # Perform noise_flatteing
-        noise_flatened = self.noise_flattening(self.ds_xsar.sigma0.isel(pol=1).compute(),
-                                               self.ds_xsar.incidence.compute())
+        noise_flatened = self.perform_noise_flattening(self.ds_xsar.sigma0.isel(pol=1).compute(),
+                                                       self.ds_xsar.incidence.compute())
 
         # ecmwf_dir_img = ecmwf_dir-self.ds_xsar["ground_heading"]
-        return xr.apply_ufunc(self.perform_mouche_inversion_1pt,
+        return xr.apply_ufunc(self.perform_dualpol_inversion_1pt,
                               10*np.log10(self.ds_xsar.sigma0.isel(pol=0)
                                           ).compute(),
                               10*np.log10(self.ds_xsar.sigma0.isel(pol=1)
