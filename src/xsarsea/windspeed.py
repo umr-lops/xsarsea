@@ -9,6 +9,8 @@ import numpy as np
 import xarray as xr
 import pickle
 import os
+
+
 try:
     from xsar.utils import timing
 except ImportError:
@@ -18,8 +20,7 @@ except ImportError:
 
 
 # LUT_path = '/home1/datahome/vlheureu/inversion_Alx/'
-
-LUT_path = "/home/vincelhx/Documents/ifremer/gmfs/GMF_mouche_inversion/"
+LUT_path = "/home/vincelhx/Documents/ifremer/data/gmfs/GMF_mouche_inversion/"
 # Version a 50 m/s
 LUT_file_name_vv = 'sig_vv_LUT_cmod5n_upto50ms.pkl'
 # LUT_file_name_cp = 'LUT_CP_GMF_H14E_2D.pkl'
@@ -28,8 +29,8 @@ LUT_file_name_cp_hwang = 'LUT_CP_GMF_H14E_2D_80ms.pkl'  # Hwang
 # LUT_file_name_cp_mouche = 'LUT_CP_GMF_MS1An_2D_80ms.pkl' # IEEE 2017
 LUT_file_name_cp_mouche = 'LUT_CP_GMF_MS1AHW_2D_80ms.pkl'  # High Wind
 
-LUT_co_path_sarwing = "/home/vincelhx/Documents/ifremer/gmfs/GMF_cmod5n/"
-LUT_cr_path_sarwing = "/home/vincelhx/Documents/ifremer/gmfs/GMF_cmodms1ahw/"
+LUT_co_path_sarwing = "/home/vincelhx/Documents/ifremer/data/gmfs/GMF_cmod5n/"
+LUT_cr_path_sarwing = "/home/vincelhx/Documents/ifremer/data/gmfs/GMF_cmodms1ahw/"
 
 
 def format_angle(angle, cycle=360, compass_format=False):
@@ -111,12 +112,13 @@ class WindInversion:
 
         phi_LUT, wspd_LUT = pickle.load(open(os.path.join(
             LUT_co_path_sarwing, 'wind_speed_and_direction.pkl'), 'rb'), encoding='iso-8859-1')
+        phi_LUT = np.concatenate((phi_LUT, -phi_LUT[::-1][1:-1])) % 360
 
         LUT_co["WSPD"], LUT_co["PHI"] = np.meshgrid(
-            wspd_LUT, np.arange(0, 360, 1.))
+            wspd_LUT, phi_LUT)
 
-        LUT_co["ZON"] = LUT_co["WSPD"]*np.cos(LUT_co["PHI"]/180.*np.pi)
-        LUT_co["MER"] = LUT_co["WSPD"]*np.sin(LUT_co["PHI"]/180.*np.pi)
+        LUT_co["ZON"] = LUT_co["WSPD"]*np.cos(np.radians(LUT_co["PHI"]))
+        LUT_co["MER"] = LUT_co["WSPD"]*np.sin(np.radians(LUT_co["PHI"]))
 
         if (self.ds_xsar.coords["pol"].values[0] == "VV"):
             print(self.ds_xsar.coords["pol"].values[0])
@@ -198,7 +200,7 @@ class WindInversion:
             DataArray with dims `('xtrack')`.
         display : boolean
 
-        Returns 
+        Returns
         -------
         xarray.Dataset
         """
@@ -207,8 +209,13 @@ class WindInversion:
         nesz_flat[np.isnan(nesz_flat)] = self.neszcr_mean[np.isnan(nesz_flat)]
 
         noise = 10*np.log10(nesz_flat)
-        _coef = np.polyfit(incid_row[np.isfinite(noise)],
-                           noise[np.isfinite(noise)], 1)
+
+        try:
+            _coef = np.polyfit(incid_row[np.isfinite(noise)],
+                               noise[np.isfinite(noise)], 1)
+        except Exception as e:
+            print(e)
+            return np.full(nesz_row.shape, np.nan)
 
         nesz_flat = 10.**((incid_row*_coef[0] + _coef[1] - 1.0)/10.)
 
@@ -274,7 +281,7 @@ class WindInversion:
             np.sin(np.radians(ext_ancillary_wind_direction - ground_heading + 90.))
 
         Jwind = ((ZON_LUT-mu)/du)**2+((MER_LUT-mv)/dv)**2
-        #print("Jwind.shape : ", Jwind.shape)
+        # print("Jwind.shape : ", Jwind.shape)
 
         if self.sarwing_way:
             gmf_nrcs = np.squeeze(sigma0_LUT[index_inc, :, :])
@@ -284,43 +291,34 @@ class WindInversion:
 
         else:
             Jsig = ((sigma0_LUT[index_inc, :, :]-sigco)/dsig)**2
-        #print("Jsig.shape : ", Jsig.shape)
+        # print("Jsig.shape : ", Jsig.shape)
 
         J = Jwind+Jsig
 
         return self.get_wind_from_cost_function(J, wspd_LUT)
 
-    def perform_crpol_inversion_1pt(self, sigcr, theta, ground_heading, ecmwf_wsp, ori_u, ori_v, du=2, dv=2, dsig=0.1):
+    def perform_crpol_inversion_1pt(self, sigcr, theta, dsig=0.1):
 
-        # TODO ZON_cp_LUT & MER_cp_LUT is 0 so Jwind = (mu/du)**2 + (mv/dv)**2 but in sarwing's invert_crosspol fct its 0
-        # This has no incidence on dualpol inversion
-
-        inc_cp_LUT = self.LUT_cr['H14E']['INC']
-        ZON_cp_LUT = self.LUT_cr['H14E']['ZON']
-        MER_cp_LUT = self.LUT_cr['H14E']['MER']
-        wspd_cp_LUT = self.LUT_cr['H14E']['WSPD']
-        # phi_cp_LUT = self.LUT_cr['H14E']['PHI']
-        # sigma0_cp_LUT = self.LUT_cr['H14E']['NRCS']
-        sigma0_cp_LUT2 = self.LUT_cr['MS1A']['NRCS']
+        inc_cp_LUT = self.LUT_cr['INC']
+        wspd_cp_LUT = self.LUT_cr['WSPD']
+        sigma0_cp_LUT2 = self.LUT_cr['NRCS']
 
         index_cp_inc = np.argmin(abs(inc_cp_LUT-theta))
 
-        ext_ancillary_wind_direction = 90. - \
-            np.rad2deg(np.arctan2(ori_v, ori_u))
+        if np.isfinite(sigcr) == False:
+            sigcr = np.nan
 
-        # save the direction in meteorological conventionfor for export
-        ext_ancillary_wind_direction = format_angle(
-            ext_ancillary_wind_direction + 180, compass_format=True)
-        mu = ecmwf_wsp * \
-            np.cos(np.radians(ext_ancillary_wind_direction - ground_heading + 90.))
-        mv = ecmwf_wsp * \
-            np.sin(np.radians(ext_ancillary_wind_direction - ground_heading + 90.))
-
-        Jwind = ((ZON_cp_LUT-mu)/du)**2+((MER_cp_LUT-mv)/dv)**2
         Jsig_mouche = ((sigma0_cp_LUT2[index_cp_inc, :]-sigcr)/dsig)**2
-        J = Jwind+Jsig_mouche
-
-        return self.get_wind_from_cost_function(J, wspd_cp_LUT)
+        J = Jsig_mouche
+        ind = np.where(J == np.nanmin(J))
+        if len(ind[0]) == 1:
+            return wspd_cp_LUT[ind]
+        elif len(ind[0]) > 1:
+            # sometimes there are 2 minimums (indices could be 0 & 360, so its could be due to LUTS) :
+            # we take the first indice
+            return wspd_cp_LUT[np.array([ind[0]])]
+        else:
+            return np.array([np.nan])
 
     def perform_dualpol_inversion_1pt(self, sigco, sigcr, nesz_cr,  theta, ground_heading, ecmwf_wsp, ori_u, ori_v, du=2, dv=2, dsig=0.1):
 
@@ -334,20 +332,33 @@ class WindInversion:
 
         du10_fg = 2
 
-        dsigcrpol = (1./((10**(sigcr/10))/nesz_cr))**2.
-        # returning solution
+        # returning Jwind solution
         J_wind = ((wspd_cp_LUT-wsp_first_guess)/du10_fg)**2.
-        J_sigcrpol2 = ((sigma0_cp_LUT2[index_cp_inc, :]-sigcr)/dsigcrpol)**2
+
+        # code alx
+        # dsigcrpol = (1./((10**(sigcr/10))/nesz_cr))**2.
+        # J_sigcrpol2 = ((sigma0_cp_LUT2[index_cp_inc, :]-sigcr)/dsigcrpol)**2
+
+        # code sarwing
+        try:
+            nrcslin = 10.**(sigcr/10.)
+            dsigcrpol = 1./(1.25/(nrcslin/nesz_cr))**4.
+
+            J_sigcrpol2 = (
+                (sigma0_cp_LUT2[index_cp_inc, :]-sigcr)*dsigcrpol)**2
+        except Exception as e:
+            print(e)
+            return np.nan
+
         J_final2 = J_sigcrpol2 + J_wind
 
         wsp_mouche = self.get_wind_from_cost_function(J_final2, wspd_cp_LUT)
-
         if (wsp_mouche < 5 or wsp_first_guess < 5 or np.isnan(wsp_mouche)):
             return wsp_first_guess
 
         return wsp_mouche
 
-    @timing
+    @ timing
     def perform_copol_inversion(self):
         """
 
@@ -362,17 +373,16 @@ class WindInversion:
 
         return xr.apply_ufunc(self.perform_copol_inversion_1pt,
                               10*np.log10(self.ds_xsar.sigma0.isel(pol=0)
-                                          ),
-                              self.ds_xsar.incidence,
-                              self.ds_xsar.ground_heading,
-
-                              self.ds_xsar.ecmwf_0100_1h_WSPD,
-                              self.ds_xsar.ecmwf_0100_1h_U10,
-                              self.ds_xsar.ecmwf_0100_1h_V10,
-                              dask='parallelized',
+                                          ).compute(),
+                              self.ds_xsar.incidence.compute(),
+                              self.ds_xsar.ground_heading.compute(),
+                              self.ds_xsar.ecmwf_0100_1h_WSPD.compute(),
+                              self.ds_xsar.ecmwf_0100_1h_U10.compute(),
+                              self.ds_xsar.ecmwf_0100_1h_V10.compute(),
+                              # dask='parallelized',
                               vectorize=True)
 
-    @timing
+    @ timing
     def perform_crpol_inversion(self):
         """
 
@@ -387,16 +397,13 @@ class WindInversion:
 
         return xr.apply_ufunc(self.perform_crpol_inversion_1pt,
                               10*np.log10(self.ds_xsar.sigma0.isel(pol=1)
-                                          ),
-                              self.ds_xsar.incidence,
-                              self.ds_xsar.ground_heading,
-                              self.ds_xsar.ecmwf_0100_1h_WSPD,
-                              self.ds_xsar.ecmwf_0100_1h_U10,
-                              self.ds_xsar.ecmwf_0100_1h_V10,
-                              dask='parallelized',
+                                          ).compute(),
+                              self.ds_xsar.incidence.compute(),
+                              self.ds_xsar.ground_heading.compute(),
+                              # dask='parallelized',
                               vectorize=True)
 
-    @timing
+    @ timing
     def perform_dualpol_inversion(self):
         """
         Parameters
@@ -410,20 +417,21 @@ class WindInversion:
         """
 
         # Perform noise_flatteing
-        noise_flatened = self.noise_flattening(self.ds_xsar.sigma0.isel(pol=1),
-                                               self.ds_xsar.incidence)
+        noise_flatened = self.perform_noise_flattening(self.ds_xsar.necz.isel(pol=1)
+                                                                   .compute(),
+                                                       self.ds_xsar.incidence.compute())
 
         # ecmwf_dir_img = ecmwf_dir-self.ds_xsar["ground_heading"]
         return xr.apply_ufunc(self.perform_dualpol_inversion_1pt,
                               10*np.log10(self.ds_xsar.sigma0.isel(pol=0)
-                                          ),
+                                          ).compute(),
                               10*np.log10(self.ds_xsar.sigma0.isel(pol=1)
-                                          ),
-                              noise_flatened,
-                              self.ds_xsar.incidence,
-                              self.ds_xsar.ground_heading,
-                              self.ds_xsar.ecmwf_0100_1h_WSPD,
-                              self.ds_xsar.ecmwf_0100_1h_U10,
-                              self.ds_xsar.ecmwf_0100_1h_V10,
-                              dask='parallelized',
+                                          ).compute(),
+                              noise_flatened.compute(),
+                              self.ds_xsar.incidence.compute(),
+                              self.ds_xsar.ground_heading.compute(),
+                              self.ds_xsar.ecmwf_0100_1h_WSPD.compute(),
+                              self.ds_xsar.ecmwf_0100_1h_U10.compute(),
+                              self.ds_xsar.ecmwf_0100_1h_V10.compute(),
+                              # dask='parallelized',
                               vectorize=True)
