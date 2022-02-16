@@ -9,6 +9,7 @@ import numpy as np
 import xarray as xr
 import pickle
 import os
+from numba import vectorize, float64
 
 
 try:
@@ -29,50 +30,11 @@ LUT_file_name_cp_hwang = 'LUT_CP_GMF_H14E_2D_80ms.pkl'  # Hwang
 # LUT_file_name_cp_mouche = 'LUT_CP_GMF_MS1An_2D_80ms.pkl' # IEEE 2017
 LUT_file_name_cp_mouche = 'LUT_CP_GMF_MS1AHW_2D_80ms.pkl'  # High Wind
 
-LUT_co_path_sarwing = "/home/vincelhx/Documents/ifremer/data/gmfs/GMF_cmod5n/"
-LUT_cr_path_sarwing = "/home/vincelhx/Documents/ifremer/data/gmfs/GMF_cmodms1ahw/"
+LUT_co_folder = "/home/vincelhx/Documents/ifremer/data/gmfs/GMF_cmod5n/"
+LUT_cr_folder = "/home/vincelhx/Documents/ifremer/data/gmfs/GMF_cmodms1ahw/"
 
-
-def format_angle(angle, cycle=360, compass_format=False):
-    r"""
-    This routine performs modulo operation on input angle given the value
-    of cycle. The output value is then either formatted between 0 and
-    cycle (when compass_format keyword is set) or between -cycle/2 and
-    cycle/2.
-
-    :param angle: The angle to be formatted (expressed in degrees)
-    :param cycle: The modulo value (set to 360° if not defined)
-    :param compass_format: If set to True, then the output value will be
-                           formatted between 0 and cycle, else it will be between -cycle/2
-                           and cycle/2
-
-    Procedure:
-        1. The angle value is transformed as follows:
-            .. math:: angle = Mod(angle,cycle)
-            .. math:: angle = \lbrace^{angle+cycle, \qquad if \qquad angle<=cycle/2}_{angle-cycle, \qquad if \qquad angle>cycle/2}
-        2. Finally, the returned value of angle is given by:
-            .. math:: angle = \lbrace^{angle+cycle, \qquad if \qquad compass_{format}=True}_{angle, \qquad else}
-
-    """
-    # stretch angles between [-180, 180] or [0, 360]
-    theta = np.mod(angle, cycle)
-    try:
-        theta[theta <= cycle/2] += cycle
-        theta[theta > cycle/2] -= cycle
-
-        if (compass_format):
-            theta[theta < 0] += cycle
-    except TypeError:
-        if theta <= cycle/2:
-            theta += cycle
-        if theta > cycle/2:
-            theta -= cycle
-
-        if (compass_format):
-            if theta < 0:
-                theta += cycle
-
-    return theta
+my_luts_co = "/home/vincelhx/Documents/ifremer/data/gmfs/lut_co.nc"
+my_luts_cr = "/home/vincelhx/Documents/ifremer/data/gmfs/lut_cr.nc"
 
 
 class WindInversion:
@@ -80,7 +42,7 @@ class WindInversion:
     WindInversion class
     """
 
-    def __init__(self, ds_xsar, sarwing_way=False):
+    def __init__(self, ds_xsar):
         """
         # TODO we start with the full dataset?
 
@@ -92,100 +54,104 @@ class WindInversion:
             DataArray with dims `('pol','atrack','xtrack')`.
         """
         self.ds_xsar = ds_xsar
+
         self.neszcr_mean = self.ds_xsar.nesz.isel(
             pol=1).mean(axis=0, skipna=True)
         self._spatial_dims = ['atrack', 'xtrack']
-        self.sarwing_way = sarwing_way
-        if self.sarwing_way:  # Sarwing way
-            self.LUT_cr, self.LUT_co = self.get_LUTs_sarwing_way()
+        # self.lut_co = xr.open_dataset(my_luts_co)
+        # self.lut_cr = xr.open_dataset(my_luts_cr)
+        self.lut_co, self.lut_cr = self.get_LUTs()
 
-        else:  # Alexis way
-            self.LUT_cr, self.LUT_co = self.get_LUTs()
+        self.lut_co_zon = self.lut_co['zon'].values
+        self.lut_co_mer = self.lut_co['mer'].values
+        self.lut_co_spd = self.lut_co['spd'].values
+        self.lut_co_nrcs = self.lut_co['sigma0'].values
+        self.lut_co_inc = self.lut_co["incidence"].values
 
-    def get_LUTs_sarwing_way(self):
-        print('... LUT loading sarwing way...')
+        self.lut_cr_spd = self.lut_cr['wspd'].values
+        self.lut_cr_nrcs = self.lut_cr['sigma0'].values
+        self.lut_cr_inc = self.lut_cr["incidence"].values
 
-        # LUT CO
-        LUT_co = {}
-        LUT_co["INC"] = pickle.load(open(os.path.join(
-            LUT_co_path_sarwing, 'incidence_angle.pkl'), 'rb'), encoding='iso-8859-1')
+    def get_ancillary_wind(self):
+        self.ds_xsar['ancillary_wind_azi'] = np.sqrt(
+            self.ds_xsar["ecmwf_0100_1h_U10"] ** 2 +
+            self.ds_xsar["ecmwf_0100_1h_V10"] ** 2
+        ) * np.exp(1j * (np.arctan2(self.ds_xsar["ecmwf_0100_1h_U10"], self.ds_xsar["ecmwf_0100_1h_V10"]) - np.deg2rad(
+            self.ds_xsar['ground_heading'])))
 
-        phi_LUT, wspd_LUT = pickle.load(open(os.path.join(
-            LUT_co_path_sarwing, 'wind_speed_and_direction.pkl'), 'rb'), encoding='iso-8859-1')
-        phi_LUT = np.concatenate((phi_LUT, -phi_LUT[::-1][1:-1])) % 360
-
-        LUT_co["WSPD"], LUT_co["PHI"] = np.meshgrid(
-            wspd_LUT, phi_LUT)
-
-        LUT_co["ZON"] = LUT_co["WSPD"]*np.cos(np.radians(LUT_co["PHI"]))
-        LUT_co["MER"] = LUT_co["WSPD"]*np.sin(np.radians(LUT_co["PHI"]))
-
-        if (self.ds_xsar.coords["pol"].values[0] == "VV"):
-            print(self.ds_xsar.coords["pol"].values[0])
-            LUT_co["NRCS"] = np.load(
-                os.path.join(LUT_co_path_sarwing, 'sigma.npy'))
-        else:
-            LUT_co["NRCS"] = np.load(
-                os.path.join(LUT_co_path_sarwing, 'sigma_hh_ratio_zhang2.npy'))
-
-        # LUT CR
-        LUT_cr = {}
-
-        LUT_cr["INC"] = pickle.load(open(os.path.join(
-            LUT_cr_path_sarwing, 'incidence_angle.pkl'), 'rb'), encoding='iso-8859-1')
-
-        LUT_cr["WSPD"] = pickle.load(open(os.path.join(
-            LUT_cr_path_sarwing, 'wind_speed.pkl'), 'rb'), encoding='iso-8859-1')
-
-        LUT_cr["NRCS"] = np.load(os.path.join(
-            LUT_cr_path_sarwing, 'sigma.npy'))
-        print('loaded !')
-
-        return LUT_cr, LUT_co
+        self.ds_xsar['ancillary_wind_azi'].attrs['comment'] = """
+        Ancillary wind, as a complex number.
+        complex angle is the wind direction relative to azimuth (atrack)
+        module is windspeed
+        real part is atrack wind component
+        imag part is xtrack wind component
+        """
+        self.ds_xsar['ancillary_wind_antenna'] = np.imag(self.ds_xsar['ancillary_wind_azi']) + 1j * np.real(
+            self.ds_xsar['ancillary_wind_azi'])
 
     def get_LUTs(self):
-        print('... LUT loading Alexis Mouche way...')
+        # Register LUT_co in xarray.Dataset
 
-        # Cross-Pol Hwang GMFnp.sin(phi_LUT/180.*np.pi)
-        LUT_co = {},
-        inc_cp_LUT, wspd_cp_LUT, sigma0_cp_LUT = pickle.load(
-            open(LUT_path+LUT_file_name_cp_hwang, 'rb'), encoding='iso-8859-1')
-        # wspd_cp_LUT,phi_cp_LUT = np.meshgrid(wspd_cp_LUT,phi_cp_LUT)
-        ZON_cp_LUT = wspd_cp_LUT * \
-            0.  # wspd_cp_LUT*np.cos(phi_cp_LUT/180.*np.pi)
-        MER_cp_LUT = wspd_cp_LUT * \
-            0.  # wspd_cp_LUT*np.sin(phi_cp_LUT/180.*np.pi)
-        # phi_cp_LUT = wspd_cp_LUT*0.
-        LUT_cr = {}
-        LUT_cr['INC'] = inc_cp_LUT
-        LUT_cr['ZON'] = ZON_cp_LUT
-        LUT_cr['MER'] = MER_cp_LUT
-        LUT_cr['WSPD'] = wspd_cp_LUT
-        # LUT_cr['H14E']['PHI'] = phi_cp_LUT
-        # LUT_cr['H14E']['NRCS'] = sigma0_cp_LUT*0.9
+        pol = self.ds_xsar.coords["pol"].values[0]
+        if pol == 'VV':
+            LUT_co_path = os.path.join(LUT_co_folder, 'sigma.npy')
+            sigma0_LUT = np.load(LUT_co_path)
 
-        # Cross-Pol Mouche GMF
-        inc_cp_LUT, wspd_cp_LUT, sigma0_cp_LUT = pickle.load(
-            open(LUT_path+LUT_file_name_cp_mouche, 'rb'), encoding='iso-8859-1')
-        # wspd_cp_LUT,phi_cp_LUT = np.meshgrid(wspd_cp_LUT,phi_cp_LUT)
-        LUT_cr['NRCS'] = sigma0_cp_LUT
+        else:
+            LUT_co_path = os.path.join(
+                LUT_co_folder, 'sigma_hh_ratio_zhang2.npy')
+            sigma0_LUT = np.load(LUT_co_path)
 
-        # Co-Pol
-        inc_LUT, phi_LUT, wspd_LUT, sigma0_LUT = pickle.load(
-            open(LUT_path+LUT_file_name_vv, 'rb'), encoding='iso-8859-1')
-        wspd_LUT, phi_LUT = np.meshgrid(wspd_LUT, phi_LUT)
-        ZON_LUT = wspd_LUT*np.cos(phi_LUT/180.*np.pi)
-        MER_LUT = wspd_LUT*np.sin(phi_LUT/180.*np.pi)
-        LUT_co = {}
-        LUT_co['INC'] = inc_LUT
-        LUT_co['ZON'] = ZON_LUT
-        LUT_co['MER'] = MER_LUT
-        LUT_co['WSPD'] = wspd_LUT
-        # LUT_co['PHI'] = phi_LUT
-        LUT_co['NRCS'] = sigma0_LUT
+        inc_LUT = pickle.load(open(os.path.join(
+            LUT_co_folder, 'incidence_angle.pkl'), 'rb'), encoding='iso-8859-1')
 
-        print('loaded !')
-        return LUT_cr, LUT_co
+        phi_LUT_1d, wspd_LUT_1d = pickle.load(open(os.path.join(
+            LUT_co_folder, 'wind_speed_and_direction.pkl'), 'rb'), encoding='iso-8859-1')
+        phi_LUT_1d = np.concatenate(
+            (phi_LUT_1d, -phi_LUT_1d[::-1][1:-1])) % 360
+
+        sigma0_LUT = np.concatenate(
+            (sigma0_LUT, sigma0_LUT[:, ::-1, :][:, 1:-1, :]), axis=1)
+
+        WSPD_LUT, PHI_LUT = np.meshgrid(wspd_LUT_1d, phi_LUT_1d)
+        ZON_LUT = WSPD_LUT*np.cos(np.radians(PHI_LUT))
+        MER_LUT = WSPD_LUT*np.sin(np.radians(PHI_LUT))
+
+        lut_co = xr.DataArray(sigma0_LUT, dims=['incidence', 'phi', 'wspd'],
+                              coords={'incidence': inc_LUT, 'phi': phi_LUT_1d, 'wspd': wspd_LUT_1d}).to_dataset(
+            name='sigma0')
+
+        lut_co['spd'] = xr.DataArray(WSPD_LUT, dims=['phi', 'wspd'])
+        lut_co['zon'] = xr.DataArray(ZON_LUT, dims=['phi', 'wspd'])
+        lut_co['mer'] = xr.DataArray(MER_LUT, dims=['phi', 'wspd'])
+
+        lut_co.attrs["pol"] = pol
+        lut_co.attrs["LUT used"] = LUT_co_path
+
+        # Register LUT_cr in xarray.Dataset
+
+        # LUT CR
+        LUT_cr_path = os.path.join(
+            LUT_cr_folder, 'sigma.npy')
+        sigma0_LUT_cr = np.load(LUT_cr_path)
+
+        inc_LUT_cr = pickle.load(open(os.path.join(
+            LUT_cr_folder, 'incidence_angle.pkl'), 'rb'), encoding='iso-8859-1')
+        wsp_LUT_cr = pickle.load(open(os.path.join(
+            LUT_cr_folder, 'wind_speed.pkl'), 'rb'), encoding='iso-8859-1')
+
+        lut_cr = xr.DataArray(sigma0_LUT_cr, dims=['incidence', 'wspd'],
+                              coords={'incidence': inc_LUT_cr, 'wspd': wsp_LUT_cr}).to_dataset(
+            name='sigma0')
+
+        lut_cr.attrs["LUT used"] = LUT_cr_path
+
+        lut_co.to_netcdf(
+            "/home/vincelhx/Documents/ifremer/data/gmfs/lut_co.nc")
+        lut_cr.to_netcdf(
+            "/home/vincelhx/Documents/ifremer/data/gmfs/lut_cr.nc")
+
+        return lut_co, lut_cr
 
     def perform_noise_flattening_1row(self, nesz_row, incid_row, display=False):
         """
@@ -247,94 +213,65 @@ class WindInversion:
                               dask='parallelized',
                               vectorize=True)
 
-    def get_wind_from_cost_function(self, J, wspd_LUT):
+    def get_wind_from_cost_function(self, J, lut):
         ind = np.where(J == J.min())
         if len(ind[0]) == 1:
-            return wspd_LUT[ind]
+            return lut[ind]
         elif len(ind[0]) > 1:
             # sometimes there are 2 minimums (indices could be 0 & 360, so its could be due to LUTS) :
             # we take the first indice
-            return wspd_LUT[np.array([ind[0][0]]), np.array([ind[1][0]])]
+            return lut[np.array([ind[0][0]]), np.array([ind[1][0]])]
         else:
             return np.array([np.nan])
 
-    def perform_copol_inversion_1pt(self, sigco, theta, ground_heading, ecmwf_wsp, ori_u, ori_v, du=2, dv=2, dsig=0.1):
+    # def perform_copol_inversion_1pt(self, sigco, theta, ground_heading, ecmwf_wsp, ori_u, ori_v, du=2, dv=2, dsig=0.1):
+    # @vectorize([(float64[:], float64[:], float64[:], float64[:])], '(n),(n),(n)->(n)')
+    def perform_copol_inversion_1pt(self, sigco, theta, ancillary_wind, du=2, dv=2, dsig=0.1):
+        if np.isnan(sigco) or np.isneginf(sigco) or np.isnan(ancillary_wind):
+            return np.nan
 
-        inc_LUT = self.LUT_co['INC']
-        wspd_LUT = self.LUT_co['WSPD']
-        sigma0_LUT = self.LUT_co['NRCS']
-        ZON_LUT = self.LUT_co['ZON']
-        MER_LUT = self.LUT_co['MER']
+        mu = np.real(ancillary_wind)
+        mv = -np.imag(ancillary_wind)
 
-        index_inc = np.argmin(abs(inc_LUT-theta))
+        Jwind = ((self.lut_co_zon-mu)/du)**2 + \
+            ((self.lut_co_mer-mv)/dv)**2
 
-        ext_ancillary_wind_direction = 90. - \
-            np.rad2deg(np.arctan2(ori_v, ori_u))
+        Jsig = ((self.lut_co_nrcs[np.argmin(
+            np.abs(self.lut_co_inc-theta)), :, :]-sigco)/dsig)**2
 
-        # save the direction in meteorological conventionfor for export
-        ext_ancillary_wind_direction = format_angle(
-            ext_ancillary_wind_direction + 180, compass_format=True)
+        Jfinal = Jwind+Jsig
 
-        mu = ecmwf_wsp * \
-            np.cos(np.radians(ext_ancillary_wind_direction - ground_heading + 90.))
-        mv = ecmwf_wsp * \
-            np.sin(np.radians(ext_ancillary_wind_direction - ground_heading + 90.))
-
-        Jwind = ((ZON_LUT-mu)/du)**2+((MER_LUT-mv)/dv)**2
-        # print("Jwind.shape : ", Jwind.shape)
-
-        if self.sarwing_way:
-            gmf_nrcs = np.squeeze(sigma0_LUT[index_inc, :, :])
-            gmf_nrcs = np.concatenate(
-                (gmf_nrcs, gmf_nrcs[::-1, :][1:-1, :]), axis=0)
-            Jsig = ((gmf_nrcs-sigco)/dsig)**2
-
-        else:
-            Jsig = ((sigma0_LUT[index_inc, :, :]-sigco)/dsig)**2
-        # print("Jsig.shape : ", Jsig.shape)
-
-        J = Jwind+Jsig
-
-        return self.get_wind_from_cost_function(J, wspd_LUT)
+        return self.get_wind_from_cost_function(Jfinal, self.lut_co_spd)
 
     def perform_crpol_inversion_1pt(self, sigcr, theta, dsig=0.1):
 
-        inc_cp_LUT = self.LUT_cr['INC']
-        wspd_cp_LUT = self.LUT_cr['WSPD']
-        sigma0_cp_LUT2 = self.LUT_cr['NRCS']
-
-        index_cp_inc = np.argmin(abs(inc_cp_LUT-theta))
+        index_cp_inc = np.argmin(abs(self.lut_cr_inc-theta))
 
         if np.isfinite(sigcr) == False:
             sigcr = np.nan
 
-        Jsig_mouche = ((sigma0_cp_LUT2[index_cp_inc, :]-sigcr)/dsig)**2
+        Jsig_mouche = ((self.lut_cr_nrcs[index_cp_inc, :]-sigcr)/dsig)**2
         J = Jsig_mouche
         ind = np.where(J == np.nanmin(J))
         if len(ind[0]) == 1:
-            return wspd_cp_LUT[ind]
+            return self.lut_cr_spd[ind]
         elif len(ind[0]) > 1:
             # sometimes there are 2 minimums (indices could be 0 & 360, so its could be due to LUTS) :
             # we take the first indice
-            return wspd_cp_LUT[np.array([ind[0]])]
+            return self.lut_cr_spd[np.array([ind[0]])]
         else:
             return np.array([np.nan])
 
-    def perform_dualpol_inversion_1pt(self, sigco, sigcr, nesz_cr,  theta, ground_heading, ecmwf_wsp, ori_u, ori_v, du=2, dv=2, dsig=0.1):
-
-        inc_cp_LUT = self.LUT_cr['INC']
-        wspd_cp_LUT = self.LUT_cr['WSPD']
-        sigma0_cp_LUT2 = self.LUT_cr['NRCS']
-        index_cp_inc = np.argmin(abs(inc_cp_LUT-theta))
+    def perform_dualpol_inversion_1pt(self, sigco, sigcr, nesz_cr,  theta, ancillary_wind, du=2, dv=2, dsig=0.1):
+        index_cp_inc = np.argmin(abs(self.lut_cr_inc-theta))
 
         wsp_first_guess = self.perform_copol_inversion_1pt(
-            sigco, theta, ground_heading, ecmwf_wsp, ori_u, ori_v, du, dv, dsig)
+            sigco, theta, ancillary_wind, du, dv, dsig)
 
         du10_fg = 2
 
         # returning Jwind solution
-        J_wind = ((wspd_cp_LUT-wsp_first_guess)/du10_fg)**2.
-
+        J_wind = ((self.lut_cr_spd-wsp_first_guess)/du10_fg)**2.
         # code alx
         # dsigcrpol = (1./((10**(sigcr/10))/nesz_cr))**2.
         # J_sigcrpol2 = ((sigma0_cp_LUT2[index_cp_inc, :]-sigcr)/dsigcrpol)**2
@@ -345,14 +282,15 @@ class WindInversion:
             dsigcrpol = 1./(1.25/(nrcslin/nesz_cr))**4.
 
             J_sigcrpol2 = (
-                (sigma0_cp_LUT2[index_cp_inc, :]-sigcr)*dsigcrpol)**2
+                (self.lut_cr_nrcs[index_cp_inc, :]-sigcr)*dsigcrpol)**2
         except Exception as e:
             print(e)
             return np.nan
 
         J_final2 = J_sigcrpol2 + J_wind
 
-        wsp_mouche = self.get_wind_from_cost_function(J_final2, wspd_cp_LUT)
+        wsp_mouche = self.get_wind_from_cost_function(
+            J_final2, self.lut_cr_spd)
         if (wsp_mouche < 5 or wsp_first_guess < 5 or np.isnan(wsp_mouche)):
             return wsp_first_guess
 
@@ -375,11 +313,7 @@ class WindInversion:
                               10*np.log10(self.ds_xsar.sigma0.isel(pol=0)
                                           ).compute(),
                               self.ds_xsar.incidence.compute(),
-                              self.ds_xsar.ground_heading.compute(),
-                              self.ds_xsar.ecmwf_0100_1h_WSPD.compute(),
-                              self.ds_xsar.ecmwf_0100_1h_U10.compute(),
-                              self.ds_xsar.ecmwf_0100_1h_V10.compute(),
-                              # dask='parallelized',
+                              self.ds_xsar.ancillary_wind_antenna.compute(),
                               vectorize=True)
 
     @ timing
@@ -399,7 +333,7 @@ class WindInversion:
                               10*np.log10(self.ds_xsar.sigma0.isel(pol=1)
                                           ).compute(),
                               self.ds_xsar.incidence.compute(),
-                              self.ds_xsar.ground_heading.compute(),
+                              self.ds_xsar.ancillary_wind_antenna.compute(),
                               # dask='parallelized',
                               vectorize=True)
 
@@ -429,9 +363,6 @@ class WindInversion:
                                           ).compute(),
                               noise_flatened.compute(),
                               self.ds_xsar.incidence.compute(),
-                              self.ds_xsar.ground_heading.compute(),
-                              self.ds_xsar.ecmwf_0100_1h_WSPD.compute(),
-                              self.ds_xsar.ecmwf_0100_1h_U10.compute(),
-                              self.ds_xsar.ecmwf_0100_1h_V10.compute(),
+                              self.ds_xsar.ancillary_wind_antenna.compute(),
                               # dask='parallelized',
                               vectorize=True)
