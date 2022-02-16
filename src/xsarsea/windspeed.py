@@ -9,7 +9,7 @@ import numpy as np
 import xarray as xr
 import pickle
 import os
-from numba import vectorize, float64
+from numba import vectorize, float64, complex64
 
 
 try:
@@ -18,6 +18,11 @@ except ImportError:
     # null decorator
     def timing(func):
         return func
+
+du = 2
+dv = 2
+dsig = 0.1
+du10_fg = 2
 
 
 # LUT_path = '/home1/datahome/vlheureu/inversion_Alx/'
@@ -224,8 +229,6 @@ class WindInversion:
         else:
             return np.array([np.nan])
 
-    # def perform_copol_inversion_1pt(self, sigco, theta, ground_heading, ecmwf_wsp, ori_u, ori_v, du=2, dv=2, dsig=0.1):
-    # @vectorize([(float64[:], float64[:], float64[:], float64[:])], '(n),(n),(n)->(n)')
     def perform_copol_inversion_1pt(self, sigco, theta, ancillary_wind, du=2, dv=2, dsig=0.1):
         if np.isnan(sigco) or np.isneginf(sigco) or np.isnan(ancillary_wind):
             return np.nan
@@ -242,6 +245,37 @@ class WindInversion:
         Jfinal = Jwind+Jsig
 
         return self.get_wind_from_cost_function(Jfinal, self.lut_co_spd)
+
+    @vectorize([float64(float64, float64, complex64)], forceobj=False, nopython=True, target="parallel")
+    def perform_copol_inversion_1pt_guvect(self, sigco, theta, ancillary_wind):
+        if np.isnan(sigco) or np.isneginf(sigco) or np.isnan(ancillary_wind):
+            return np.nan
+
+        mu = np.real(ancillary_wind)
+        mv = -np.imag(ancillary_wind)
+
+        arg = np.argmin(np.abs(self.lut_co_inc-theta))
+
+        Jwind = ((self.lut_co_zon-mu)/du)**2 + \
+            ((self.lut_co_mer-mv)/dv)**2
+        lut_ncrs__ = self.lut_co_nrcs[arg, :, :]
+        Jsig = ((lut_ncrs__-sigco)/dsig)**2
+
+        J = Jwind+Jsig
+
+        __min = 99999999
+        i_min = 0
+        j_min = 0
+
+        for i in range(0, J.shape[0]):
+            j = np.where(J[i, :] == J[i, :].min())[0][0]
+            min_t = J[i, j]
+            if min_t < __min:
+                __min = min_t
+                i_min = i
+                j_min = j
+
+        return self.lut_co_spd[i_min, j_min]
 
     def perform_crpol_inversion_1pt(self, sigcr, theta, dsig=0.1):
 
@@ -294,6 +328,54 @@ class WindInversion:
         if (wsp_mouche < 5 or wsp_first_guess < 5 or np.isnan(wsp_mouche)):
             return wsp_first_guess
 
+        return wsp_mouche
+
+    import numba
+
+    @vectorize([float64(float64, float64, float64, float64, complex64)], forceobj=False, nopython=True, target="parallel")
+    def perform_dualpol_inversion_1pt_guvect(self, sigco, sigcr, nesz_cr, theta, ancillary_wind):
+        if np.isnan(sigco) or np.isneginf(sigco) or np.isnan(sigcr) or np.isneginf(sigcr) or np.isnan(nesz_cr) or np.isneginf(nesz_cr) or np.isnan(ancillary_wind):
+            return np.nan
+
+        # co pol solution
+        mu = np.real(ancillary_wind)
+        mv = -np.imag(ancillary_wind)
+        arg = np.argmin(np.abs(self.lut_co_inc-theta))
+        Jwind = ((self.lut_co_zon-mu)/du)**2 + \
+            ((self.lut_co_mer-mv)/dv)**2
+        lut_ncrs__ = self.lut_co_nrcs[arg, :, :]
+        Jsig = ((lut_ncrs__-sigco)/dsig)**2
+        J = Jwind+Jsig
+        __min = 99999999
+        i_min = 0
+        j_min = 0
+        for i in range(0, J.shape[0]):
+            j = np.where(J[i, :] == J[i, :].min())[0][0]
+            min_t = J[i, j]
+            if min_t < __min:
+                __min = min_t
+                i_min = i
+                j_min = j
+        wsp_first_guess = self.lut_co_spd[i_min, j_min]
+
+        index_cp_inc = np.argmin(np.abs(self.lut_cr_inc-theta))
+
+        # returning Jwind solution
+        J_wind = ((self.lut_cr_spd-wsp_first_guess)/du10_fg)**2.
+        nrcslin = 10.**(sigcr/10.)
+        dsigcrpol = 1./(1.25/(nrcslin/nesz_cr))**4.
+
+        J_sigcrpol2 = (
+            (self.lut_cr_nrcs[index_cp_inc, :]-sigcr)*dsigcrpol)**2
+
+        J_final2 = J_sigcrpol2 + J_wind
+
+        min__ = np.where(J_final2 == J_final2.min())[0][0]
+
+        wsp_mouche = self.lut_cr_spd[min__]
+
+        if (wsp_mouche < 5 or wsp_first_guess < 5 or np.isnan(wsp_mouche)):
+            return wsp_first_guess
         return wsp_mouche
 
     @ timing
@@ -366,3 +448,51 @@ class WindInversion:
                               self.ds_xsar.ancillary_wind_antenna.compute(),
                               # dask='parallelized',
                               vectorize=True)
+
+    @ timing
+    def perform_copol_inversion_guvect(self):
+        """
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        copol_wspd: xarray.DataArray
+            DataArray with dims `('atrack','xtrack')`.
+        """
+
+        return xr.apply_ufunc(self.perform_copol_inversion_1pt_guvect,
+                              10*np.log10(self.ds_xsar.sigma0.isel(pol=0)
+                                          ).compute(),
+                              self.ds_xsar.incidence.compute(),
+                              self.ds_xsar.ancillary_wind_antenna.compute(),
+                              vectorize=False)
+
+    @ timing
+    def perform_dualpol_inversion_guvect(self):
+        """
+        Parameters
+
+        ----------
+
+        Returns
+        -------
+        dualpol_wspd: xarray.DataArray
+            DataArray with dims `('atrack','xtrack')`.
+        """
+
+        # Perform noise_flatteing
+        noise_flatened = self.perform_noise_flattening(self.ds_xsar.necz.isel(pol=1)
+                                                                   .compute(),
+                                                       self.ds_xsar.incidence.compute())
+
+        return xr.apply_ufunc(self.perform_dualpol_inversion_1pt,
+                              10*np.log10(self.ds_xsar.sigma0.isel(pol=0)
+                                          ).compute(),
+                              10*np.log10(self.ds_xsar.sigma0.isel(pol=1)
+                                          ).compute(),
+                              noise_flatened.compute(),
+                              self.ds_xsar.incidence.compute(),
+                              self.ds_xsar.ancillary_wind_antenna.compute(),
+                              vectorize=False)
