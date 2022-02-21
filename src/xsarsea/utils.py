@@ -54,7 +54,8 @@ def perform_copol_inversion_1pt_guvect(sigco, incid, ancillary_wind):
     j_min = 0
 
     for i in range(0, J.shape[0]):
-        j = np.where(J[i, :] == J[i, :].min())[0][0]
+        j = (np.argmin(J[i, :]) % J.shape[-1])
+        #np.where(J[i, :] == J[i, :].min())[0][0]
         min_t = J[i, j]
         if min_t < __min:
             __min = min_t
@@ -96,7 +97,8 @@ def perform_dualpol_inversion_1pt_guvect(sigco, sigcr, nesz_cr, incid, ancillary
     i_min = 0
     j_min = 0
     for i in range(0, J.shape[0]):
-        j = np.where(J == J.min())[0][0]
+        j = (np.argmin(J[i, :]) % J.shape[-1])
+        # j = np.where(J == J.min())[0][0]
         min_t = J[i, j]
         if min_t < __min:
             __min = min_t
@@ -114,7 +116,8 @@ def perform_dualpol_inversion_1pt_guvect(sigco, sigcr, nesz_cr, incid, ancillary
 
     J_final2 = J_sigcrpol2 + J_wind
 
-    min__ = np.where(J_final2 == J_final2.min())[0][0]
+    # min__ = np.where(J_final2 == J_final2.min())[0][0]
+    min__ = (np.argmin(J_final2) % J_final2.shape[-1])
 
     wsp_mouche = lut_cr_spd[min__]
 

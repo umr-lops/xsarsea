@@ -132,7 +132,7 @@ class WindInversion:
         xarray.DataArray
             DataArray with dims `('atrack','xtrack')`.
         """
-
+        # TODO numba-ize
         return xr.apply_ufunc(self.perform_noise_flattening_1row,
                               nesz_cr,
                               incid,
@@ -155,12 +155,15 @@ class WindInversion:
         numpy.ndarray (length 1)
 
         """
-        ind = np.where(J == J.min())
-        if len(ind[0]) == 1:
+
+        # TODO careful argmin handles only first minimum
+        if J.ndim == 2:
+            ind = (np.argmin(J) // J.shape[-1], np.argmin(J) % J.shape[-1])
+        if J.ndim == 1:
+            ind = (np.argmin(J) % J.shape[-1])
+
+        if ind:
             return lut[ind]
-        elif len(ind[0]) > 1:
-            # we take the first indice
-            return lut[np.array([ind[0][0]]), np.array([ind[1][0]])]
         else:
             return np.array([np.nan])
 
@@ -207,20 +210,11 @@ class WindInversion:
         """
         index_cp_inc = np.argmin(abs(self.lut_cr_inc-incid))
 
-        if np.isfinite(sigcr) == False:
+        if np.isnan(sigcr) or np.isfinite(sigcr) == False:
             sigcr = np.nan
 
         Jsig_mouche = ((self.lut_cr_nrcs[index_cp_inc, :]-sigcr)/dsig)**2
-        J = Jsig_mouche
-        ind = np.where(J == J.min())
-        if len(ind[0]) == 1:
-            return self.lut_cr_spd[ind]
-        elif len(ind[0]) > 1:
-            # sometimes there are 2 minimums (indices could be 0 & 360, so its could be due to LUTS) :
-            # we take the first indice
-            return self.lut_cr_spd[np.array([ind[0]])]
-        else:
-            return np.array([np.nan])
+        return self.get_wind_from_cost_function(Jsig_mouche, self.lut_cr_spd)
 
     def perform_dualpol_inversion_1pt(self, sigco, sigcr, nesz_cr,  incid, ancillary_wind):
         if np.isnan(sigco) or np.isneginf(sigco) or np.isnan(sigcr) or np.isneginf(sigcr) or np.isnan(nesz_cr) or np.isneginf(nesz_cr) or np.isnan(ancillary_wind):
@@ -242,7 +236,7 @@ class WindInversion:
         index_cp_inc = np.argmin(abs(self.lut_cr_inc-incid))
 
         wsp_first_guess = self.perform_copol_inversion_1pt(
-            sigco, incid, ancillary_wind, du, dv, dsig)
+            sigco, incid, ancillary_wind)
         J_wind = ((self.lut_cr_spd-wsp_first_guess)/du10_fg)**2.
 
         # code sarwing
