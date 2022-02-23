@@ -3,17 +3,32 @@ Ressources TODO
 
 Combined Co- and Cross-Polarized SAR Measurements Under Extreme Wind Conditions
 https://agupubs.onlinelibrary.wiley.com/doi/full/10.1029/2006JC003743
+
 """
-
-
-# TODO handle minimising J when sigcr // sigco == np.nan
-# enter sigcr & cigco instead of 10log10(....)
-
-
 import numpy as np
 import xarray as xr
 from gmfs import *
-from xsarsea.utils import perform_copol_inversion_1pt_guvect, perform_dualpol_inversion_1pt_guvect
+
+
+"""
+wspd_min = 0.2
+wspd_max = 50
+wspd_step = 1
+wspd_1d = np.arange(wspd_min, wspd_max+wspd_step, wspd_step)
+
+phi_min = 0
+phi_max = 360
+phi_step = 1
+phi_1d = np.arange(phi_min, phi_max+phi_step, phi_step)
+"""
+
+
+@guvectorize([(float64[:], float64[:], float64[:], float64[:, :])], '(n),(m),(p)->(m,p)')
+def gmf_ufunc_inc(inc_1d, phi_1d, wspd_1d, sigma0_out):
+    # return sigma 0 values of cmod5n for a given incidence (°)
+    for i_spd, one_wspd in enumerate(wspd_1d):
+        sigma0_out[:, i_spd] = 10*np.log10(cmod5(
+            one_wspd, phi_1d, inc_1d, neutral=True))
 
 
 try:
@@ -35,9 +50,9 @@ class WindInversion:
     WindInversion class
     """
 
-    def __init__(self, ds_xsar, path_LUT_co, path_LUT_cr):
+    def __init__(self, ds_xsar):
         """
-
+        # TODO add LUTs_co_resolutions
         Parameters
         ----------
         ds_xsar: xarray.Dataset
@@ -53,14 +68,24 @@ class WindInversion:
 
         self._spatial_dims = ['atrack', 'xtrack']
 
-        # GET LUTS
-        self.lut_co_zon, self.lut_co_mer, self.lut_co_spd, self.lut_co_nrcs, self.lut_co_inc = get_LUTs_co_arrays(
-            path_LUT_co)
-        self.lut_cr_spd, self.lut_cr_nrcs, self.lut_cr_inc = get_LUTs_cr_arrays(
-            path_LUT_cr)
-
         # GET ANCILLARY WIND
         self.get_ancillary_wind()
+
+    def load_wind_lut_co(self, wspd_1d, phi_1d):
+        SPD_LUT, PHI_LUT = np.meshgrid(wspd_1d, phi_1d)
+        ZON_LUT = SPD_LUT*np.cos(np.radians(PHI_LUT))
+        MER_LUT = SPD_LUT*np.sin(np.radians(PHI_LUT))
+
+        self.phi_1d = phi_1d
+        self.wspd_1d = wspd_1d
+
+        self.lut_co_spd = SPD_LUT
+        self.lut_co_zon = ZON_LUT
+        self.lut_co_mer = MER_LUT
+
+    def load_lut_cr(self, PATH_luts_cr):
+        self.lut_cr_spd, self.lut_cr_nrcs, self.lut_cr_inc = get_LUTs_cr_arrays(
+            PATH_luts_cr)
 
     def get_ancillary_wind(self):
         """
@@ -169,6 +194,7 @@ class WindInversion:
             #print(ind, np.where(J == np.min(J)))
         elif J.ndim == 1:
             ind = (np.argmin(J) % J.shape[-1])
+
         if ind:
             return lut[ind]
         else:
@@ -196,8 +222,8 @@ class WindInversion:
         Jwind = ((self.lut_co_zon-mu)/du)**2 + \
             ((self.lut_co_mer-mv)/dv)**2
 
-        Jsig = ((self.lut_co_nrcs[np.argmin(
-            np.abs(self.lut_co_inc-theta)), :, :]-sigco)/dsig)**2
+        Jsig = (
+            (gmf_ufunc_inc(np.array([theta]), self.phi_1d, self.wspd_1d)-sigco)/dsig)**2
 
         Jfinal = Jwind+Jsig
         return self.get_wind_from_cost_function(Jfinal, self.lut_co_spd)
@@ -217,8 +243,8 @@ class WindInversion:
         """
         index_cp_inc = np.argmin(abs(self.lut_cr_inc-incid))
 
-        # if np.isnan(sigcr) or np.isfinite(sigcr) == False:
-        #    sigcr = np.nan
+        if np.isnan(sigcr) or np.isfinite(sigcr) == False:
+            sigcr = np.nan
 
         Jsig_mouche = ((self.lut_cr_nrcs[index_cp_inc, :]-sigcr)/dsig)**2
         return self.get_wind_from_cost_function(Jsig_mouche, self.lut_cr_spd)
@@ -263,14 +289,13 @@ class WindInversion:
 
         wsp_mouche = self.get_wind_from_cost_function(
             J_final2, self.lut_cr_spd)
-        # or np.isnan(wsp_mouche)):
-        if (wsp_mouche < 5 or wsp_first_guess < 5):
+        if (wsp_mouche < 5 or wsp_first_guess < 5 or np.isnan(wsp_mouche)):
             return wsp_first_guess
 
         return wsp_mouche
 
     @ timing
-    def perform_copol_inversion(self):
+    def perform_copol_inversion(self, wspd_1d, phi_1d):
         """
 
         Parameters
@@ -281,6 +306,7 @@ class WindInversion:
         copol_wspd: xarray.DataArray
             DataArray with dims `('atrack','xtrack')`.
         """
+        self.build_wind_lut_co(wspd_1d, phi_1d)
 
         return xr.apply_ufunc(self.perform_copol_inversion_1pt,
                               10*np.log10(self.ds_xsar.sigma0.isel(pol=0)
@@ -290,7 +316,7 @@ class WindInversion:
                               vectorize=True)
 
     @ timing
-    def perform_crpol_inversion(self):
+    def perform_crpol_inversion(self, PATH_luts_cr):
         """
 
         Parameters
@@ -302,15 +328,18 @@ class WindInversion:
             DataArray with dims `('atrack','xtrack')`.
         """
 
+        self.load_lut_cr(PATH_luts_cr)
+
         return xr.apply_ufunc(self.perform_crpol_inversion_1pt,
                               10*np.log10(self.ds_xsar.sigma0.isel(pol=1)
                                           ).compute(),
                               self.ds_xsar.incidence.compute(),
+                              self.ds_xsar.ancillary_wind_antenna.compute(),
                               # dask='parallelized',
                               vectorize=True)
 
     @ timing
-    def perform_dualpol_inversion(self):
+    def perform_dualpol_inversion(self, wspd_1d, phi_1d, PATH_luts_cr):
         """
         Parameters
 
@@ -321,6 +350,9 @@ class WindInversion:
         dualpol_wspd: xarray.DataArray
             DataArray with dims `('atrack','xtrack')`.
         """
+
+        self.build_wind_lut_co(wspd_1d, phi_1d)
+        self.load_lut_cr(PATH_luts_cr)
 
         # Perform noise_flatteing
         noise_flatened = self.perform_noise_flattening(self.ds_xsar.necz.isel(pol=1)
@@ -340,7 +372,7 @@ class WindInversion:
                               vectorize=True)
 
     @ timing
-    def perform_copol_inversion_guvect(self):
+    def perform_copol_inversion_guvect(self, wspd_1d, phi_1d):
         """
 
         Parameters
@@ -352,15 +384,17 @@ class WindInversion:
             DataArray with dims `('atrack','xtrack')`.
         """
 
-        return xr.apply_ufunc(perform_copol_inversion_1pt_guvect,
+        self.build_wind_lut_co(wspd_1d, phi_1d)
+
+        return xr.apply_ufunc(perform_copol_inversion_1pt_guvect_analytique,
                               10*np.log10(self.ds_xsar.sigma0.isel(pol=0)
                                           ).compute(),
                               self.ds_xsar.incidence.compute(),
                               self.ds_xsar.ancillary_wind_antenna.compute(),
                               vectorize=False)
 
-    @ timing
-    def perform_dualpol_inversion_guvect(self):
+    @timing
+    def perform_dualpol_inversion_guvect(self, wspd_1d, phi_1d, PATH_luts_cr):
         """
         Parameters
 
@@ -372,11 +406,14 @@ class WindInversion:
             DataArray with dims `('atrack','xtrack')`.
         """
 
+        self.load_lut_cr(PATH_luts_cr)
+        self.build_wind_lut_co(wspd_1d, phi_1d)
+
         # Perform noise_flatteing
         noise_flatened = self.perform_noise_flattening(self.ds_xsar.necz.isel(pol=1)
                                                                    .compute(),
                                                        self.ds_xsar.incidence.compute())
-        return xr.apply_ufunc(perform_dualpol_inversion_1pt_guvect,
+        return xr.apply_ufunc(perform_dualpol_inversion_1pt_guvect_analytique,
                               10*np.log10(self.ds_xsar.sigma0.isel(pol=0)
                                           ).compute(),
                               10*np.log10(self.ds_xsar.sigma0.isel(pol=1)
