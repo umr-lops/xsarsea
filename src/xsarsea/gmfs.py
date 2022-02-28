@@ -71,35 +71,77 @@ def cmod5(u10, phi, inc, neutral=True):
     return sig
 
 
+@njit
+def cmod_like_CR(inc, u10):
+    #inc = xdata[0]
+    #u10 = xdata[1]
+
+    c1 = -3.14993013e+00
+    c2 = -5.97976767e-01
+    c3 = -3.27075281e-01
+    c4 = -4.69016576e-01
+    c5 = 2.52596490e-02
+    c6 = 1.05453695e-02
+    c7 = 8.23746078e+09
+    c8 = -1.70926452e+09
+    c9 = -6.50638418e+05
+    c10 = 7.50378262e+18
+    c11 = -7.97374621e+18
+    c12 = 1.63073350e+12
+    c13 = -4.22692526e+17
+
+    zpow = 1.6
+    thetm = 40.
+    thethr = 25.
+
+    #y0 = c[19]
+    #pn = c[20]
+    #a = y0 - (y0 - 1.) / pn
+    #b = 1. / (pn * (y0 - 1.) ** (pn - 1.))
+
+    # Angles
+    x = (inc - thetm) / thethr
+    x2 = x ** 2.
+
+    # B0 term
+    a0 = c1 + c2 * x + c3 * x2 + c4 * x * x2
+    a1 = c5 + c6 * x
+    a2 = c7 + c8 * x
+    gam = c9 + c10 * x + c11 * x2
+    s0 = c12 + c13 * x
+    s = a2 * u10
+    a3 = 1. / (1. + np.exp(-s0))
+    slts0 = s < s0
+    a3[~slts0] = 1. / (1. + np.exp(-s[~slts0]))
+    a3[slts0] = a3[slts0] * (s[slts0] / s0[slts0]
+                             ) ** (s0[slts0] * (1. - a3[slts0]))
+    a3 = a3 * (s / s0) ** (s0 * (1. - a3))
+    # a3=1
+    b0 = (a3 ** gam) * 10. ** (a0 + a1 * u10)
+    #b0 = 10*np.log10(a3 ** gam) + a0 + a1*u10
+    #b0 = 10. ** ( a0 + a1*u10 )
+
+    return b0
+
+
 @guvectorize([(float64[:], float64[:], float64[:], float64[:, :, :])], '(n),(m),(p)->(n,m,p)')
-def gmf_ufunc(inc_1d, phi_1d, wspd_1d, sigma0_out):
+def gmf_ufunc_co(inc_1d, phi_1d, wspd_1d, sigma0_out):
     for i_phi, one_phi in enumerate(phi_1d):
         for i_spd, one_wspd in enumerate(wspd_1d):
             sigma0_out[:, i_phi, i_spd] = cmod5(
                 one_wspd, one_phi, inc_1d, neutral=True)
 
 
-"""
-wspd_min = 0.2
-wspd_max = 50
-wspd_step = 1
-wspd_1d = np.arange(wspd_min,wspd_max+wspd_step,wspd_step)
-
-phi_min = 0
-phi_max = 360
-phi_step = 1
-phi_1d = np.arange(phi_min,phi_max+phi_step,phi_step)
-
-inc_min = 17.5
-inc_max = 50
-inc_step = 0.1
-inc_1d = np.arange(inc_min,inc_max+inc_step,inc_step)   
-"""
+@guvectorize([(float64[:], float64[:], float64[:, :])], '(n),(m)->(n,m)')
+def gmf_ufunc_cr(inc_1d, wspd_1d, sigma0_out):
+    for i_spd, one_wspd in enumerate(wspd_1d):
+        # print(i_spd,one_wspd)
+        sigma0_out[:, i_spd] = cmod_like_CR(inc_1d, one_wspd)
 
 
-def create_LUT_sigma0(inc_1d, phi_1d, wspd_1d, name, savepath):
+def create_LUT_sigma0_co(inc_1d, phi_1d, wspd_1d, name, savepath):
     # TODO add POL attribute
-    sigma0_gmf = gmf_ufunc(inc_1d, phi_1d, wspd_1d)
+    sigma0_gmf = gmf_ufunc_co(inc_1d, phi_1d, wspd_1d)
     SPD_LUT, PHI_LUT = np.meshgrid(wspd_1d, phi_1d)
 
     ZON_LUT = SPD_LUT*np.cos(np.radians(PHI_LUT))
@@ -116,7 +158,20 @@ def create_LUT_sigma0(inc_1d, phi_1d, wspd_1d, name, savepath):
     lut.attrs["LUT used"] = name
     if os.path.exists(savepath):
         os.remove(savepath)
+    lut.to_netcdf(savepath, format="NETCDF4")
 
+
+def create_LUT_sigma0_cr(inc_1d, wspd_1d, name, savepath):
+    # TODO add POL attribute
+    import os
+    sigma0_gmf = gmf_ufunc_cr(inc_1d, wspd_1d)
+
+    lut = xr.DataArray(10*np.log10(sigma0_gmf), dims=['incidence', 'wspd'],
+                       coords={'incidence': inc_1d, 'wspd': wspd_1d}).to_dataset(name='sigma0')
+
+    lut.attrs["LUT used"] = name
+    if os.path.exists(savepath):
+        os.remove(savepath)
     lut.to_netcdf(savepath, format="NETCDF4")
 
 

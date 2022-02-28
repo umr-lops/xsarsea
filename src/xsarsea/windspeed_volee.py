@@ -42,6 +42,7 @@ except ImportError:
 du = 2
 dv = 2
 dsig = 0.1
+dsig_crpol = 0.1
 du10_fg = 2
 
 
@@ -50,7 +51,7 @@ class WindInversion:
     WindInversion class
     """
 
-    def __init__(self, ds_xsar):
+    def __init__(self, ds_xsar, is_rs2=False):
         """
         # TODO add LUTs_co_resolutions
         Parameters
@@ -62,10 +63,7 @@ class WindInversion:
         -------
         """
         self.ds_xsar = ds_xsar
-
-        self.neszcr_mean = self.ds_xsar.nesz.isel(
-            pol=1).mean(axis=0, skipna=True)
-
+        self.is_rs2 = is_rs2
         self._spatial_dims = ['atrack', 'xtrack']
 
         # GET ANCILLARY WIND
@@ -191,14 +189,16 @@ class WindInversion:
         # TODO careful argmin handles only first minimum
         if J.ndim == 2:
             ind = (np.argmin(J) // J.shape[-1], np.argmin(J) % J.shape[-1])
-            #print(ind, np.where(J == np.min(J)))
+            # print(ind, np.where(J == np.min(J)))
         elif J.ndim == 1:
             ind = (np.argmin(J) % J.shape[-1])
+        return lut[ind]
 
-        if ind:
-            return lut[ind]
+        """
         else:
+            print(ind)
             return np.array([np.nan])
+        """
 
     def perform_copol_inversion_1pt(self, sigco, theta, ancillary_wind):
         """
@@ -228,7 +228,7 @@ class WindInversion:
         Jfinal = Jwind+Jsig
         return self.get_wind_from_cost_function(Jfinal, self.lut_co_spd)
 
-    def perform_crpol_inversion_1pt(self, sigcr, incid, dsig=0.1):
+    def perform_crpol_inversion_1pt(self, sigcr, incid):
         """
 
         Parameters
@@ -246,7 +246,7 @@ class WindInversion:
         if np.isnan(sigcr) or np.isfinite(sigcr) == False:
             sigcr = np.nan
 
-        Jsig_mouche = ((self.lut_cr_nrcs[index_cp_inc, :]-sigcr)/dsig)**2
+        Jsig_mouche = ((self.lut_cr_nrcs[index_cp_inc, :]-sigcr)/dsig_crpol)**2
         return self.get_wind_from_cost_function(Jsig_mouche, self.lut_cr_spd)
 
     def perform_dualpol_inversion_1pt(self, sigco, sigcr, nesz_cr,  incid, ancillary_wind):
@@ -294,11 +294,122 @@ class WindInversion:
 
         return wsp_mouche
 
-    @ timing
-    def perform_copol_inversion(self, wspd_1d, phi_1d):
+    def perform_copol_inversion_1pt_one_iter(self, sigco, theta, ancillary_wind, phi_1d, wspd_1d):
         """
 
         Parameters
+        ----------
+        sigco: float64
+        incid: float64
+        ancillary_wind: complex64
+
+        Returns
+        -------
+        float64
+        """
+        if np.isnan(sigco) or np.isnan(ancillary_wind):
+            # print("there")
+            return np.nan, np.nan
+
+        lut_co_spd, lut_co_phi = np.meshgrid(wspd_1d, phi_1d)
+        lut_co_zon = lut_co_spd*np.cos(np.radians(lut_co_phi))
+        lut_co_mer = lut_co_spd*np.sin(np.radians(lut_co_phi))
+
+        mu = np.real(ancillary_wind)
+        mv = -np.imag(ancillary_wind)
+
+        Jwind = ((lut_co_zon-mu)/du)**2 + \
+            ((lut_co_mer-mv)/dv)**2
+
+        Jsig = (
+            (gmf_ufunc_inc(np.array([theta]), phi_1d, wspd_1d)-sigco)/dsig)**2
+
+        Jfinal = Jwind+Jsig
+        if (Jfinal.shape[1] == 0):
+            print(Jwind, Jsig)
+            print(phi_1d, wspd_1d)
+
+        ind = (np.argmin(Jfinal) //
+               Jfinal.shape[-1], np.argmin(Jfinal) % Jfinal.shape[-1])
+
+        # print(ind, "=> (", lut_co_spd[ind],lut_co_phi[ind] ,")")
+        return lut_co_spd[ind]  # ,lut_co_phi[ind]
+
+    def perform_copol_inversion_1pt_iterations(self, sigco, theta, ancillary_wind):
+        wspd_min = 0.2
+        wspd_max = 50
+        phi_min = 0
+        phi_max = 360
+
+        step_LR_phi = 1
+        steps = np.geomspace(12.5, 0.1, num=4)
+
+        wspd_1d = np.arange(wspd_min, wspd_max+steps[0], steps[0])
+        phi_1d = np.arange(phi_min, phi_max+step_LR_phi, step_LR_phi)
+        spd = self.perform_copol_inversion_1pt_one_iter(
+            sigco, theta, ancillary_wind, phi_1d, wspd_1d)
+
+        for idx, val in enumerate(steps[1:]):
+            if (np.isnan(spd)):
+                return np.nan
+            wspd_1d = np.arange(spd-steps[idx], spd+steps[idx]+val, val)
+            spd = self.perform_copol_inversion_1pt_one_iter(
+                sigco, theta, ancillary_wind, phi_1d, wspd_1d)
+
+        return
+
+    def perform_dualpol_inversion_1pt_iterations(self, sigco, sigcr, nesz_cr,  incid, ancillary_wind):
+
+        if np.isnan(sigco) or np.isnan(sigcr) or np.isnan(nesz_cr) or np.isnan(ancillary_wind):
+            return np.nan
+        """
+
+        Parameters
+        ----------
+        sigco: float64
+        sigcr: float64
+        nesz_cr: float64
+        incid: float64
+        ancillary_wind: complex64
+
+        Returns
+        -------
+        float64
+        """
+        index_cp_inc = np.argmin(abs(self.lut_cr_inc-incid))
+
+        wsp_first_guess = self.perform_copol_inversion_1pt_iterations(
+            sigco, incid, ancillary_wind)
+        J_wind = ((self.lut_cr_spd-wsp_first_guess)/du10_fg)**2.
+
+        # code sarwing
+        try:
+            nrcslin = 10.**(sigcr/10.)
+            dsigcrpol = 1./(1.25/(nrcslin/nesz_cr))**4.
+            # code alx
+            # dsigcrpol = (1./((10**(sigcr/10))/nesz_cr))**2.
+            # J_sigcrpol2 = ((sigma0_cp_LUT2[index_cp_inc, :]-sigcr)/dsigcrpol)**2
+            J_sigcrpol2 = (
+                (self.lut_cr_nrcs[index_cp_inc, :]-sigcr)*dsigcrpol)**2
+
+        except Exception as e:
+            # print(e)
+            return np.nan
+
+        J_final2 = J_sigcrpol2 + J_wind
+
+        wsp_mouche = self.get_wind_from_cost_function(
+            J_final2, self.lut_cr_spd)
+        if (wsp_mouche < 5 or wsp_first_guess < 5 or np.isnan(wsp_mouche)):
+            return wsp_first_guess
+        return wsp_mouche
+
+    @ timing
+    def perform_copol_inversion_iterations(self):
+        """
+
+        Parameters
+        iter : booleean
         ----------
 
         Returns
@@ -306,7 +417,29 @@ class WindInversion:
         copol_wspd: xarray.DataArray
             DataArray with dims `('atrack','xtrack')`.
         """
-        self.build_wind_lut_co(wspd_1d, phi_1d)
+
+        if iter:
+            return xr.apply_ufunc(self.perform_copol_inversion_1pt_iterations,
+                                  10*np.log10(self.ds_xsar.sigma0.isel(pol=0)
+                                              ).compute(),
+                                  self.ds_xsar.incidence.compute(),
+                                  self.ds_xsar.ancillary_wind_antenna.compute(),
+                                  vectorize=True)
+
+    @ timing
+    def perform_copol_inversion(self, wspd_1d, phi_1d):
+        """
+
+        Parameters
+        iter : booleean
+        ----------
+
+        Returns
+        -------
+        copol_wspd: xarray.DataArray
+            DataArray with dims `('atrack','xtrack')`.
+        """
+        self.load_wind_lut_co(wspd_1d, phi_1d)
 
         return xr.apply_ufunc(self.perform_copol_inversion_1pt,
                               10*np.log10(self.ds_xsar.sigma0.isel(pol=0)
@@ -339,7 +472,7 @@ class WindInversion:
                               vectorize=True)
 
     @ timing
-    def perform_dualpol_inversion(self, wspd_1d, phi_1d, PATH_luts_cr):
+    def perform_dualpol_inversion(self, wspd_1d, phi_1d, iter, PATH_luts_cr):
         """
         Parameters
 
@@ -351,13 +484,21 @@ class WindInversion:
             DataArray with dims `('atrack','xtrack')`.
         """
 
-        self.build_wind_lut_co(wspd_1d, phi_1d)
         self.load_lut_cr(PATH_luts_cr)
 
         # Perform noise_flatteing
-        noise_flatened = self.perform_noise_flattening(self.ds_xsar.necz.isel(pol=1)
-                                                                   .compute(),
-                                                       self.ds_xsar.incidence.compute())
+        if self.is_rs2 == False:
+            # Noise flatening for s1a, s1b
+            self.neszcr_mean = self.ds_xsar.nesz.isel(
+                pol=1).mean(axis=0, skipna=True)
+            noise_flatened = self.perform_noise_flattening(self.ds_xsar.necz.isel(pol=1)
+                                                           .compute(),
+                                                           self.ds_xsar.incidence.compute())
+        else:
+            # No noise flatening for rs2
+            noise_flatened = self.ds_xsar.necz.isel(pol=1)
+
+        self.load_wind_lut_co(wspd_1d, phi_1d)
 
         # ecmwf_dir_img = ecmwf_dir-self.ds_xsar["ground_heading"]
         return xr.apply_ufunc(self.perform_dualpol_inversion_1pt,
@@ -372,29 +513,7 @@ class WindInversion:
                               vectorize=True)
 
     @ timing
-    def perform_copol_inversion_guvect(self, wspd_1d, phi_1d):
-        """
-
-        Parameters
-        ----------
-
-        Returns
-        -------
-        copol_wspd: xarray.DataArray
-            DataArray with dims `('atrack','xtrack')`.
-        """
-
-        self.build_wind_lut_co(wspd_1d, phi_1d)
-
-        return xr.apply_ufunc(perform_copol_inversion_1pt_guvect_analytique,
-                              10*np.log10(self.ds_xsar.sigma0.isel(pol=0)
-                                          ).compute(),
-                              self.ds_xsar.incidence.compute(),
-                              self.ds_xsar.ancillary_wind_antenna.compute(),
-                              vectorize=False)
-
-    @timing
-    def perform_dualpol_inversion_guvect(self, wspd_1d, phi_1d, PATH_luts_cr):
+    def perform_dualpol_inversion_iterations(self, iter, PATH_luts_cr):
         """
         Parameters
 
@@ -407,13 +526,20 @@ class WindInversion:
         """
 
         self.load_lut_cr(PATH_luts_cr)
-        self.build_wind_lut_co(wspd_1d, phi_1d)
 
         # Perform noise_flatteing
-        noise_flatened = self.perform_noise_flattening(self.ds_xsar.necz.isel(pol=1)
-                                                                   .compute(),
-                                                       self.ds_xsar.incidence.compute())
-        return xr.apply_ufunc(perform_dualpol_inversion_1pt_guvect_analytique,
+        if self.is_rs2 == False:
+            # Noise flatening for s1a, s1b
+            self.neszcr_mean = self.ds_xsar.nesz.isel(
+                pol=1).mean(axis=0, skipna=True)
+            noise_flatened = self.perform_noise_flattening(self.ds_xsar.necz.isel(pol=1)
+                                                           .compute(),
+                                                           self.ds_xsar.incidence.compute())
+        else:
+            # No noise flatening for rs2
+            noise_flatened = self.ds_xsar.necz.isel(pol=1)
+
+        return xr.apply_ufunc(self.perform_dualpol_inversion_1pt_iterations,
                               10*np.log10(self.ds_xsar.sigma0.isel(pol=0)
                                           ).compute(),
                               10*np.log10(self.ds_xsar.sigma0.isel(pol=1)
@@ -421,4 +547,5 @@ class WindInversion:
                               noise_flatened.compute(),
                               self.ds_xsar.incidence.compute(),
                               self.ds_xsar.ancillary_wind_antenna.compute(),
-                              vectorize=False)
+                              # dask='parallelized',
+                              vectorize=True)

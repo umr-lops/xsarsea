@@ -1,4 +1,5 @@
 """
+TODO noise flattening only for S1A, RS2
 Ressources TODO
 
 Combined Co- and Cross-Polarized SAR Measurements Under Extreme Wind Conditions
@@ -12,7 +13,8 @@ https://agupubs.onlinelibrary.wiley.com/doi/full/10.1029/2006JC003743
 
 import numpy as np
 import xarray as xr
-from gmfs import *
+from xsarsea.gmfs import get_LUTs_co_arrays, get_LUTs_cr_arrays
+# from gmfs import
 from xsarsea.utils import perform_copol_inversion_1pt_guvect, perform_dualpol_inversion_1pt_guvect
 
 
@@ -27,6 +29,7 @@ except ImportError:
 du = 2
 dv = 2
 dsig = 0.1
+dsig_crpol = 0.1
 du10_fg = 2
 
 
@@ -35,7 +38,7 @@ class WindInversion:
     WindInversion class
     """
 
-    def __init__(self, ds_xsar, path_LUT_co, path_LUT_cr):
+    def __init__(self, ds_xsar, path_LUT_co, path_LUT_cr, is_rs2=False):
         """
 
         Parameters
@@ -47,10 +50,7 @@ class WindInversion:
         -------
         """
         self.ds_xsar = ds_xsar
-
-        self.neszcr_mean = self.ds_xsar.nesz.isel(
-            pol=1).mean(axis=0, skipna=True)
-
+        self.is_rs2 = is_rs2
         self._spatial_dims = ['atrack', 'xtrack']
 
         # GET LUTS
@@ -84,6 +84,7 @@ class WindInversion:
         real part is atrack wind component
         imag part is xtrack wind component
         """
+        # Rotation de 90° pour inverser
         self.ds_xsar['ancillary_wind_antenna'] = np.imag(self.ds_xsar['ancillary_wind_azi']) + 1j * np.real(
             self.ds_xsar['ancillary_wind_azi'])
 
@@ -107,7 +108,7 @@ class WindInversion:
         # replacing nan values by nesz mean value for concerned incidence
         nesz_flat[np.isnan(nesz_flat)] = self.neszcr_mean[np.isnan(nesz_flat)]
 
-        noise = 10*np.log10(nesz_flat)
+        noise = 10.*np.log10(nesz_flat)
 
         try:
             _coef = np.polyfit(incid_row[np.isfinite(noise)],
@@ -169,10 +170,12 @@ class WindInversion:
             #print(ind, np.where(J == np.min(J)))
         elif J.ndim == 1:
             ind = (np.argmin(J) % J.shape[-1])
-        if ind:
-            return lut[ind]
+        return lut[ind]
+        """
         else:
+            print(ind)
             return np.array([np.nan])
+        """
 
     def perform_copol_inversion_1pt(self, sigco, theta, ancillary_wind):
         """
@@ -202,7 +205,7 @@ class WindInversion:
         Jfinal = Jwind+Jsig
         return self.get_wind_from_cost_function(Jfinal, self.lut_co_spd)
 
-    def perform_crpol_inversion_1pt(self, sigcr, incid, dsig=0.1):
+    def perform_crpol_inversion_1pt(self, sigcr, incid):
         """
 
         Parameters
@@ -220,7 +223,7 @@ class WindInversion:
         # if np.isnan(sigcr) or np.isfinite(sigcr) == False:
         #    sigcr = np.nan
 
-        Jsig_mouche = ((self.lut_cr_nrcs[index_cp_inc, :]-sigcr)/dsig)**2
+        Jsig_mouche = ((self.lut_cr_nrcs[index_cp_inc, :]-sigcr)/dsig_crpol)**2
         return self.get_wind_from_cost_function(Jsig_mouche, self.lut_cr_spd)
 
     def perform_dualpol_inversion_1pt(self, sigco, sigcr, nesz_cr,  incid, ancillary_wind):
@@ -323,9 +326,16 @@ class WindInversion:
         """
 
         # Perform noise_flatteing
-        noise_flatened = self.perform_noise_flattening(self.ds_xsar.necz.isel(pol=1)
-                                                                   .compute(),
-                                                       self.ds_xsar.incidence.compute())
+        if self.is_rs2 == False:
+            # Noise flatening for s1a, s1b
+            self.neszcr_mean = self.ds_xsar.nesz.isel(
+                pol=1).mean(axis=0, skipna=True)
+            noise_flatened = self.perform_noise_flattening(self.ds_xsar.necz.isel(pol=1)
+                                                           .compute(),
+                                                           self.ds_xsar.incidence.compute())
+        else:
+            # No noise flatening for rs2
+            noise_flatened = self.ds_xsar.necz.isel(pol=1)
 
         # ecmwf_dir_img = ecmwf_dir-self.ds_xsar["ground_heading"]
         return xr.apply_ufunc(self.perform_dualpol_inversion_1pt,
@@ -373,9 +383,17 @@ class WindInversion:
         """
 
         # Perform noise_flatteing
-        noise_flatened = self.perform_noise_flattening(self.ds_xsar.necz.isel(pol=1)
-                                                                   .compute(),
-                                                       self.ds_xsar.incidence.compute())
+        if self.is_rs2 == False:
+            # Noise flatening for s1a, s1b
+            self.neszcr_mean = self.ds_xsar.nesz.isel(
+                pol=1).mean(axis=0, skipna=True)
+            noise_flatened = self.perform_noise_flattening(self.ds_xsar.necz.isel(pol=1)
+                                                           .compute(),
+                                                           self.ds_xsar.incidence.compute())
+        else:
+            # No noise flatening for rs2
+            noise_flatened = self.ds_xsar.necz.isel(pol=1)
+
         return xr.apply_ufunc(perform_dualpol_inversion_1pt_guvect,
                               10*np.log10(self.ds_xsar.sigma0.isel(pol=0)
                                           ).compute(),
