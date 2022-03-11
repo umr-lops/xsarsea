@@ -1,127 +1,154 @@
 from numba import guvectorize, float64
-from numba import njit
-import pickle
+#import pickle
+import logging
 import numpy as np
 import os
 import xarray as xr
 
-
-my_luts_co = "/home/vincelhx/Documents/ifremer/data/gmfs/lut_co.nc"
-my_luts_cr = "/home/vincelhx/Documents/ifremer/data/gmfs/lut_cr.nc"
-my_luts_co_cmod5n_decim1___ = "/home/vincelhx/Documents/ifremer/data/gmfs/GMF_cmod5n/_cmod5n_decim1___.nc"
+from xsar.utils import timing
+from gmfs_methods import *
 
 
-@njit
-def cmod5(u10, phi, inc, neutral=True):
+class Gmfs_Loader:
     """
+    Gmfs_Loader class
     """
-    # Coefficients and constants
-    if neutral is True:  # CMOD5.n coefficients
-        c = [0., -0.6878, -0.7957, 0.338, -0.1728, 0., 0.004, 0.1103,
-             0.0159, 6.7329, 2.7713, -2.2885, 0.4971, -0.725, 0.045, 0.0066,
-             0.3222, 0.012, 22.7, 2.0813, 3., 8.3659, -3.3428, 1.3236,
-             6.2437, 2.3893, 0.3249, 4.159, 1.693]
-    else:  # CMOD5 coefficients
-        c = [0., -0.688, -0.793, 0.338, -0.173, 0., 0.004, 0.111,
-             0.0162, 6.34, 2.57, -2.18, 0.4, -0.6, 0.045, 0.007,
-             0.33, 0.012, 22., 1.95, 3., 8.39, -3.44, 1.36, 5.35,
-             1.99, 0.29, 3.80, 1.53]
-    zpow = 1.6
-    thetm = 40.
-    thethr = 25.
-    y0 = c[19]
-    pn = c[20]
-    a = y0 - (y0 - 1.) / pn
-    b = 1. / (pn * (y0 - 1.) ** (pn - 1.))
 
-    # Angles
-    cosphi = np.cos(np.deg2rad(phi))
-    x = (inc - thetm) / thethr
-    x2 = x ** 2.
+    def __init__(self):
 
-    # B0 term
-    a0 = c[1] + c[2] * x + c[3] * x2 + c[4] * x * x2
-    a1 = c[5] + c[6] * x
-    a2 = c[7] + c[8] * x
-    gam = c[9] + c[10] * x + c[11] * x2
-    s0 = c[12] + c[13] * x
-    s = a2 * u10
-    a3 = 1. / (1. + np.exp(-s0))
-    slts0 = s < s0
-    a3[~slts0] = 1. / (1. + np.exp(-s[~slts0]))
-    a3[slts0] = a3[slts0] * (s[slts0] / s0[slts0]
-                             ) ** (s0[slts0] * (1. - a3[slts0]))
-    b0 = (a3 ** gam) * 10. ** (a0 + a1 * u10)
+        return
 
-    # B1 term
-    b1 = c[15] * u10 * (0.5 + x - np.tanh(4. * (x + c[16] + c[17] * u10)))
-    b1 = (c[14] * (1. + x) - b1) / (np.exp(0.34 * (u10 - c[18])) + 1.)
+    def load_lut(self, pol, tabulated, path, dims={}):
+        # use match / case in python>3.1
 
-    # B2 term
-    v0 = c[21] + c[22] * x + c[23] * x2
-    d1 = c[24] + c[25] * x + c[26] * x2
-    d2 = c[27] + c[28] * x
-    v2 = (u10 / v0 + 1.)
-    v2lty0 = v2 < y0
-    v2[v2lty0] = a + b * (v2[v2lty0] - 1.) ** pn
-    b2 = (-d1 + d2 * v2) * np.exp(-v2)
+        if pol == "co" or pol == "copol":
 
-    # Sigma0 according to Fourier terms
-    sig = b0 * (1. + b1 * cosphi + b2 * (2. * cosphi ** 2. - 1.)) ** zpow
-    return sig
+            if tabulated:
+                lut_co_zon, lut_co_mer, lut_co_spd, lut_co_nrcs, lut_co_inc = self.get_LUTs_co_arrays(
+                    path)
+                self.lut_co_dict = {}
+                self.lut_co_dict["lut_co_zon"] = lut_co_zon
+                self.lut_co_dict["lut_co_mer"] = lut_co_mer
+                self.lut_co_dict["lut_co_spd"] = lut_co_spd
+                self.lut_co_dict["lut_co_nrcs"] = lut_co_nrcs
+                self.lut_co_dict["lut_co_inc"] = lut_co_inc
+            elif not(tabulated):
+                if not(dims):
+                    logging.error("needs wspd_1d, phi_1d, inc_1d")
+                    # return
 
+                self.lut_co_dict = {}
+                self.lut_co_dict["lut_co_nrcs"] = self.gmf_ufunc_co(
+                    dims["inc_1d"], dims["phi_1d"], dims["wspd_1d"])
 
-@njit
-def cmod_like_CR(inc, u10):
-    #inc = xdata[0]
-    #u10 = xdata[1]
+                SPD_LUT, PHI_LUT = np.meshgrid(dims["wspd_1d"], dims["phi_1d"])
+                ZON_LUT = SPD_LUT*np.cos(np.radians(PHI_LUT))
+                MER_LUT = SPD_LUT*np.sin(np.radians(PHI_LUT))
 
-    c1 = -3.14993013e+00
-    c2 = -5.97976767e-01
-    c3 = -3.27075281e-01
-    c4 = -4.69016576e-01
-    c5 = 2.52596490e-02
-    c6 = 1.05453695e-02
-    c7 = 8.23746078e+09
-    c8 = -1.70926452e+09
-    c9 = -6.50638418e+05
-    c10 = 7.50378262e+18
-    c11 = -7.97374621e+18
-    c12 = 1.63073350e+12
-    c13 = -4.22692526e+17
+                self.lut_co_dict['lut_co_spd'] = SPD_LUT
+                self.lut_co_dict['lut_co_zon'] = ZON_LUT
+                self.lut_co_dict['lut_co_mer'] = MER_LUT
+                self.lut_co_dict["lut_co_inc"] = dims["inc_1d"]
+            else:
+                logging.ERROR("`tabulated` arg has to be boolean")
+                return None
 
-    zpow = 1.6
-    thetm = 40.
-    thethr = 25.
+        elif pol == "cr" or pol == "crpol":
+            if tabulated:
+                lut_cr_spd, lut_cr_nrcs, lut_cr_inc = self.get_LUTs_cr_arrays(
+                    path)
+                self.lut_cr_dict = {}
+                self.lut_cr_dict["lut_cr_spd"] = lut_cr_spd
+                self.lut_cr_dict["lut_cr_nrcs"] = lut_cr_nrcs
+                self.lut_cr_dict["lut_cr_inc"] = lut_cr_inc
 
-    #y0 = c[19]
-    #pn = c[20]
-    #a = y0 - (y0 - 1.) / pn
-    #b = 1. / (pn * (y0 - 1.) ** (pn - 1.))
+            elif not(tabulated):
+                if not(dims):
+                    logging.ERROR("needs wspd_1d, inc_1d, fct_number")
+                    return None
+                self.lut_cr_dict = {}
+                self.lut_cr_dict["lut_cr_nrcs"] = self.gmf_ufunc_cr(
+                    dims["inc_1d"], dims["wspd_1d"], dims["fct_number"])
+                self.lut_cr_dict['lut_cr_spd'] = dims["wspd_1d"]
+                self.lut_cr_dict["lut_cr_inc"] = dims["inc_1d"]
+            else:
+                logging.error("`tabulated` arg has to be boolean")
+                return None
 
-    # Angles
-    x = (inc - thetm) / thethr
-    x2 = x ** 2.
+        return None
 
-    # B0 term
-    a0 = c1 + c2 * x + c3 * x2 + c4 * x * x2
-    a1 = c5 + c6 * x
-    a2 = c7 + c8 * x
-    gam = c9 + c10 * x + c11 * x2
-    s0 = c12 + c13 * x
-    s = a2 * u10
-    a3 = 1. / (1. + np.exp(-s0))
-    slts0 = s < s0
-    a3[~slts0] = 1. / (1. + np.exp(-s[~slts0]))
-    a3[slts0] = a3[slts0] * (s[slts0] / s0[slts0]
-                             ) ** (s0[slts0] * (1. - a3[slts0]))
-    a3 = a3 * (s / s0) ** (s0 * (1. - a3))
-    # a3=1
-    b0 = (a3 ** gam) * 10. ** (a0 + a1 * u10)
-    #b0 = 10*np.log10(a3 ** gam) + a0 + a1*u10
-    #b0 = 10. ** ( a0 + a1*u10 )
+    """ TABULATED LUTS  """
 
-    return b0
+    def get_LUTs_co_arrays(self, path_nc):
+        lut_co = self.get_LUTs_co(path_nc)
+        lut_co_zon = lut_co['zon'].values
+        lut_co_mer = lut_co['mer'].values
+        lut_co_spd = lut_co['spd'].values
+        lut_co_nrcs = lut_co['sigma0'].values
+        lut_co_inc = lut_co["incidence"].values
+        return lut_co_zon, lut_co_mer, lut_co_spd, lut_co_nrcs, lut_co_inc
+
+    def get_LUTs_cr_arrays(self, path_nc):
+        lut_cr = self.get_LUTs_cr(path_nc)
+        lut_cr_spd = lut_cr['wspd'].values
+        lut_cr_nrcs = lut_cr['sigma0'].values
+        lut_cr_inc = lut_cr["incidence"].values
+        return lut_cr_spd, lut_cr_nrcs, lut_cr_inc
+
+    def get_LUTs_co(self, path_nc):
+        print("here")
+        return xr.open_dataset(path_nc).transpose('incidence', 'phi', 'wspd')
+
+    def get_LUTs_cr(self, path_nc):
+        return xr.open_dataset(path_nc)
+
+    """ NON-TABULATED LUTS"""
+
+    @ timing
+    def save_LUT_sigma0_co(self, inc_1d, phi_1d, wspd_1d, savepath):
+        # TODO add POL attribute
+        sigma0_gmf = self.gmf_ufunc_co(inc_1d, phi_1d, wspd_1d)
+        SPD_LUT, PHI_LUT = np.meshgrid(wspd_1d, phi_1d)
+
+        ZON_LUT = SPD_LUT*np.cos(np.radians(PHI_LUT))
+        MER_LUT = SPD_LUT*np.sin(np.radians(PHI_LUT))
+
+        lut = xr.DataArray(10*np.log10(sigma0_gmf), dims=['incidence', 'phi', 'wspd'],
+                           coords={'incidence': inc_1d, 'phi': phi_1d, 'wspd': wspd_1d}).to_dataset(name='sigma0')
+
+        lut['spd'] = xr.DataArray(SPD_LUT, dims=['phi', 'wspd'])
+        lut['zon'] = xr.DataArray(ZON_LUT, dims=['phi', 'wspd'])
+        lut['mer'] = xr.DataArray(MER_LUT, dims=['phi', 'wspd'])
+
+        # lut_co.attrs["pol"] = pol
+        lut.attrs["LUT used"] = savepath.split("/")[-1]
+        if os.path.exists(savepath):
+            os.remove(savepath)
+        lut.to_netcdf(savepath, format="NETCDF4")
+
+    @ timing
+    def save_LUT_sigma0_cr(self, inc_1d, wspd_1d, savepath, fct_number):
+        # TODO add POL attribute
+        import os
+        sigma0_gmf = self.gmf_ufunc_cr(inc_1d, wspd_1d, fct_number)
+
+        lut = xr.DataArray(10*np.log10(sigma0_gmf), dims=['incidence', 'wspd'],
+                           coords={'incidence': inc_1d, 'wspd': wspd_1d}).to_dataset(name='sigma0')
+
+        lut.attrs["LUT used"] = savepath.split("/")[-1]
+        if os.path.exists(savepath):
+            os.remove(savepath)
+        lut.to_netcdf(savepath, format="NETCDF4")
+
+    def gmf_ufunc_cr(self, inc_1d, wspd_1d, fct_name):
+        return gmf_ufunc_cr(inc_1d, wspd_1d, fct_name)
+
+    def gmf_ufunc_co(self, inc_1d, phi_1d, wspd_1d):
+        return gmf_ufunc_co(inc_1d, phi_1d, wspd_1d)
+
+    def gmf_ufunc_co_inc(inc_1d, phi_1d, wspd_1d):
+        # return sigma 0 values of cmod5n for a given incidence (°)
+        return gmf_ufunc_co_inc(inc_1d, phi_1d, wspd_1d)
 
 
 @guvectorize([(float64[:], float64[:], float64[:], float64[:, :, :])], '(n),(m),(p)->(n,m,p)')
@@ -132,76 +159,22 @@ def gmf_ufunc_co(inc_1d, phi_1d, wspd_1d, sigma0_out):
                 one_wspd, one_phi, inc_1d, neutral=True)
 
 
-@guvectorize([(float64[:], float64[:], float64[:, :])], '(n),(m)->(n,m)')
-def gmf_ufunc_cr(inc_1d, wspd_1d, sigma0_out):
+@guvectorize([(float64[:], float64[:], float64,  float64[:, :])], '(n),(m),()->(n,m)')
+def gmf_ufunc_cr(inc_1d, wspd_1d, fct_number, sigma0_out):
     for i_spd, one_wspd in enumerate(wspd_1d):
         # print(i_spd,one_wspd)
-        sigma0_out[:, i_spd] = cmod_like_CR(inc_1d, one_wspd)
+        sigma0_out[:, i_spd] = corresponding_gmfs[fct_number](inc_1d, one_wspd)
 
 
-def create_LUT_sigma0_co(inc_1d, phi_1d, wspd_1d, name, savepath):
-    # TODO add POL attribute
-    sigma0_gmf = gmf_ufunc_co(inc_1d, phi_1d, wspd_1d)
-    SPD_LUT, PHI_LUT = np.meshgrid(wspd_1d, phi_1d)
-
-    ZON_LUT = SPD_LUT*np.cos(np.radians(PHI_LUT))
-    MER_LUT = SPD_LUT*np.sin(np.radians(PHI_LUT))
-
-    lut = xr.DataArray(10*np.log10(sigma0_gmf), dims=['incidence', 'phi', 'wspd'],
-                       coords={'incidence': inc_1d, 'phi': phi_1d, 'wspd': wspd_1d}).to_dataset(name='sigma0')
-
-    lut['spd'] = xr.DataArray(SPD_LUT, dims=['phi', 'wspd'])
-    lut['zon'] = xr.DataArray(ZON_LUT, dims=['phi', 'wspd'])
-    lut['mer'] = xr.DataArray(MER_LUT, dims=['phi', 'wspd'])
-
-    #lut_co.attrs["pol"] = pol
-    lut.attrs["LUT used"] = name
-    if os.path.exists(savepath):
-        os.remove(savepath)
-    lut.to_netcdf(savepath, format="NETCDF4")
+@guvectorize([(float64[:], float64[:], float64[:], float64[:, :])], '(n),(m),(p)->(m,p)')
+def gmf_ufunc_co_inc(inc_1d, phi_1d, wspd_1d, sigma0_out):
+    # return sigma 0 values of cmod5n for a given incidence (°)
+    for i_spd, one_wspd in enumerate(wspd_1d):
+        sigma0_out[:, i_spd] = cmod5(
+            one_wspd, phi_1d, inc_1d, neutral=True)
 
 
-def create_LUT_sigma0_cr(inc_1d, wspd_1d, name, savepath):
-    # TODO add POL attribute
-    import os
-    sigma0_gmf = gmf_ufunc_cr(inc_1d, wspd_1d)
-
-    lut = xr.DataArray(10*np.log10(sigma0_gmf), dims=['incidence', 'wspd'],
-                       coords={'incidence': inc_1d, 'wspd': wspd_1d}).to_dataset(name='sigma0')
-
-    lut.attrs["LUT used"] = name
-    if os.path.exists(savepath):
-        os.remove(savepath)
-    lut.to_netcdf(savepath, format="NETCDF4")
-
-
-def get_LUTs_co(path_nc):
-    return xr.open_dataset(path_nc).transpose(
-        'incidence', 'phi', 'wspd')
-
-
-def get_LUTs_cr(path_nc):
-    return xr.open_dataset(path_nc)
-
-
-def get_LUTs_co_arrays(path_nc):
-    lut_co = get_LUTs_co(path_nc)
-    lut_co_zon = lut_co['zon'].values
-    lut_co_mer = lut_co['mer'].values
-    lut_co_spd = lut_co['spd'].values
-    lut_co_nrcs = lut_co['sigma0'].values
-    lut_co_inc = lut_co["incidence"].values
-    return lut_co_zon, lut_co_mer, lut_co_spd, lut_co_nrcs, lut_co_inc
-
-
-def get_LUTs_cr_arrays(path_nc):
-    lut_cr = get_LUTs_cr(path_nc)
-    lut_cr_spd = lut_cr['wspd'].values
-    lut_cr_nrcs = lut_cr['sigma0'].values
-    lut_cr_inc = lut_cr["incidence"].values
-    return lut_cr_spd, lut_cr_nrcs, lut_cr_inc
-
-
+"""
 def get_LUTs(pol):
 
     # Register LUT_co in xarray.Dataset
@@ -269,3 +242,4 @@ def get_LUTs(pol):
         "/home/vincelhx/Documents/ifremer/data/gmfs/lut_cr.nc")
 
     return lut_co, lut_cr
+"""

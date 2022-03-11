@@ -5,32 +5,10 @@ Combined Co- and Cross-Polarized SAR Measurements Under Extreme Wind Conditions
 https://agupubs.onlinelibrary.wiley.com/doi/full/10.1029/2006JC003743
 
 """
+
 import numpy as np
 import xarray as xr
 from gmfs import *
-
-
-"""
-wspd_min = 0.2
-wspd_max = 50
-wspd_step = 1
-wspd_1d = np.arange(wspd_min, wspd_max+wspd_step, wspd_step)
-
-phi_min = 0
-phi_max = 360
-phi_step = 1
-phi_1d = np.arange(phi_min, phi_max+phi_step, phi_step)
-"""
-
-
-@guvectorize([(float64[:], float64[:], float64[:], float64[:, :])], '(n),(m),(p)->(m,p)')
-def gmf_ufunc_inc(inc_1d, phi_1d, wspd_1d, sigma0_out):
-    # return sigma 0 values of cmod5n for a given incidence (°)
-    for i_spd, one_wspd in enumerate(wspd_1d):
-        sigma0_out[:, i_spd] = 10*np.log10(cmod5(
-            one_wspd, phi_1d, inc_1d, neutral=True))
-
-
 try:
     from xsar.utils import timing
 except ImportError:
@@ -38,7 +16,7 @@ except ImportError:
     def timing(func):
         return func
 
-# CONSTANTS
+# CONSTANTS #
 du = 2
 dv = 2
 dsig = 0.1
@@ -94,6 +72,7 @@ class WindInversion:
         Returns
         -------
         """
+
         self.ds_xsar['ancillary_wind_azi'] = np.sqrt(
             self.ds_xsar["ecmwf_0100_1h_U10"] ** 2 +
             self.ds_xsar["ecmwf_0100_1h_V10"] ** 2
@@ -356,7 +335,7 @@ class WindInversion:
             spd = self.perform_copol_inversion_1pt_one_iter(
                 sigco, theta, ancillary_wind, phi_1d, wspd_1d)
 
-        return
+        return spd
 
     def perform_dualpol_inversion_1pt_iterations(self, sigco, sigcr, nesz_cr,  incid, ancillary_wind):
 
@@ -380,6 +359,7 @@ class WindInversion:
 
         wsp_first_guess = self.perform_copol_inversion_1pt_iterations(
             sigco, incid, ancillary_wind)
+
         J_wind = ((self.lut_cr_spd-wsp_first_guess)/du10_fg)**2.
 
         # code sarwing
@@ -409,7 +389,6 @@ class WindInversion:
         """
 
         Parameters
-        iter : booleean
         ----------
 
         Returns
@@ -418,20 +397,18 @@ class WindInversion:
             DataArray with dims `('atrack','xtrack')`.
         """
 
-        if iter:
-            return xr.apply_ufunc(self.perform_copol_inversion_1pt_iterations,
-                                  10*np.log10(self.ds_xsar.sigma0.isel(pol=0)
-                                              ).compute(),
-                                  self.ds_xsar.incidence.compute(),
-                                  self.ds_xsar.ancillary_wind_antenna.compute(),
-                                  vectorize=True)
+        return xr.apply_ufunc(self.perform_copol_inversion_1pt_iterations,
+                              10*np.log10(self.ds_xsar.sigma0.isel(pol=0)
+                                          ).compute(),
+                              self.ds_xsar.incidence.compute(),
+                              self.ds_xsar.ancillary_wind_antenna.compute(),
+                              vectorize=True)
 
     @ timing
     def perform_copol_inversion(self, wspd_1d, phi_1d):
         """
 
         Parameters
-        iter : booleean
         ----------
 
         Returns
@@ -472,7 +449,7 @@ class WindInversion:
                               vectorize=True)
 
     @ timing
-    def perform_dualpol_inversion(self, wspd_1d, phi_1d, iter, PATH_luts_cr):
+    def perform_dualpol_inversion(self, wspd_1d, phi_1d, PATH_luts_cr):
         """
         Parameters
 
@@ -513,7 +490,7 @@ class WindInversion:
                               vectorize=True)
 
     @ timing
-    def perform_dualpol_inversion_iterations(self, iter, PATH_luts_cr):
+    def perform_dualpol_inversion_iterations(self, PATH_luts_cr):
         """
         Parameters
 

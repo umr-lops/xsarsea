@@ -1,3 +1,9 @@
+"""
+Ressources TODO
+
+Combined Co- and Cross-Polarized SAR Measurements Under Extreme Wind Conditions
+https://agupubs.onlinelibrary.wiley.com/doi/full/10.1029/2006JC003743
+"""
 
 
 # TODO handle minimising J when sigcr // sigco == np.nan
@@ -6,8 +12,8 @@
 
 import numpy as np
 import xarray as xr
-#from xsarsea.gmfs import get_LUTs_co_arrays, get_LUTs_cr_arrays
-#from xsarsea.utils import perform_copol_inversion_1pt_guvect, perform_dualpol_inversion_1pt_guvect
+from xsarsea.gmfs import get_LUTs_co_arrays, get_LUTs_cr_arrays
+from xsarsea.utils import perform_copol_inversion_1pt_guvect, perform_dualpol_inversion_1pt_guvect
 
 try:
     from xsar.utils import timing
