@@ -68,7 +68,7 @@ class Gmfs_Loader:
                     return None
                 self.lut_cr_dict = {}
                 self.lut_cr_dict["lut_cr_nrcs"] = self.gmf_ufunc_cr(
-                    dims["inc_1d"], dims["wspd_1d"], dims["fct_number"])
+                    dims["inc_1d"], dims["wspd_1d"], np.array([dims["fct_number"]]))
                 self.lut_cr_dict['lut_cr_spd'] = dims["wspd_1d"]
                 self.lut_cr_dict["lut_cr_inc"] = dims["inc_1d"]
             else:
@@ -96,7 +96,6 @@ class Gmfs_Loader:
         return lut_cr_spd, lut_cr_nrcs, lut_cr_inc
 
     def get_LUTs_co(self, path_nc):
-        print("here")
         return xr.open_dataset(path_nc).transpose('incidence', 'phi', 'wspd')
 
     def get_LUTs_cr(self, path_nc):
@@ -113,7 +112,7 @@ class Gmfs_Loader:
         ZON_LUT = SPD_LUT*np.cos(np.radians(PHI_LUT))
         MER_LUT = SPD_LUT*np.sin(np.radians(PHI_LUT))
 
-        lut = xr.DataArray(10*np.log10(sigma0_gmf), dims=['incidence', 'phi', 'wspd'],
+        lut = xr.DataArray(sigma0_gmf, dims=['incidence', 'phi', 'wspd'],
                            coords={'incidence': inc_1d, 'phi': phi_1d, 'wspd': wspd_1d}).to_dataset(name='sigma0')
 
         lut['spd'] = xr.DataArray(SPD_LUT, dims=['phi', 'wspd'])
@@ -132,7 +131,7 @@ class Gmfs_Loader:
         import os
         sigma0_gmf = self.gmf_ufunc_cr(inc_1d, wspd_1d, fct_number)
 
-        lut = xr.DataArray(10*np.log10(sigma0_gmf), dims=['incidence', 'wspd'],
+        lut = xr.DataArray(sigma0_gmf, dims=['incidence', 'wspd'],
                            coords={'incidence': inc_1d, 'wspd': wspd_1d}).to_dataset(name='sigma0')
 
         lut.attrs["LUT used"] = savepath.split("/")[-1]
@@ -141,10 +140,10 @@ class Gmfs_Loader:
         lut.to_netcdf(savepath, format="NETCDF4")
 
     def gmf_ufunc_cr(self, inc_1d, wspd_1d, fct_name):
-        return gmf_ufunc_cr(inc_1d, wspd_1d, fct_name)
+        return 10*np.log10(gmf_ufunc_cr(inc_1d, wspd_1d, fct_name))
 
     def gmf_ufunc_co(self, inc_1d, phi_1d, wspd_1d):
-        return gmf_ufunc_co(inc_1d, phi_1d, wspd_1d)
+        return 10*np.log10(gmf_ufunc_co(inc_1d, phi_1d, wspd_1d))
 
     def gmf_ufunc_co_inc(inc_1d, phi_1d, wspd_1d):
         # return sigma 0 values of cmod5n for a given incidence (°)
@@ -159,11 +158,12 @@ def gmf_ufunc_co(inc_1d, phi_1d, wspd_1d, sigma0_out):
                 one_wspd, one_phi, inc_1d, neutral=True)
 
 
-@guvectorize([(float64[:], float64[:], float64,  float64[:, :])], '(n),(m),()->(n,m)')
+@guvectorize([(float64[:], float64[:], float64[:],  float64[:, :])], '(n),(m),(p)->(n,m)')
 def gmf_ufunc_cr(inc_1d, wspd_1d, fct_number, sigma0_out):
     for i_spd, one_wspd in enumerate(wspd_1d):
         # print(i_spd,one_wspd)
-        sigma0_out[:, i_spd] = corresponding_gmfs[fct_number](inc_1d, one_wspd)
+        sigma0_out[:, i_spd] = corresponding_gmfs[fct_number[0]](
+            inc_1d, one_wspd)
 
 
 @guvectorize([(float64[:], float64[:], float64[:], float64[:, :])], '(n),(m),(p)->(m,p)')
