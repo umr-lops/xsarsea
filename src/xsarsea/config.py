@@ -24,12 +24,12 @@ gmfs_loader.load_lut(pol="crpol", tabulated=True,
 
 # "point_by_point"
 # "iterative"
-
+# "third"
 
 inversion_parameters = {
-    "inversion_method": "iterative",
+    "inversion_method": "third",
     "lut_co_dict": gmfs_loader.lut_co_dict,
     "lut_cr_dict": gmfs_loader.lut_cr_dict,
+    "dims": dims,
     "is_rs2": False,
-    "product_type": "L1"
 }

@@ -1,11 +1,11 @@
 import numpy as np
 import xarray as xr
-from numba import vectorize, float64, boolean, complex128
+from numba import vectorize, guvectorize, float64, boolean, complex128
 from xsar.utils import timing
-
+from xsarsea import gmfs, gmfs_methods
 from xsarsea.gmfs import gmf_ufunc_co_inc
 from config import *
-
+from gmfs_methods import cmod5
 
 lut_cr_spd = inversion_parameters["lut_cr_dict"]["lut_cr_spd"]
 lut_cr_nrcs = inversion_parameters["lut_cr_dict"]["lut_cr_nrcs"]
@@ -17,6 +17,14 @@ if inversion_parameters["inversion_method"] == 'point_by_point':
     lut_co_spd = inversion_parameters["lut_co_dict"]["lut_co_spd"]
     lut_co_nrcs = inversion_parameters["lut_co_dict"]["lut_co_nrcs"]
     lut_co_inc = inversion_parameters["lut_co_dict"]["lut_co_inc"]
+
+if inversion_parameters["inversion_method"] == 'third':
+    wspd_1d = dims["wspd_1d"]
+    inc_1d = dims["inc_1d"]
+    phi_1d = dims["phi_1d"]
+    lut_co_spd, lut_co_phi = np.meshgrid(wspd_1d, phi_1d)
+    lut_co_zon = lut_co_spd*np.cos(np.radians(lut_co_phi))
+    lut_co_mer = lut_co_spd*np.sin(np.radians(lut_co_phi))
 
 
 class WindInversion:
@@ -135,6 +143,9 @@ class WindInversion:
         elif self.inversion_method == "iterative":
             fct = self.perform_copol_inversion_1pt_iterative
 
+        elif self.inversion_method == "third":
+            fct = self.perform_copol_inversion_met3
+
         if self.ds_xsar:
             mask_co = ((self.ds_xsar.land_mask.values == 1) | (np.isnan(
                 self.ds_xsar.sigma0.isel(pol=0))) | (self.ds_xsar.sigma0.isel(pol=0) == 0))
@@ -166,6 +177,9 @@ class WindInversion:
 
         elif self.inversion_method == "iterative":
             fct = self.perform_dualpol_iterative_inversion_1pt
+
+        elif self.inversion_method == "third":
+            fct = self.perform_dualpol_inversion_met3
 
         if self.ds_xsar:
             # Perform noise_flatteing
@@ -256,8 +270,87 @@ class WindInversion:
     def perform_copol_inversion_1pt_iterative(self, sigco, theta, ancillary_wind, mask):
         return perform_copol_inversion_1pt_iterative(sigco, theta, ancillary_wind, mask)
 
+    @guvectorize([(float64[:, :], float64[:, :], complex128[:, :], float64[:, :], boolean[:, :])], '(n,m),(n,m),(n,m),(n,m)->(n,m)', forceobj=False, nopython=True, fastmath=False)
+    def perform_copol_inversion_met3(nrcs_co_2d, inc_2d, ancillary_wind_2d, mask_2d, wspd_co):
+        # return sigma 0 values of cmod5n for a given incidence (°)
+        for j in range(nrcs_co_2d.shape[1]):
+            # constant inc
+            gmf_cmod5n_2d = np.empty(shape=lut_co_spd.shape)
+
+            mean_incidence = np.nanmean(inc_2d[:, j])
+            for i_spd, one_wspd in enumerate(wspd_1d):
+                gmf_cmod5n_2d[:, i_spd] = 10*np.log10(cmod5(
+                    one_wspd, phi_1d, np.array([mean_incidence]), neutral=True))
+
+            for i in range(nrcs_co_2d.shape[0]):
+                if mask_2d[i, j]:
+                    wspd_co[i, j] = np.nan
+                else:
+
+                    mu = np.real(ancillary_wind_2d[i, j])
+                    mv = -np.imag(ancillary_wind_2d[i, j])
+
+                    Jwind_co = ((lut_co_zon-mu)/du)**2 + \
+                        ((lut_co_mer-mv)/dv)**2
+
+                    Jsig_co = ((gmf_cmod5n_2d-nrcs_co_2d[i, j])/dsig_co)**2
+
+                    # print(lut_co_spd.shape)
+
+                    J_co = Jwind_co+Jsig_co
+                    wspd_co[i, j] = lut_co_spd[(
+                        np.argmin(J_co) // J_co.shape[-1], np.argmin(J_co) % J_co.shape[-1])]
+
+    @guvectorize([(float64[:, :], float64[:, :], float64[:, :], float64[:, :], complex128[:, :], float64[:, :], boolean[:, :])], '(n,m),(n,m),(n,m),(n,m),(n,m),(n,m)->(n,m)', forceobj=True)
+    def perform_dualpol_inversion_met3(nrcs_co_2d, nrcs_cr_2d, nesz_cr_2d, inc_2d, ancillary_wind_2d, mask_2d, wspd_dual):
+        for j in range(nrcs_co_2d.shape[1]):
+            # constant inc
+            gmf_cmod5n_2d = np.empty(shape=lut_co_spd.shape)
+
+            mean_incidence = np.nanmean(inc_2d[:, j])
+            for i_spd, one_wspd in enumerate(wspd_1d):
+                gmf_cmod5n_2d[:, i_spd] = 10*np.log10(cmod5(
+                    one_wspd, phi_1d, np.array([mean_incidence]), neutral=True))
+
+            idx_inc_cr = np.argmin(np.abs(lut_cr_inc-mean_incidence))
+            lut_nrcs_inc_cr = lut_cr_nrcs[idx_inc_cr, :]
+
+            for i in range(nrcs_co_2d.shape[0]):
+                # print(mean_incidence,inc_2d[i,j])
+
+                if mask_2d[i, j]:
+                    wspd_dual[i, j] = np.nan
+
+                else:
+                    mu = np.real(ancillary_wind_2d[i, j])
+                    mv = -np.imag(ancillary_wind_2d[i, j])
+
+                    Jwind = ((lut_co_zon-mu)/du)**2 + \
+                            ((lut_co_mer-mv)/dv)**2
+
+                    Jsig = ((gmf_cmod5n_2d-nrcs_co_2d[i, j])/dsig_co)**2
+
+                    J = Jwind+Jsig
+                    spd_co = lut_co_spd[(
+                        np.argmin(J) // J.shape[-1], np.argmin(J) % J.shape[-1])]
+
+                    Jwind_cr = ((lut_cr_spd-spd_co)/du10_fg)**2.
+
+                    nrcslin = 10.**(nrcs_cr_2d[i, j]/10.)
+                    dsig_cr = 1./(1.25/(nrcslin/nesz_cr_2d[i, j]))**4.
+
+                    Jsig_cr = ((lut_nrcs_inc_cr-nrcs_cr_2d[i, j])*dsig_cr)**2
+
+                    J_cr = Jsig_cr + Jwind_cr
+
+                    spd_dual = lut_cr_spd[(np.argmin(J_cr) % J_cr.shape[-1])]
+
+                    if (spd_dual < 5 or spd_co < 5):
+                        wspd_dual[i, j] = spd_co
+                    wspd_dual[i, j] = spd_dual
 
 ### iterative on copol 1pt ###
+
 
 @vectorize([float64(float64, float64, complex128)], forceobj=True)
 def perform_copol_inversion_1pt_iterative(sigco, theta, ancillary_wind, mask):
