@@ -4,8 +4,8 @@ import numpy as np
 
 du = 2
 dv = 2
-dsig = 0.1
-dsig_crpol = 0.1
+dsig_co = 0.1
+dsig_cr = 0.1
 du10_fg = 2
 
 
@@ -21,9 +21,15 @@ gmfs_loader.load_lut(pol="copol", tabulated=True,
 gmfs_loader.load_lut(pol="crpol", tabulated=True,
                      path="/home/vincelhx/Documents/ifremer/data/gmfs/lut_cr.nc", dims=dims)
 
+
+# "point_by_point"
+# "iterative"
+
+
 inversion_parameters = {
-    "inversion_method": "point_by_point",
+    "inversion_method": "iterative",
     "lut_co_dict": gmfs_loader.lut_co_dict,
     "lut_cr_dict": gmfs_loader.lut_cr_dict,
-    "is_rs2": False
+    "is_rs2": False,
+    "product_type": "L1"
 }
