@@ -238,10 +238,53 @@ def cmod_like_CR_5(inc, u10):
     return sig
 
 
+@njit
+def cmod_like_CR_7(inc, u10):
+    # array([ 1.95413174e-05, -1.97502988e-08, -6.20960769e-09,  2.43508866e+00,
+    #   -4.05945173e-02,  6.57808362e-04])
+    # FOR RS2
+    a0 = 1.95413174e-05
+    a1 = -1.97502988e-08
+    a2 = -6.20960769e-09
+    b0 = 2.43508866e+00
+    b1 = -4.05945173e-02
+    b2 = 6.57808362e-04
+
+    a = a0 + a1*inc + a2*inc**2
+    b = b0 + b1*inc + b2*inc**2
+
+    sig = a*u10**(b)
+
+    return sig
+
+
+@njit
+def cmod_like_CR_8(inc, u10):
+    # array([ 1.37636993e-04, -4.71175564e-06,  4.12477619e-08,  1.50892081e+00,
+    #   -1.30471202e-02,  4.23936064e-04])
+    # FOR RS2
+    a0 = 1.37636993e-04
+    a1 = -4.71175564e-06
+    a2 = 4.12477619e-08
+    b0 = 1.50892081e+00
+    b1 = -1.30471202e-02
+    b2 = 4.23936064e-04
+
+    a = a0 + a1*inc + a2*inc**2
+    b = b0 + b1*inc + b2*inc**2
+
+    sig = a*u10**(b)
+
+    return sig
+
+
 corresponding_gmfs = {
     1: cmod_like_CR,
     2: cmod_like_CR_2,
     3: cmod_like_CR_3,
     4: cmod_like_CR_4,
     5: cmod_like_CR_5,
+    7: cmod_like_CR_7,
+    8: cmod_like_CR_8
+
 }

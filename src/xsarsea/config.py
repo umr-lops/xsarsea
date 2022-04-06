@@ -13,7 +13,7 @@ gmfs_loader = Gmfs_Loader()
 dims = {}
 dims["inc_1d"] = np.arange(17, 50.1, 0.1)
 dims["phi_1d"] = np.arange(0, 360, 1)
-dims["wspd_1d"] = np.arange(0.3, 50.1, 0.1)
+dims["wspd_1d"] = np.arange(0.3, 80.1, 0.1)
 dims["fct_number"] = 1
 
 gmfs_loader.load_lut(pol="copol", tabulated=True,
@@ -27,7 +27,7 @@ gmfs_loader.load_lut(pol="crpol", tabulated=True,
 # "third"
 
 inversion_parameters = {
-    "inversion_method": "third",
+    "inversion_method": "point_by_point",
     "lut_co_dict": gmfs_loader.lut_co_dict,
     "lut_cr_dict": gmfs_loader.lut_cr_dict,
     "dims": dims,

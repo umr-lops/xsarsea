@@ -352,7 +352,7 @@ class WindInversion:
 ### iterative on copol 1pt ###
 
 
-@vectorize([float64(float64, float64, complex128)], forceobj=True)
+@vectorize([float64(float64, float64, complex128, boolean)], forceobj=True)
 def perform_copol_inversion_1pt_iterative(sigco, theta, ancillary_wind, mask):
     wspd_min = 0.2
     wspd_max = 50

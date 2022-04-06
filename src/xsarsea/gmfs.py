@@ -18,7 +18,7 @@ class Gmfs_Loader:
 
         return
 
-    def load_lut(self, pol, tabulated, path, dims={}):
+    def load_lut(self, pol, tabulated, path, dims={}, factor=1):
         # use match / case in python>3.1
 
         if pol == "co" or pol == "copol":
@@ -68,7 +68,7 @@ class Gmfs_Loader:
                     return None
                 self.lut_cr_dict = {}
                 self.lut_cr_dict["lut_cr_nrcs"] = self.gmf_ufunc_cr(
-                    dims["inc_1d"], dims["wspd_1d"], np.array([dims["fct_number"]]))
+                    dims["inc_1d"], dims["wspd_1d"], np.array([dims["fct_number"]]), factor)
                 self.lut_cr_dict['lut_cr_spd'] = dims["wspd_1d"]
                 self.lut_cr_dict["lut_cr_inc"] = dims["inc_1d"]
             else:
@@ -139,8 +139,8 @@ class Gmfs_Loader:
             os.remove(savepath)
         lut.to_netcdf(savepath, format="NETCDF4")
 
-    def gmf_ufunc_cr(self, inc_1d, wspd_1d, fct_name):
-        return 10*np.log10(gmf_ufunc_cr(inc_1d, wspd_1d, fct_name))
+    def gmf_ufunc_cr(self, inc_1d, wspd_1d, fct_name, factor=1):
+        return 10*np.log10(factor * gmf_ufunc_cr(inc_1d, wspd_1d, fct_name))
 
     def gmf_ufunc_co(self, inc_1d, phi_1d, wspd_1d):
         return 10*np.log10(gmf_ufunc_co(inc_1d, phi_1d, wspd_1d))
