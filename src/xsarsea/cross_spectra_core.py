@@ -42,26 +42,25 @@ def read_slc(onetiff,slice_subdomain=None,resolution=None,resampling=None):
     if resolution is not None:
         if resolution['atrack']==1 and resolution['xtrack']==1:
             #June 2021, a patch because currently resolution 1:1 for image and rasterio returns an error
-            slc = xsar.Sentine1Dataset(wv_slc_meta.subdatasets[good_indice],resolution=None,resampling=None)
+            s1ds = xsar.Sentinel1Dataset(wv_slc_meta.subdatasets[good_indice],resolution=None,resampling=None)
         else:
-            slc = xsar.Sentine1Dataset(wv_slc_meta.subdatasets[good_indice],resolution=resolution,resampling=resampling)
+            s1ds = xsar.Sentinel1Dataset(wv_slc_meta.subdatasets[good_indice],resolution=resolution,resampling=resampling)
     else:
-        slc = xsar.Sentine1Dataset(wv_slc_meta.subdatasets[good_indice])
+        s1ds = xsar.Sentinel1Dataset(wv_slc_meta.subdatasets[good_indice])
+    slc = s1ds.dataset
     logging.info('max xtrack val : %s',slc['xtrack'].values[-1])
     slc = slc.rename({'atrack' : 'azimuth','xtrack' : 'range'})
-    azimuthSpacing,rangeSpacing = slc.s1meta.image['slant_pixel_spacing']
+    azimuthSpacing, rangeSpacing = s1ds.s1meta.image['ground_pixel_spacing']
     #rangeSpacing = slc.attrs['pixel_xtrack_m']
     #azimuthSpacing= slc.attrs['pixel_atrack_m']
 
     platform_heading = slc.attrs['platform_heading']
-    logging.debug('slant rangeSpacing %s',rangeSpacing)
     #changement des coordinates range and azimuth like Nouguier
     raxis = np.arange(len(slc['range']))
     aaxis = np.arange(len(slc['azimuth']))
     raxis = raxis * rangeSpacing
     aaxis = aaxis * azimuthSpacing
     logging.info('range coords before : %s',slc['range'].values)
-    #slc = slc.assign_coords({'range':raxis,'azimuth':aaxis}) # I turn off the coords change performed by Noug because I think it is already done in xsar (not sure but it can explain the problem of grid I have)
     slc = slc.assign_coords({'range' : raxis,'azimuth' : aaxis}) # I put back the coords change because otherwise I cannot get the energy pattern expected like Nouguier
     logging.info('max range val : %s',raxis[-1])
     logging.info('range coords after : %s',slc['range'].values)
@@ -218,7 +217,7 @@ def compute_SAR_cross_spectrum2(slc, *, N_look=3, look_width=0.25, look_overlap=
     allspecs = xr.merge(allspecs, join='outer', fill_value=np.nan)
     allspecs = allspecs.assign_coords(freq_range=np.fft.fftshift(frange))
     allspecs = allspecs.assign_coords(freq_azimuth=np.fft.fftshift(fazimuth))
-    allspecs.attrs.update({'tau': slc.synthetic_duration * (look_width - look_overlap)})
+    #allspecs.attrs.update({'tau': slc.synthetic_duration * (look_width - look_overlap)}) #TODO fix this
     allspecs = allspecs.rename(freq_range='kx', freq_azimuth='ky')
     allspecs.kx.attrs.update({'long_name': 'wavenumber in range direction', 'units': 'rad/m'})
     allspecs.ky.attrs.update({'long_name': 'wavenumber in azimuth direction', 'units': 'rad/m'})
