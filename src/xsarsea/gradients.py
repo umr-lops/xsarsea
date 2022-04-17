@@ -751,6 +751,7 @@ def circ_hist(hist_at):
     -------
     pd.DataFrame, with columns ['atrack_g', 'xtrack_g']
     """
+
     # convert histogram to circular histogram
     # convert to complex
     hist_at = hist_at * np.exp(1j * hist_at.angles)
