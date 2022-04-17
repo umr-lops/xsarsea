@@ -29,7 +29,7 @@ Those examples show how to:
 
 * :doc:`examples/streaks`
 
-* :doc:`example/windspeed_inversion`
+* :doc:`examples/windspeed_inversion`
 
 Help & Reference
 ................
