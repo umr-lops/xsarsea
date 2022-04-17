@@ -1,4 +1,4 @@
-from .utils import register_gmf
+from .gmfs import register_gmf
 import numpy as np
 
 # analytical functions
@@ -74,6 +74,7 @@ def gmf_cmod5_generic(neutral=False):
 
     return gmf_cmod5
 
+# register gmfs gmf_cmod5 and gmf_cmod5n
 gmf_cmod5_generic(neutral=False)
 gmf_cmod5_generic(neutral=True)
 
