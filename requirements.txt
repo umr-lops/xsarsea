@@ -10,3 +10,6 @@ nbsphinx
 jupyter-sphinx
 holoviews
 panel
+numpy
+xarray
+numba
