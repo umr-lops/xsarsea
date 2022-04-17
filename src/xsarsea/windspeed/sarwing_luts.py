@@ -16,17 +16,17 @@ def load_sarwing_lut(pathin):
     sigma0_db = np.ascontiguousarray(np.transpose(np.load(sigma0_db_path)))
     inc = pkl.load(open(os.path.join(pathin, 'incidence_angle.pkl'), 'rb'), encoding='iso-8859-1')
     try:
-        phi, u10 = pkl.load(open(os.path.join(pathin, 'wind_speed_and_direction.pkl'), 'rb'), encoding='iso-8859-1')
+        phi, wspd = pkl.load(open(os.path.join(pathin, 'wind_speed_and_direction.pkl'), 'rb'), encoding='iso-8859-1')
     except FileNotFoundError:
         phi = None
-        u10 = pkl.load(open(os.path.join(pathin, 'wind_speed.pkl'), 'rb'), encoding='iso-8859-1')
+        wspd = pkl.load(open(os.path.join(pathin, 'wind_speed.pkl'), 'rb'), encoding='iso-8859-1')
 
     if phi is not None:
-        dims = ['u10', 'phi', 'incidence']
-        coords = {'incidence': inc, 'phi': phi, 'u10': u10}
+        dims = ['wspd', 'phi', 'incidence']
+        coords = {'incidence': inc, 'phi': phi, 'wspd': wspd}
     else:
-        dims = ['u10', 'incidence']
-        coords = {'incidence': inc, 'u10': u10}
+        dims = ['wspd', 'incidence']
+        coords = {'incidence': inc, 'wspd': wspd}
 
     da_sigma0_db = xr.DataArray(sigma0_db, dims=dims, coords=coords)
 
@@ -38,11 +38,11 @@ def load_sarwing_lut(pathin):
 
 
 def register(path):
-    register_cmod('cmodms1ahw', inc_range=[17., 50.], u10_range=[3., 80.])(
+    register_cmod('cmodms1ahw', inc_range=[17., 50.], wspd_range=[3., 80.])(
         os.path.join(path, 'GMF_cmodms1ahw'))
-    register_cmod('cmod5', inc_range=[17., 50.], u10_range=[0.2, 50.], phi_range=[0., 180.])(
+    register_cmod('cmod5', inc_range=[17., 50.], wspd_range=[0.2, 50.], phi_range=[0., 180.])(
         os.path.join(path, 'GMF_cmod5'))
-    register_cmod('cmod5n', inc_range=[17., 50.], u10_range=[0.2, 50.], phi_range=[0., 180.])(
+    register_cmod('cmod5n', inc_range=[17., 50.], wspd_range=[0.2, 50.], phi_range=[0., 180.])(
         os.path.join(path, 'GMF_cmod5n'))
-    register_cmod('cmod5h', inc_range=[17., 50.], u10_range=[0.2, 50.], phi_range=[0., 180.])(
+    register_cmod('cmod5h', inc_range=[17., 50.], wspd_range=[0.2, 50.], phi_range=[0., 180.])(
         os.path.join(path, 'GMF_cmod5h'))

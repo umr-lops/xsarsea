@@ -2,7 +2,7 @@ import os
 
 cmod_descr = {}
 
-def register_cmod(name=None, inc_range=[17., 50.], u10_range=[0.2, 50.], phi_range=None):
+def register_cmod(name=None, inc_range=[17., 50.], wspd_range=[0.2, 50.], phi_range=None):
     def inner(func_or_file):
         func = None
         file = None
@@ -19,7 +19,7 @@ def register_cmod(name=None, inc_range=[17., 50.], u10_range=[0.2, 50.], phi_ran
             'gmf': func,
             'lut_path': file,
             'inc_range': inc_range,
-            'u10_range': u10_range,
+            'wspd_range': wspd_range,
             'phi_range': phi_range,
         }
         update = {k: update[k] for k in update.keys() if update[k] is not None}

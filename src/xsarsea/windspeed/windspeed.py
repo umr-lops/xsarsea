@@ -135,28 +135,28 @@ def invert_from_gmf(*args, **kwargs):
         dsig_co = 0.1
         d_antenna = 2
         d_azi = 2
-        du10_fg = 2
+        dwspd_fg = 2
 
 
-        sigma0_co_lut_db = gmf_lut(gmf_names[0], sarwing=False)  # shape (inc, u10, phi)
-        np_sigma0_co_lut_db = np.ascontiguousarray(np.asarray(sigma0_co_lut_db.transpose('u10', 'phi', 'incidence')))
-        np_u10_dim = np.asarray(sigma0_co_lut_db.u10)
+        sigma0_co_lut_db = gmf_lut(gmf_names[0], sarwing=False)  # shape (inc, wspd, phi)
+        np_sigma0_co_lut_db = np.ascontiguousarray(np.asarray(sigma0_co_lut_db.transpose('wspd', 'phi', 'incidence')))
+        np_wspd_dim = np.asarray(sigma0_co_lut_db.wspd)
         np_phi_dim = np.asarray(sigma0_co_lut_db.phi)
         np_inc_dim = np.asarray(sigma0_co_lut_db.incidence)
 
-        np_phi_lut, np_u10_lut = np.meshgrid(np_phi_dim, np_u10_dim)  # shape (u10,phi)
-        np_u10_lut_co_antenna = np_u10_lut * np.cos(np.radians(np_phi_lut))  # antenna (xtrack)
-        np_u10_lut_co_azi = np_u10_lut * np.sin(np.radians(np_phi_lut))  # azi (atrack)
+        np_phi_lut, np_wspd_lut = np.meshgrid(np_phi_dim, np_wspd_dim)  # shape (wspd,phi)
+        np_wspd_lut_co_antenna = np_wspd_lut * np.cos(np.radians(np_phi_lut))  # antenna (xtrack)
+        np_wspd_lut_co_azi = np_wspd_lut * np.sin(np.radians(np_phi_lut))  # azi (atrack)
 
         if not np.all(np.isnan(np_sigma0_cr_db)):
             sigma0_cr_lut_db = gmf_lut(gmf_names[1], sarwing=True)
-            np_sigma0_cr_lut_db = np.ascontiguousarray(np.asarray(sigma0_cr_lut_db.transpose('u10', 'incidence')))
-            np_u10_lut_cr = np.asarray(sigma0_cr_lut_db.u10)
+            np_sigma0_cr_lut_db = np.ascontiguousarray(np.asarray(sigma0_cr_lut_db.transpose('wspd', 'incidence')))
+            np_wspd_lut_cr = np.asarray(sigma0_cr_lut_db.wspd)
             np_inc_cr_dim = np.asarray(sigma0_cr_lut_db.incidence)
         else:
             # dummy empty for numba typing
             np_inc_cr_dim = np.array([], dtype=np.float64)
-            np_u10_lut_cr = np.array([], dtype=np.float64)
+            np_wspd_lut_cr = np.array([], dtype=np.float64)
             np_sigma0_cr_lut_db = np.array([[]], dtype=np.float64)
 
 
@@ -185,21 +185,21 @@ def invert_from_gmf(*args, **kwargs):
             m_azi = np.imag(one_ancillary_wind)  # azi (atrack)
             if phi_180:
                 m_azi = np.abs(m_azi)  # symetrical lut
-            Jwind_co = ((np_u10_lut_co_antenna - m_antenna) / d_antenna) ** 2 + \
-                       ((np_u10_lut_co_azi - m_azi) / d_azi) ** 2  # shape (phi, u10)
-            Jsig_co = ((np_sigma0_co_lut_db_inc - one_sigma0_co_db) / dsig_co) ** 2  # shape (u10, phi)
+            Jwind_co = ((np_wspd_lut_co_antenna - m_antenna) / d_antenna) ** 2 + \
+                       ((np_wspd_lut_co_azi - m_azi) / d_azi) ** 2  # shape (phi, wspd)
+            Jsig_co = ((np_sigma0_co_lut_db_inc - one_sigma0_co_db) / dsig_co) ** 2  # shape (wspd, phi)
             J_co = Jwind_co + Jsig_co
             ## cost function
             iJ_co = np.argmin(J_co)
             lut_idx = (iJ_co // J_co.shape[-1], iJ_co % J_co.shape[-1])
-            wspd = np_u10_lut[lut_idx]
+            wspd = np_wspd_lut[lut_idx]
 
             if not np.isnan(one_sigma0_cr_db):
                 # crosspol available, do dualpol inversion
                 i_inc = np.argmin(np.abs(np_inc_cr_dim - one_inc))
                 np_sigma0_cr_lut_db_inc = np_sigma0_cr_lut_db[:, i_inc]
 
-                Jwind_cr = ((np_u10_lut_cr - wspd) / du10_fg) ** 2.
+                Jwind_cr = ((np_wspd_lut_cr - wspd) / dwspd_fg) ** 2.
                 nrcslin = 10. ** (one_sigma0_cr_db / 10.)
                 neszlin = 10. ** (one_nesz_cr_db / 10.)
                 dsig_cr = (1.25 / (nrcslin / neszlin)) ** 4.
@@ -209,7 +209,7 @@ def invert_from_gmf(*args, **kwargs):
                 # having nan in J_cr is an edge case, but if some nan where provided to analytical
                 # function, we have to handle it
                 # J_cr[np.isnan(J_cr)] = np.nanmax(J_cr)
-                spd_dual = np_u10_lut_cr[np.argmin(J_cr)]
+                spd_dual = np_wspd_lut_cr[np.argmin(J_cr)]
                 if (spd_dual > 5) and (wspd > 5):
                     wspd = spd_dual
 

@@ -23,8 +23,8 @@ def cmod5_generic(neutral=False):
                       6.2437, 2.3893, 0.3249, 4.159, 1.693])
         name = 'cmod5n'
 
-    @register_cmod(name, inc_range=[17., 50.], u10_range=[0.2, 50.], phi_range=[0., 180.])
-    def cmod5(inc, u10, phi):
+    @register_cmod(name, inc_range=[17., 50.], wspd_range=[0.2, 50.], phi_range=[0., 180.])
+    def cmod5(inc, wspd, phi):
         zpow = 1.6
         thetm = 40.
         thethr = 25.
@@ -44,7 +44,7 @@ def cmod5_generic(neutral=False):
         a2 = c[7] + c[8] * x
         gam = c[9] + c[10] * x + c[11] * x2
         s0 = c[12] + c[13] * x
-        s = a2 * u10
+        s = a2 * wspd
         a3 = 1. / (1. + np.exp(-s0))
 
         if s < s0:
@@ -52,17 +52,17 @@ def cmod5_generic(neutral=False):
         else:
             a3 = 1. / (1. + np.exp(-s))
 
-        b0 = (a3 ** gam) * 10. ** (a0 + a1 * u10)
+        b0 = (a3 ** gam) * 10. ** (a0 + a1 * wspd)
 
         # B1 term
-        b1 = c[15] * u10 * (0.5 + x - np.tanh(4. * (x + c[16] + c[17] * u10)))
-        b1 = (c[14] * (1. + x) - b1) / (np.exp(0.34 * (u10 - c[18])) + 1.)
+        b1 = c[15] * wspd * (0.5 + x - np.tanh(4. * (x + c[16] + c[17] * wspd)))
+        b1 = (c[14] * (1. + x) - b1) / (np.exp(0.34 * (wspd - c[18])) + 1.)
 
         # B2 term
         v0 = c[21] + c[22] * x + c[23] * x2
         d1 = c[24] + c[25] * x + c[26] * x2
         d2 = c[27] + c[28] * x
-        v2 = (u10 / v0 + 1.)
+        v2 = (wspd / v0 + 1.)
         if v2 < y0:
             v2 = a + b * (v2 - 1.) ** pn
 
@@ -77,8 +77,8 @@ def cmod5_generic(neutral=False):
 cmod5_generic(neutral=False)
 cmod5_generic(neutral=True)
 
-@register_cmod(inc_range=[17., 50.], u10_range=[3., 80.])
-def cmod_like_CR(inc, u10):
+@register_cmod(inc_range=[17., 50.], wspd_range=[3., 80.])
+def cmod_like_CR(inc, wspd):
     c1 = -3.14993013e+00
     c2 = -5.97976767e-01
     c3 = -3.27075281e-01
@@ -107,7 +107,7 @@ def cmod_like_CR(inc, u10):
     a2 = c7 + c8 * x
     gam = c9 + c10 * x + c11 * x2
     s0 = c12 + c13 * x
-    s = a2 * u10
+    s = a2 * wspd
     a3 = 1. / (1. + np.exp(-s0))
 
     if s < s0:
@@ -117,14 +117,14 @@ def cmod_like_CR(inc, u10):
 
     a3 = a3 * (s / s0) ** (s0 * (1. - a3))
     # a3=1
-    b0 = (a3 ** gam) * 10. ** (a0 + a1 * u10)
+    b0 = (a3 ** gam) * 10. ** (a0 + a1 * wspd)
 
     return b0
 
-@register_cmod(inc_range=[17., 50.], u10_range=[3., 80.])
-def cmod_like_CR_2(inc, u10):
+@register_cmod(inc_range=[17., 50.], wspd_range=[3., 80.])
+def cmod_like_CR_2(inc, wspd):
     # inc = xdata[0]
-    # u10 = xdata[1]
+    # wspd = xdata[1]
 
     a0 = 3.01372545e-05
     a1 = -4.75452800e-07
@@ -138,46 +138,46 @@ def cmod_like_CR_2(inc, u10):
     # ,d,e,f,g):#
     # ,p0):
 
-    # c = d + e*(u10-f)**g
-    # sig_dB = a + b*u10**c
+    # c = d + e*(wspd-f)**g
+    # sig_dB = a + b*wspd**c
     # return sig_dB
     # b = c+d*u+e*u**2
-    # sig = a*u10**b
+    # sig = a*wspd**b
     a = a0 + a1 * inc  # + a2*inc**2
     b = b0 + b1 * inc  # + b2*inc**2
     c = c0 + c1 * inc  # + c2*inc**2
     d = d0 + d1 * inc  # + d2*inc**2
 
     # 0.000006*xx**(1.85+(xx-30)*(-1*0.001))
-    sig = a * u10 ** (b + d * (u10 - c))
+    sig = a * wspd ** (b + d * (wspd - c))
 
     return sig
 
-@register_cmod(inc_range=[17., 50.], u10_range=[3., 80.])
-def cmod_like_CR_3(inc, u10):
+@register_cmod(inc_range=[17., 50.], wspd_range=[3., 80.])
+def cmod_like_CR_3(inc, wspd):
     a0 = 6.04514162e-05
     a1 = -8.35047917e-07
     b0 = 1.51102385e+00
     b1 = -7.89429818e-04
 
-    # c = d + e*(u10-f)**g
-    # sig_dB = a + b*u10**c
+    # c = d + e*(wspd-f)**g
+    # sig_dB = a + b*wspd**c
     # return sig_dB
     # b = c+d*u+e*u**2
-    # sig = a*u10**b
+    # sig = a*wspd**b
     a = a0 + a1 * inc  # + a2*inc**2
     b = b0 + b1 * inc  # + b2*inc**2
     # c = c0 + c1*inc #+ c2*inc**2
     # d = d0 + d1*inc #+ d2*inc**2
 
     # 0.000006*xx**(1.85+(xx-30)*(-1*0.001))
-    # sig = a*u10**(b+d*(u10-c))
-    sig = a * u10 ** (b)
+    # sig = a*wspd**(b+d*(wspd-c))
+    sig = a * wspd ** (b)
 
     return sig
 
-@register_cmod(inc_range=[17., 50.], u10_range=[3., 80.])
-def cmod_like_CR_4(inc, u10):
+@register_cmod(inc_range=[17., 50.], wspd_range=[3., 80.])
+def cmod_like_CR_4(inc, wspd):
     # FOR RS2
     a0 = 1.49874540e-04
     a1 = -5.22780344e-06
@@ -189,11 +189,11 @@ def cmod_like_CR_4(inc, u10):
     # ,d,e,f,g):#
     # ,p0):
 
-    # c = d + e*(u10-f)**g
-    # sig_dB = a + b*u10**c
+    # c = d + e*(wspd-f)**g
+    # sig_dB = a + b*wspd**c
     # return sig_dB
     # b = c+d*u+e*u**2
-    # sig = a*u10**b
+    # sig = a*wspd**b
     a = a0 + a1 * inc + a2 * inc ** 2
     b = b0 + b1 * inc + b2 * inc ** 2
     # a = a0 + a1*inc# + a2*inc**2
@@ -202,13 +202,13 @@ def cmod_like_CR_4(inc, u10):
     # d = d0 + d1*inc #+ d2*inc**2
 
     # 0.000006*xx**(1.85+(xx-30)*(-1*0.001))
-    # sig = a*u10**(b+d*(u10-c))
-    sig = a * u10 ** (b)
+    # sig = a*wspd**(b+d*(wspd-c))
+    sig = a * wspd ** (b)
 
     return sig
 
-@register_cmod(inc_range=[17., 50.], u10_range=[3., 80.])
-def cmod_like_CR_5(inc, u10):
+@register_cmod(inc_range=[17., 50.], wspd_range=[3., 80.])
+def cmod_like_CR_5(inc, wspd):
     # FOR S1A/S1B
 
     a0 = 0.00013106836021008122
@@ -221,11 +221,11 @@ def cmod_like_CR_5(inc, u10):
     # ,d,e,f,g):#
     # ,p0):
 
-    # c = d + e*(u10-f)**g
-    # sig_dB = a + b*u10**c
+    # c = d + e*(wspd-f)**g
+    # sig_dB = a + b*wspd**c
     # return sig_dB
     # b = c+d*u+e*u**2
-    # sig = a*u10**b
+    # sig = a*wspd**b
     a = a0 + a1 * inc + a2 * inc ** 2
     b = b0 + b1 * inc + b2 * inc ** 2
     # a = a0 + a1*inc# + a2*inc**2
@@ -234,8 +234,8 @@ def cmod_like_CR_5(inc, u10):
     # d = d0 + d1*inc #+ d2*inc**2
 
     # 0.000006*xx**(1.85+(xx-30)*(-1*0.001))
-    # sig = a*u10**(b+d*(u10-c))
-    sig = a * u10 ** (b)
+    # sig = a*wspd**(b+d*(wspd-c))
+    sig = a * wspd ** (b)
 
     return sig
 

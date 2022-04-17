@@ -35,7 +35,7 @@ def _get_gmf_func(name, ftype='numba_vectorize'):
     Returns
     -------
     function
-        `sigma0_linear = function(inc, u10, [phi])`
+        `sigma0_linear = function(inc, wspd, [phi])`
     """
 
     try:
@@ -69,11 +69,11 @@ def _get_gmf_func(name, ftype='numba_vectorize'):
                 (float64[:], float64[:], float64[:], float64[:, :, :]),
                 (float32[:], float32[:], float32[:], float32[:, :, :])
             ], '(n),(m),(p)->(n,m,p)', target='cpu')
-        def func(inc, u10, phi, sigma0_out):
+        def func(inc, wspd, phi, sigma0_out):
             for i_phi, one_phi in enumerate(phi):
-                for i_u10, one_u10 in enumerate(u10):
+                for i_wspd, one_wspd in enumerate(wspd):
                     for i_inc, one_inc in enumerate(inc):
-                        sigma0_out[i_inc, i_u10, i_phi] = func_njit(one_inc, one_u10, one_phi)
+                        sigma0_out[i_inc, i_wspd, i_phi] = func_njit(one_inc, one_wspd, one_phi)
 
         return func
 
@@ -81,7 +81,7 @@ def _get_gmf_func(name, ftype='numba_vectorize'):
 
 
 @timing
-def gmf(inc, u10, phi=None, name=None, numba=True):
+def gmf(inc, wspd, phi=None, name=None, numba=True):
     try:
         assert cmod_descr[name]['gmf'] is not None
     except (KeyError, AssertionError):
@@ -91,7 +91,7 @@ def gmf(inc, u10, phi=None, name=None, numba=True):
 
     # input ndim give the function ftype
     try:
-        ndim = u10.ndim
+        ndim = wspd.ndim
     except AttributeError:
         # scalar input
         ndim = 0
@@ -119,9 +119,9 @@ def gmf(inc, u10, phi=None, name=None, numba=True):
         phi = np.array([np.nan])
     if phi is None:
         # non guvectorized function with no phi
-        phi = u10 * np.nan
+        phi = wspd * np.nan
 
-    sigma0_lin = gmf_func(inc, u10, phi)
+    sigma0_lin = gmf_func(inc, wspd, phi)
     if squeeze_phi_dim:
         sigma0_lin = np.squeeze(sigma0_lin, axis=2)
 
@@ -137,7 +137,7 @@ def gmf(inc, u10, phi=None, name=None, numba=True):
 
 
 @timing
-def _gmf_lut(name, inc_range=None, phi_range=None, u10_range=None, allow_interp=True):
+def _gmf_lut(name, inc_range=None, phi_range=None, wspd_range=None, allow_interp=True):
 
     try:
         cmod_attrs = cmod_descr[name].copy()
@@ -146,41 +146,41 @@ def _gmf_lut(name, inc_range=None, phi_range=None, u10_range=None, allow_interp=
 
     inc_range = inc_range or cmod_attrs.pop('inc_range')
     phi_range = phi_range or cmod_attrs.pop('phi_range', None)
-    u10_range = u10_range or cmod_attrs.pop('u10_range')
+    wspd_range = wspd_range or cmod_attrs.pop('wspd_range')
 
     inc_step_hr = 0.1
-    u10_step_hr = 0.1
+    wspd_step_hr = 0.1
     phi_step_hr = 1
 
     inc_step_lr = 0.2
-    u10_step_lr = 0.5
+    wspd_step_lr = 0.5
     phi_step_lr = 1
 
     if allow_interp:
         inc_step = inc_step_lr
-        u10_step = u10_step_lr
+        wspd_step = wspd_step_lr
         phi_step = phi_step_lr
     else:
         inc_step = inc_step_hr
-        u10_step = u10_step_hr
+        wspd_step = wspd_step_hr
         phi_step = phi_step_hr
 
     # 2*step, because we want to be sure to not have bounds conditions in interp
     inc = np.arange(inc_range[0] - inc_step, inc_range[1] + 2*inc_step, inc_step)
-    u10 = np.arange(np.max([0, u10_range[0] - u10_step]), u10_range[1] + 2*u10_step, u10_step)
+    wspd = np.arange(np.max([0, wspd_range[0] - wspd_step]), wspd_range[1] + 2*wspd_step, wspd_step)
 
     try:
         phi = np.arange(phi_range[0], phi_range[1] + 2*phi_step, phi_step)
-        dims = ['incidence', 'u10', 'phi']
-        coords = {'incidence': inc, 'u10': u10, 'phi': phi}
+        dims = ['incidence', 'wspd', 'phi']
+        coords = {'incidence': inc, 'wspd': wspd, 'phi': phi}
     except TypeError:
         phi = None
-        dims = ['incidence', 'u10']
-        coords = {'incidence': inc, 'u10': u10}
+        dims = ['incidence', 'wspd']
+        coords = {'incidence': inc, 'wspd': wspd}
 
 
     lut = xr.DataArray(
-        gmf(inc, u10, phi, name),
+        gmf(inc, wspd, phi, name),
         dims=dims,
         coords=coords
     )
@@ -189,7 +189,7 @@ def _gmf_lut(name, inc_range=None, phi_range=None, u10_range=None, allow_interp=
         # interp to get high res
         interp_kwargs = {}
         interp_kwargs['incidence'] = np.arange(inc_range[0], inc_range[1] + inc_step_hr, inc_step_hr)
-        interp_kwargs['u10'] = np.arange(u10_range[0], u10_range[1] + u10_step_hr, u10_step_hr)
+        interp_kwargs['wspd'] = np.arange(wspd_range[0], wspd_range[1] + wspd_step_hr, wspd_step_hr)
         if phi is not None:
             interp_kwargs['phi'] = np.arange(phi_range[0], phi_range[1] + phi_step_hr, phi_step_hr)
 
@@ -197,7 +197,7 @@ def _gmf_lut(name, inc_range=None, phi_range=None, u10_range=None, allow_interp=
 
     # crop lut to exact range
     crop_cond = (lut.incidence >= inc_range[0]) & (lut.incidence <= inc_range[1])
-    crop_cond = crop_cond & (lut.u10 >= u10_range[0]) & (lut.u10 <= u10_range[1])
+    crop_cond = crop_cond & (lut.wspd >= wspd_range[0]) & (lut.wspd <= wspd_range[1])
     if phi is not None:
         crop_cond = crop_cond & (lut.phi >= phi_range[0]) & (lut.phi <= phi_range[1])
 
@@ -212,7 +212,7 @@ def _gmf_lut(name, inc_range=None, phi_range=None, u10_range=None, allow_interp=
     return lut
 
 
-def gmf_lut(name, inc_range=None, phi_range=None, u10_range=None, allow_interp=True, sarwing=None, db=True):
+def gmf_lut(name, inc_range=None, phi_range=None, wspd_range=None, allow_interp=True, sarwing=None, db=True):
     sarwing_error = None
     lut = None
 
@@ -227,7 +227,7 @@ def gmf_lut(name, inc_range=None, phi_range=None, u10_range=None, allow_interp=T
             sarwing_error = e
 
     if lut is None:
-        lut = _gmf_lut(name, inc_range=inc_range, phi_range=phi_range, u10_range=u10_range, allow_interp=allow_interp)
+        lut = _gmf_lut(name, inc_range=inc_range, phi_range=phi_range, wspd_range=wspd_range, allow_interp=allow_interp)
         if db:
             lut = 10 * np.log10(np.clip(lut, 1e-15, None))  # clip with epsilon to avoid nans
             lut.attrs['units'] = 'dB'
