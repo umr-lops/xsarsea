@@ -29,6 +29,8 @@ Those examples show how to:
 
 * :doc:`examples/streaks`
 
+* :doc:`examples/windspeed_inversion`
+
 Help & Reference
 ................
 
@@ -59,6 +61,7 @@ Last documentation build: |today|
 
    examples/xsarsea
    examples/streaks
+   examples/windspeed_inversion
 
 .. toctree::
    :maxdepth: 1

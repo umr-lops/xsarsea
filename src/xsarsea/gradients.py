@@ -751,6 +751,7 @@ def circ_hist(hist_at):
     -------
     pd.DataFrame, with columns ['atrack_g', 'xtrack_g']
     """
+
     # convert histogram to circular histogram
     # convert to complex
     hist_at = hist_at * np.exp(1j * hist_at.angles)
@@ -765,6 +766,6 @@ def circ_hist(hist_at):
     circ_hist_pts = hist_at.to_dataframe('tmp')[['atrack_g', 'xtrack_g']]
 
     # close path
-    circ_hist_pts = circ_hist_pts.append(circ_hist_pts.iloc[0])
+    circ_hist_pts = pd.concat([circ_hist_pts, pd.DataFrame(circ_hist_pts.iloc[0]).T])
 
     return circ_hist_pts
