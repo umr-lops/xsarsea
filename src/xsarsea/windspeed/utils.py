@@ -7,6 +7,9 @@ def register_gmf(name=None, inc_range=[17., 50.], wspd_range=[0.2, 50.], phi_ran
     def inner(func):
         gmf_name = name or func.__name__
 
+        if not gmf_name.startswith('gmf_'):
+            raise ValueError("gmf function must start with 'gmf_'. Got %s" % gmf_name)
+
         update = {
             'gmf': func,
             'inc_range': inc_range,

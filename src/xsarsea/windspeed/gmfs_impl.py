@@ -78,18 +78,21 @@ gmf_cmod5_generic(neutral=False)
 gmf_cmod5_generic(neutral=True)
 
 
-@register_gmf(inc_range=[17., 50.], wspd_range=[3., 80.], phi_range=None)
-def gmf_dummy(incidence, speed, phi=None):
-    a0 = 0.00013106836021008122
-    a1 = -4.530598283705591e-06
-    a2 = 4.429277425062766e-08
-    b0 = 1.3925444179360706
-    b1 = 0.004157838450541205
-    b2 = 3.4735809771069953e-05
-
-    a = a0 + a1 * incidence + a2 * incidence ** 2
-    b = b0 + b1 * incidence + b2 * incidence ** 2
-    sig = a * speed ** b
-
-    return sig
+#
+# gmf_dummy example
+#
+#@register_gmf(inc_range=[17., 50.], wspd_range=[3., 80.], phi_range=None)
+#def gmf_dummy(incidence, speed, phi=None):
+#    a0 = 0.00013106836021008122
+#    a1 = -4.530598283705591e-06
+#    a2 = 4.429277425062766e-08
+#    b0 = 1.3925444179360706
+#    b1 = 0.004157838450541205
+#    b2 = 3.4735809771069953e-05
+#
+#    a = a0 + a1 * incidence + a2 * incidence ** 2
+#    b = b0 + b1 * incidence + b2 * incidence ** 2
+#    sig = a * speed ** b
+#
+#    return sig
 
