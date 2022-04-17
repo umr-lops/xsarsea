@@ -4,7 +4,8 @@ import numpy as np
 import warnings
 import xarray as xr
 from ..xsarsea import logger, timing
-from .gmfs import gmf_lut
+from .gmfs import _gmf_to_lut
+from .sarwing_luts import lut_from_sarwing
 
 
 def wind_to_img(u, v, ground_heading, convention='antenna'):
@@ -93,11 +94,38 @@ def nesz_flattening(noise, inc):
     return np.apply_along_axis(_noise_flattening_1row, 1, noise, np.nanmean(inc, axis=0))
 
 
+
+def get_lut(name, inc_range=None, phi_range=None, wspd_range=None, allow_interp=True, db=True):
+    sarwing_error = None
+    lut = None
+
+    # try to load lut from sarwing
+
+    if name.startswith('sarwing_lut_'):
+        lut = lut_from_sarwing(name)
+        if not db:
+            lut = 10. ** (lut / 10.)  # to linear
+            lut.attrs['units'] = 'linear'
+
+    if name.startswith('gmf_'):
+        lut = _gmf_to_lut(name, inc_range=inc_range, phi_range=phi_range, wspd_range=wspd_range, allow_interp=allow_interp)
+        if db:
+            lut = 10 * np.log10(np.clip(lut, 1e-15, None))  # clip with epsilon to avoid nans
+            lut.attrs['units'] = 'dB'
+
+    if lut is None:
+        raise ValueError('%s not found in gmfs or sarwing luts' % name)
+
+    return lut
+
+
+
+
 @timing
-def invert_from_gmf(*args, **kwargs):
+def invert_from_model(*args, **kwargs):
     # default array values if no crosspol
     nan = args[1] * np.nan
-    default_gmf = ('cmod5n', 'cmodms1ahw')
+    #default_gmf = ('cmod5n', 'cmodms1ahw')
 
     if len(args) == 3:
         # copol inversion
@@ -109,11 +137,11 @@ def invert_from_gmf(*args, **kwargs):
         # dualpol inversion
         inc, sigma0_co, sigma0_cr, nesz_cr, ancillary_wind = args
     else:
-        raise TypeError("invert_from_gmf() takes 3 or 5 positional arguments, but %d were given" % len(args))
+        raise TypeError("invert_from_model() takes 3 or 5 positional arguments, but %d were given" % len(args))
 
-    gmf_names = kwargs.pop('gmf', default_gmf)
-    if not isinstance(gmf_names, tuple):
-        gmf_names = (gmf_names, None)
+    models_names = kwargs.pop('model', None)
+    if not isinstance(models_names, tuple):
+        models_names = (models_names, None)
 
     # to dB
     sigma0_co_db = 10 * np.log10(sigma0_co + 1e-15)
@@ -126,7 +154,7 @@ def invert_from_gmf(*args, **kwargs):
     else:
         nesz_cr_db = nan
 
-    def _invert_from_gmf_numpy(np_inc, np_sigma0_co_db, np_sigma0_cr_db, np_nesz_cr_db, np_ancillary_wind):
+    def _invert_from_model_numpy(np_inc, np_sigma0_co_db, np_sigma0_cr_db, np_nesz_cr_db, np_ancillary_wind):
         # this wrapper function is only useful if using dask.array.map_blocks:
         # local variables defined here will be available on the worker, and they will be used
         # in _invert_copol_numba
@@ -138,7 +166,7 @@ def invert_from_gmf(*args, **kwargs):
         dwspd_fg = 2
 
 
-        sigma0_co_lut_db = gmf_lut(gmf_names[0], sarwing=False)  # shape (inc, wspd, phi)
+        sigma0_co_lut_db = get_lut(models_names[0])  # shape (inc, wspd, phi)
         np_sigma0_co_lut_db = np.ascontiguousarray(np.asarray(sigma0_co_lut_db.transpose('wspd', 'phi', 'incidence')))
         np_wspd_dim = np.asarray(sigma0_co_lut_db.wspd)
         np_phi_dim = np.asarray(sigma0_co_lut_db.phi)
@@ -149,7 +177,7 @@ def invert_from_gmf(*args, **kwargs):
         np_wspd_lut_co_azi = np_wspd_lut * np.sin(np.radians(np_phi_lut))  # azi (atrack)
 
         if not np.all(np.isnan(np_sigma0_cr_db)):
-            sigma0_cr_lut_db = gmf_lut(gmf_names[1], sarwing=True)
+            sigma0_cr_lut_db = get_lut(models_names[1])
             np_sigma0_cr_lut_db = np.ascontiguousarray(np.asarray(sigma0_cr_lut_db.transpose('wspd', 'incidence')))
             np_wspd_lut_cr = np.asarray(sigma0_cr_lut_db.wspd)
             np_inc_cr_dim = np.asarray(sigma0_cr_lut_db.incidence)
@@ -169,7 +197,7 @@ def invert_from_gmf(*args, **kwargs):
 
 
 
-        def __invert_from_gmf_scalar(one_inc, one_sigma0_co_db, one_sigma0_cr_db, one_nesz_cr_db, one_ancillary_wind):
+        def __invert_from_model_scalar(one_inc, one_sigma0_co_db, one_sigma0_cr_db, one_nesz_cr_db, one_ancillary_wind):
             # invert from gmf for scalar (float) input.
             # this function will be vectorized with 'numba.vectorize' or 'numpy.frompyfunc'
             # set debug=True below to force 'numpy.frompyfunc', so you can debug this code
@@ -220,20 +248,20 @@ def invert_from_gmf(*args, **kwargs):
         # debug = True  # force np.frompyfunc
         # debug = False
         if debug:
-            __invert_from_gmf_vect = timing(np.frompyfunc(__invert_from_gmf_scalar, 5, 1))
+            __invert_from_model_vect = timing(np.frompyfunc(__invert_from_model_scalar, 5, 1))
         else:
             # fastmath can be used, but we will need nan handling
-            __invert_from_gmf_vect = timing(
+            __invert_from_model_vect = timing(
                 vectorize([float64(float64, float64, float64, float64, complex128)], fastmath={'nnan': False}, target='parallel')
-                (__invert_from_gmf_scalar)
+                (__invert_from_model_scalar)
             )
         with warnings.catch_warnings():
             warnings.filterwarnings('ignore', message='.*invalid value encountered.*', category=RuntimeWarning)
-            return __invert_from_gmf_vect(np_inc, np_sigma0_co_db,
-                                          np_sigma0_cr_db, np_nesz_cr_db, np_ancillary_wind)
+            return __invert_from_model_vect(np_inc, np_sigma0_co_db,
+                                            np_sigma0_cr_db, np_nesz_cr_db, np_ancillary_wind)
 
 
-    def _invert_from_gmf_any(inc, sigma0_co_db, sigma0_cr_db, nesz_cr_db, ancillary_wind):
+    def _invert_from_model_any(inc, sigma0_co_db, sigma0_cr_db, nesz_cr_db, ancillary_wind):
         # wrapper to allow computation on any type (xarray, numpy)
 
         try:
@@ -252,7 +280,7 @@ def invert_from_gmf(*args, **kwargs):
                         ]
                 ):
                     da_ws.data = da.map_blocks(
-                        _invert_from_gmf_numpy,
+                        _invert_from_model_numpy,
                         inc.data, sigma0_co_db.data, sigma0_cr_db.data, nesz_cr_db.data, ancillary_wind.data,
                         meta=sigma0_co_db.data
                     )
@@ -262,7 +290,7 @@ def invert_from_gmf(*args, **kwargs):
 
             except (ImportError, TypeError):
                 # use numpy array, but store in xarray
-                da_ws.data = _invert_from_gmf_numpy(
+                da_ws.data = _invert_from_model_numpy(
                     np.asarray(inc),
                     np.asarray(sigma0_co_db),
                     np.asarray(sigma0_cr_db),
@@ -273,7 +301,7 @@ def invert_from_gmf(*args, **kwargs):
         except TypeError:
             # full numpy
             logger.debug('invert with numpy')
-            da_ws = _invert_from_gmf_numpy(
+            da_ws = _invert_from_model_numpy(
                 inc,
                 sigma0_co_db,
                 sigma0_cr_db,
@@ -284,5 +312,5 @@ def invert_from_gmf(*args, **kwargs):
         return da_ws
 
     # main
-    ws = _invert_from_gmf_any(inc, sigma0_co_db, sigma0_cr_db, nesz_cr_db, ancillary_wind)
+    ws = _invert_from_model_any(inc, sigma0_co_db, sigma0_cr_db, nesz_cr_db, ancillary_wind)
     return ws

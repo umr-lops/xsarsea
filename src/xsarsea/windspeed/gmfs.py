@@ -4,8 +4,8 @@ from ..xsarsea import logger, timing
 from functools import lru_cache
 from numba import njit, vectorize, guvectorize, float64, float32
 import xarray as xr
-from .sarwing_luts import load_sarwing_lut
-from .utils import cmod_descr
+from .sarwing_luts import lut_from_sarwing
+from .utils import registered_gmfs
 
 
 
@@ -39,9 +39,9 @@ def _get_gmf_func(name, ftype='numba_vectorize'):
     """
 
     try:
-        gmf_attrs = cmod_descr[name].copy()
+        gmf_attrs = registered_gmfs[name].copy()
     except KeyError:
-        raise KeyError('gmf %s not available. (available: %s)' % (name, cmod_descr.keys()))
+        raise KeyError('gmf %s not available. (available: %s)' % (name, registered_gmfs.keys()))
 
     pyfunc = gmf_attrs['gmf']
 
@@ -83,9 +83,9 @@ def _get_gmf_func(name, ftype='numba_vectorize'):
 @timing
 def gmf(inc, wspd, phi=None, name=None, numba=True):
     try:
-        assert cmod_descr[name]['gmf'] is not None
+        assert registered_gmfs[name]['gmf'] is not None
     except (KeyError, AssertionError):
-        available_cmod = [k for k in cmod_descr.keys() if cmod_descr[k]['gmf'] is not None]
+        available_cmod = [k for k in registered_gmfs.keys() if registered_gmfs[k]['gmf'] is not None]
         raise ValueError("gmf name must be one of %s, and have an analytical function" % available_cmod)
 
 
@@ -137,12 +137,12 @@ def gmf(inc, wspd, phi=None, name=None, numba=True):
 
 
 @timing
-def _gmf_lut(name, inc_range=None, phi_range=None, wspd_range=None, allow_interp=True):
+def _gmf_to_lut(name, inc_range=None, phi_range=None, wspd_range=None, allow_interp=True):
 
     try:
-        cmod_attrs = cmod_descr[name].copy()
+        cmod_attrs = registered_gmfs[name].copy()
     except KeyError:
-        raise KeyError('gmf %s not available. (available: %s)' % (name, cmod_descr.keys()))
+        raise KeyError('gmf %s not available. (available: %s)' % (name, registered_gmfs.keys()))
 
     inc_range = inc_range or cmod_attrs.pop('inc_range')
     phi_range = phi_range or cmod_attrs.pop('phi_range', None)
@@ -203,39 +203,7 @@ def _gmf_lut(name, inc_range=None, phi_range=None, wspd_range=None, allow_interp
 
     lut = lut.where(crop_cond, drop=True)
 
-    if np.count_nonzero(np.isnan(lut.values)):
-        raise ValueError('Found nans in lut %s' % name)
-
-
-    # TODO add gmf_lut.attrs
-
-    return lut
-
-
-def gmf_lut(name, inc_range=None, phi_range=None, wspd_range=None, allow_interp=True, sarwing=None, db=True):
-    sarwing_error = None
-    lut = None
-
-    if sarwing:
-        # try to load lut
-        try:
-            lut = load_sarwing_lut(cmod_descr[name]['lut_path'])
-            if not db:
-                lut = 10. ** (lut / 10.)  # to linear
-                lut.attrs['units'] = 'linear'
-        except (FileNotFoundError, KeyError) as e:
-            sarwing_error = e
-
-    if lut is None:
-        lut = _gmf_lut(name, inc_range=inc_range, phi_range=phi_range, wspd_range=wspd_range, allow_interp=allow_interp)
-        if db:
-            lut = 10 * np.log10(np.clip(lut, 1e-15, None))  # clip with epsilon to avoid nans
-            lut.attrs['units'] = 'dB'
-    elif sarwing_error is not None:
-        raise sarwing_error
-
-    if np.count_nonzero(np.isnan(lut)):
-        raise ValueError('Found nans in lut')
+    # TODO add lut.attrs
 
     return lut
 

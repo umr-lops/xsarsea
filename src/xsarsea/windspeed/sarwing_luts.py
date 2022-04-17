@@ -3,10 +3,10 @@ import xarray as xr
 import pickle as pkl
 from ..xsarsea import logger
 import numpy as np
-from .utils import register_cmod
 
+registered_sarwing_luts = {}
 
-def load_sarwing_lut(pathin):
+def _load_sarwing_lut(pathin):
     if not os.path.isdir(pathin):
         raise FileNotFoundError(pathin)
 
@@ -35,14 +35,18 @@ def load_sarwing_lut(pathin):
 
     return da_sigma0_db
 
+def lut_from_sarwing(name):
+    return _load_sarwing_lut(registered_sarwing_luts[name]['sarwing_lut_path'])
 
 
-def register(path):
-    register_cmod('cmodms1ahw', inc_range=[17., 50.], wspd_range=[3., 80.])(
-        os.path.join(path, 'GMF_cmodms1ahw'))
-    register_cmod('cmod5', inc_range=[17., 50.], wspd_range=[0.2, 50.], phi_range=[0., 180.])(
-        os.path.join(path, 'GMF_cmod5'))
-    register_cmod('cmod5n', inc_range=[17., 50.], wspd_range=[0.2, 50.], phi_range=[0., 180.])(
-        os.path.join(path, 'GMF_cmod5n'))
-    register_cmod('cmod5h', inc_range=[17., 50.], wspd_range=[0.2, 50.], phi_range=[0., 180.])(
-        os.path.join(path, 'GMF_cmod5h'))
+def register_sarwing_lut(name, path):
+    registered_sarwing_luts[name] = {}
+    registered_sarwing_luts[name]['sarwing_lut_path'] = path
+
+
+def register_all_sarwing_luts(topdir):
+    for path in os.listdir(topdir):
+        sarwing_name = os.path.basename(path)
+        path = os.path.abspath(os.path.join(topdir, path))
+        name = sarwing_name.replace('GMF_', 'sarwing_lut_')
+        register_sarwing_lut(name, path)
