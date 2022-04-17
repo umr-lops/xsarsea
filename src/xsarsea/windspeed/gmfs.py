@@ -41,7 +41,7 @@ def _get_gmf_func(name, ftype='numba_vectorize'):
     try:
         gmf_attrs = cmod_descr[name].copy()
     except KeyError:
-        raise KeyError('cmod %s not available. (available: %s)' % (name, cmod_descr.keys()))
+        raise KeyError('gmf %s not available. (available: %s)' % (name, cmod_descr.keys()))
 
     pyfunc = gmf_attrs['gmf']
 
@@ -82,13 +82,12 @@ def _get_gmf_func(name, ftype='numba_vectorize'):
 
 @timing
 def gmf(inc, u10, phi=None, name=None, numba=True):
-    if name is None:
-        if phi is not None:
-            warnings.warn("No gmf name provided. Using 'cmod5'")
-            name = 'cmod5'
-        else:
-            warnings.warn("No gmf name provided. Using 'cmod_like_CR'")
-            name = 'cmod_like_CR'
+    try:
+        assert cmod_descr[name]['gmf'] is not None
+    except (KeyError, AssertionError):
+        available_cmod = [k for k in cmod_descr.keys() if cmod_descr[k]['gmf'] is not None]
+        raise ValueError("gmf name must be one of %s, and have an analytical function" % available_cmod)
+
 
     # input ndim give the function ftype
     try:
@@ -129,7 +128,8 @@ def gmf(inc, u10, phi=None, name=None, numba=True):
     # add name and comment to variable, if xarray
     try:
         sigma0_lin.name = 'sigma0_gmf'
-        sigma0_lin.attrs['comment'] = "sigma0_gmf from '%s' (linear)" % name
+        sigma0_lin.attrs['comment'] = "sigma0_gmf from '%s'" % name
+        sigma0_lin.attrs['units'] = 'linear'
     except AttributeError:
         pass
 
@@ -138,11 +138,15 @@ def gmf(inc, u10, phi=None, name=None, numba=True):
 
 @timing
 def _gmf_lut(name, inc_range=None, phi_range=None, u10_range=None, allow_interp=True):
-    cmod_attrs = cmod_descr[name].copy()
 
-    inc_range = inc_range or cmod_attrs.pop('inc_range', [17., 50.])
-    phi_range = phi_range or cmod_attrs.pop('phi_range', [-180, 180.])
-    u10_range = u10_range or cmod_attrs.pop('u10_range', [0.2, 50.])
+    try:
+        cmod_attrs = cmod_descr[name].copy()
+    except KeyError:
+        raise KeyError('gmf %s not available. (available: %s)' % (name, cmod_descr.keys()))
+
+    inc_range = inc_range or cmod_attrs.pop('inc_range')
+    phi_range = phi_range or cmod_attrs.pop('phi_range', None)
+    u10_range = u10_range or cmod_attrs.pop('u10_range')
 
     inc_step_hr = 0.1
     u10_step_hr = 0.1
@@ -161,22 +165,47 @@ def _gmf_lut(name, inc_range=None, phi_range=None, u10_range=None, allow_interp=
         u10_step = u10_step_hr
         phi_step = phi_step_hr
 
-    inc = np.arange(inc_range[0], inc_range[1] + inc_step, inc_step)
-    u10 = np.arange(u10_range[0], u10_range[1] + u10_step, u10_step)
-    phi = np.arange(phi_range[0], phi_range[1] + phi_step, phi_step)
+    # 2*step, because we want to be sure to not have bounds conditions in interp
+    inc = np.arange(inc_range[0] - inc_step, inc_range[1] + 2*inc_step, inc_step)
+    u10 = np.arange(np.max([0, u10_range[0] - u10_step]), u10_range[1] + 2*u10_step, u10_step)
+
+    try:
+        phi = np.arange(phi_range[0], phi_range[1] + 2*phi_step, phi_step)
+        dims = ['incidence', 'u10', 'phi']
+        coords = {'incidence': inc, 'u10': u10, 'phi': phi}
+    except TypeError:
+        phi = None
+        dims = ['incidence', 'u10']
+        coords = {'incidence': inc, 'u10': u10}
+
+
     lut = xr.DataArray(
         gmf(inc, u10, phi, name),
-        dims=['incidence', 'u10', 'phi'],
-        coords={'incidence': inc, 'u10': u10, 'phi': phi}
+        dims=dims,
+        coords=coords
     )
 
     if allow_interp:
         # interp to get high res
-        inc = np.arange(inc_range[0], inc_range[1] + inc_step_hr, inc_step_hr)
-        u10 = np.arange(u10_range[0], u10_range[1] + u10_step_hr, u10_step_hr)
-        phi = np.arange(phi_range[0], phi_range[1] + phi_step_hr, phi_step_hr)
+        interp_kwargs = {}
+        interp_kwargs['incidence'] = np.arange(inc_range[0], inc_range[1] + inc_step_hr, inc_step_hr)
+        interp_kwargs['u10'] = np.arange(u10_range[0], u10_range[1] + u10_step_hr, u10_step_hr)
+        if phi is not None:
+            interp_kwargs['phi'] = np.arange(phi_range[0], phi_range[1] + phi_step_hr, phi_step_hr)
 
-        lut = lut.interp(incidence=inc, u10=u10, phi=phi)
+        lut = lut.interp(**interp_kwargs, kwargs=dict(bounds_error=True))
+
+    # crop lut to exact range
+    crop_cond = (lut.incidence >= inc_range[0]) & (lut.incidence <= inc_range[1])
+    crop_cond = crop_cond & (lut.u10 >= u10_range[0]) & (lut.u10 <= u10_range[1])
+    if phi is not None:
+        crop_cond = crop_cond & (lut.phi >= phi_range[0]) & (lut.phi <= phi_range[1])
+
+    lut = lut.where(crop_cond, drop=True)
+
+    if np.count_nonzero(np.isnan(lut.values)):
+        raise ValueError('Found nans in lut %s' % name)
+
 
     # TODO add gmf_lut.attrs
 
@@ -193,15 +222,20 @@ def gmf_lut(name, inc_range=None, phi_range=None, u10_range=None, allow_interp=T
             lut = load_sarwing_lut(cmod_descr[name]['lut_path'])
             if not db:
                 lut = 10. ** (lut / 10.)  # to linear
-        except FileNotFoundError as e:
+                lut.attrs['units'] = 'linear'
+        except (FileNotFoundError, KeyError) as e:
             sarwing_error = e
 
     if lut is None:
         lut = _gmf_lut(name, inc_range=inc_range, phi_range=phi_range, u10_range=u10_range, allow_interp=allow_interp)
         if db:
-            lut = 10 * np.log10(lut)
+            lut = 10 * np.log10(np.clip(lut, 1e-15, None))  # clip with epsilon to avoid nans
+            lut.attrs['units'] = 'dB'
     elif sarwing_error is not None:
         raise sarwing_error
+
+    if np.count_nonzero(np.isnan(lut)):
+        raise ValueError('Found nans in lut')
 
     return lut
 

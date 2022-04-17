@@ -54,7 +54,9 @@ def nesz_flattening(noise, inc):
     if noise.ndim != 2:
         raise IndexError('Only 2D noise allowed')
 
-    noise_mean = np.nanmean(noise, axis=0)
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', message='.*empty.*', category=RuntimeWarning)
+        noise_mean = np.nanmean(noise, axis=0)
 
     try:
         # unlike np.mean, np.nanmean return a numpy array, even if noise is an xarray
@@ -136,7 +138,7 @@ def invert_from_gmf(*args, **kwargs):
         du10_fg = 2
 
 
-        sigma0_co_lut_db = gmf_lut(gmf_names[0], sarwing=True)  # shape (inc, u10, phi)
+        sigma0_co_lut_db = gmf_lut(gmf_names[0], sarwing=False)  # shape (inc, u10, phi)
         np_sigma0_co_lut_db = np.ascontiguousarray(np.asarray(sigma0_co_lut_db.transpose('u10', 'phi', 'incidence')))
         np_u10_dim = np.asarray(sigma0_co_lut_db.u10)
         np_phi_dim = np.asarray(sigma0_co_lut_db.phi)
@@ -203,6 +205,10 @@ def invert_from_gmf(*args, **kwargs):
                 dsig_cr = (1.25 / (nrcslin / neszlin)) ** 4.
                 Jsig_cr = ((np_sigma0_cr_lut_db_inc - one_sigma0_cr_db) / dsig_cr) ** 2.
                 J_cr = Jsig_cr + Jwind_cr
+                # numba doesn't support nanargmin
+                # having nan in J_cr is an edge case, but if some nan where provided to analytical
+                # function, we have to handle it
+                # J_cr[np.isnan(J_cr)] = np.nanmax(J_cr)
                 spd_dual = np_u10_lut_cr[np.argmin(J_cr)]
                 if (spd_dual > 5) and (wspd > 5):
                     wspd = spd_dual
@@ -221,9 +227,10 @@ def invert_from_gmf(*args, **kwargs):
                 vectorize([float64(float64, float64, float64, float64, complex128)], fastmath={'nnan': False}, target='parallel')
                 (__invert_from_gmf_scalar)
             )
-
-        return __invert_from_gmf_vect(np_inc, np_sigma0_co_db,
-                                      np_sigma0_cr_db, np_nesz_cr_db, np_ancillary_wind)
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', message='.*invalid value encountered.*', category=RuntimeWarning)
+            return __invert_from_gmf_vect(np_inc, np_sigma0_co_db,
+                                          np_sigma0_cr_db, np_nesz_cr_db, np_ancillary_wind)
 
 
     def _invert_from_gmf_any(inc, sigma0_co_db, sigma0_cr_db, nesz_cr_db, ancillary_wind):

@@ -30,7 +30,8 @@ def load_sarwing_lut(pathin):
 
     da_sigma0_db = xr.DataArray(sigma0_db, dims=dims, coords=coords)
 
-    da_sigma0_db.name = 'sigma0_db'
+    da_sigma0_db.name = 'sigma0'
+    da_sigma0_db.attrs['unit'] = 'dB'
 
     return da_sigma0_db
 
@@ -39,9 +40,9 @@ def load_sarwing_lut(pathin):
 def register(path):
     register_cmod('cmodms1ahw', inc_range=[17., 50.], u10_range=[3., 80.])(
         os.path.join(path, 'GMF_cmodms1ahw'))
-    register_cmod('cmod5', inc_range=[17., 50.], u10_range=[3., 80.], phi_range=[0., 180.])(
+    register_cmod('cmod5', inc_range=[17., 50.], u10_range=[0.2, 50.], phi_range=[0., 180.])(
         os.path.join(path, 'GMF_cmod5'))
-    register_cmod('cmod5n', inc_range=[17., 50.], u10_range=[3., 80.], phi_range=[0., 180.])(
+    register_cmod('cmod5n', inc_range=[17., 50.], u10_range=[0.2, 50.], phi_range=[0., 180.])(
         os.path.join(path, 'GMF_cmod5n'))
-    register_cmod('cmod5h', inc_range=[17., 50.], u10_range=[3., 80.], phi_range=[0., 180.])(
+    register_cmod('cmod5h', inc_range=[17., 50.], u10_range=[0.2, 50.], phi_range=[0., 180.])(
         os.path.join(path, 'GMF_cmod5h'))
