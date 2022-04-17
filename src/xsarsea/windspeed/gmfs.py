@@ -8,7 +8,7 @@ import xarray as xr
 
 registered_gmfs = {}
 
-def register_gmf(name=None, inc_range=[17., 50.], wspd_range=[0.2, 50.], phi_range=None):
+def register_gmf(name=None, inc_range=[17., 50.], wspd_range=[0.2, 50.], phi_range=None, pols=None):
     """TODO: docstring"""
     def inner(func):
         gmf_name = name or func.__name__
@@ -21,6 +21,7 @@ def register_gmf(name=None, inc_range=[17., 50.], wspd_range=[0.2, 50.], phi_ran
             'inc_range': inc_range,
             'wspd_range': wspd_range,
             'phi_range': phi_range,
+            'pols': pols
         }
         update = {k: update[k] for k in update.keys() if update[k] is not None}
 

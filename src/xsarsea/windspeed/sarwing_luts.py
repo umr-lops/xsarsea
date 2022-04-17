@@ -39,14 +39,26 @@ def lut_from_sarwing(name):
     return _load_sarwing_lut(registered_sarwing_luts[name]['sarwing_lut_path'])
 
 
-def register_sarwing_lut(name, path):
+def register_sarwing_lut(name, path, pols=None):
     registered_sarwing_luts[name] = {}
     registered_sarwing_luts[name]['sarwing_lut_path'] = path
+    registered_sarwing_luts[name]['pols'] = None
 
 
 def register_all_sarwing_luts(topdir):
+
+    # TODO: polratio not handled
     for path in os.listdir(topdir):
         sarwing_name = os.path.basename(path)
         path = os.path.abspath(os.path.join(topdir, path))
         name = sarwing_name.replace('GMF_', 'sarwing_lut_')
-        register_sarwing_lut(name, path)
+
+        # guess available pols from filenames
+        if os.path.exists(os.path.join(path, 'wind_speed_and_direction.pkl')):
+            pols = ['VV']
+        elif os.path.exists(os.path.join(path, 'wind_speed.pkl')):
+            pols = ['VH']
+        else:
+            pols = None
+
+        register_sarwing_lut(name, path, pols=pols)
