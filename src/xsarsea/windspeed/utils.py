@@ -1,19 +1,6 @@
 import os
 import warnings
 import numpy as np
-import xarray as xr
-from .sarwing_luts import lut_from_sarwing, registered_sarwing_luts
-from ..xsarsea import logger, timing
-from .gmfs import _gmf_to_lut, registered_gmfs
-
-from .sarwing_luts import registered_sarwing_luts
-
-
-_models = {
-    'sarwing_luts': registered_sarwing_luts,
-    'gmfs': registered_gmfs
-}
-
 
 def wind_to_img(u, v, ground_heading, convention='antenna'):
     wind_azi = np.sqrt(u ** 2 + v ** 2) * \
@@ -99,79 +86,3 @@ def nesz_flattening(noise, inc):
 
     # incidence is almost constant along atrack dim, so we can make it 1D
     return np.apply_along_axis(_noise_flattening_1row, 1, noise, np.nanmean(inc, axis=0))
-
-
-def available_models():
-    """
-    Get available models as a list of strings.
-
-    Returns
-    -------
-    list
-    """
-    models = []
-    for gmf_name in registered_gmfs:
-        models.append(gmf_name)
-    for sarwing_lut_name in registered_sarwing_luts:
-        models.append(sarwing_lut_name)
-
-    return models
-
-def _get_model(name, search_order=('sarwing_luts', 'gmfs')):
-    # from name (can be abbreviated) , return (model_type, full_name)
-
-    # canonical search
-    for search_type in search_order:
-        if name in _models[search_type].keys():
-            return search_type, name
-
-    # abbreviated search
-    for search_type in search_order:
-        for full_name in _models[search_type].keys():
-            if full_name.endswith(name):
-                return search_type, full_name
-
-    raise KeyError("Unable to find model '%s'. Available models are '%s'" % (name, available_models()))
-
-
-def get_lut(name, inc_range=None, phi_range=None, wspd_range=None, allow_interp=True, db=True):
-    """
-
-    Get lut as an xarray DataArray
-
-    Parameters
-    ----------
-    name: str
-    inc_range
-    phi_range
-    wspd_range
-    allow_interp
-    db: bool
-
-    Returns
-    -------
-    xarray.DataArray
-
-    """
-
-    model_type, model_name = _get_model(name)
-
-    if model_type == 'sarwing_luts':
-        lut = lut_from_sarwing(name)
-        if not db:
-            lut = 10. ** (lut / 10.)  # to linear
-            lut.attrs['units'] = 'linear'
-    elif model_type == 'gmfs':
-        lut = _gmf_to_lut(name, inc_range=inc_range, phi_range=phi_range, wspd_range=wspd_range,
-                          allow_interp=allow_interp)
-        if db:
-            lut = 10 * np.log10(np.clip(lut, 1e-15, None))  # clip with epsilon to avoid nans
-            lut.attrs['units'] = 'dB'
-    else:
-        raise KeyError('model %s not found.' % name)
-
-    lut.attrs['model'] = model_name
-
-    # TODO: check lut is normalized (dims ordering, etc ...)
-
-    return lut

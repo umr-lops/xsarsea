@@ -4,7 +4,7 @@ import numpy as np
 import warnings
 import xarray as xr
 from ..xsarsea import logger, timing
-from .utils import get_lut
+from .models import available_models
 
 
 @timing
@@ -51,8 +51,7 @@ def invert_from_model(*args, **kwargs):
         d_azi = 2
         dwspd_fg = 2
 
-
-        sigma0_co_lut_db = get_lut(models_names[0])  # shape (inc, wspd, phi)
+        sigma0_co_lut_db = available_models[models_names[0]].to_lut(units='dB')  # shape (inc, wspd, phi)
         np_sigma0_co_lut_db = np.ascontiguousarray(np.asarray(sigma0_co_lut_db.transpose('wspd', 'phi', 'incidence')))
         np_wspd_dim = np.asarray(sigma0_co_lut_db.wspd)
         np_phi_dim = np.asarray(sigma0_co_lut_db.phi)
@@ -63,7 +62,7 @@ def invert_from_model(*args, **kwargs):
         np_wspd_lut_co_azi = np_wspd_lut * np.sin(np.radians(np_phi_lut))  # azi (atrack)
 
         if not np.all(np.isnan(np_sigma0_cr_db)):
-            sigma0_cr_lut_db = get_lut(models_names[1])
+            sigma0_cr_lut_db = available_models[models_names[1]].to_lut(units='dB')
             np_sigma0_cr_lut_db = np.ascontiguousarray(np.asarray(sigma0_cr_lut_db.transpose('wspd', 'incidence')))
             np_wspd_lut_cr = np.asarray(sigma0_cr_lut_db.wspd)
             np_inc_cr_dim = np.asarray(sigma0_cr_lut_db.incidence)

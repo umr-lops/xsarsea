@@ -23,7 +23,7 @@ def gmf_cmod5_generic(neutral=False):
                       6.2437, 2.3893, 0.3249, 4.159, 1.693])
         name = 'gmf_cmod5n'
 
-    @register_gmf(name, inc_range=[17., 50.], wspd_range=[0.2, 50.], phi_range=[0., 180.], pols=['VV'])
+    @register_gmf(name, inc_range=[17., 50.], wspd_range=[0.2, 50.], phi_range=[0., 180.], pols=['VV'], units='linear')
     def gmf_cmod5(inc, wspd, phi):
         zpow = 1.6
         thetm = 40.
@@ -82,7 +82,7 @@ gmf_cmod5_generic(neutral=True)
 #
 # gmf_dummy example
 #
-#@register_gmf(inc_range=[17., 50.], wspd_range=[3., 80.], phi_range=None, pols=['VH'])
+#@register_gmf(inc_range=[17., 50.], wspd_range=[3., 80.], phi_range=None, pols=['VH'], units='linear')
 #def gmf_dummy(incidence, speed, phi=None):
 #    a0 = 0.00013106836021008122
 #    a1 = -4.530598283705591e-06
