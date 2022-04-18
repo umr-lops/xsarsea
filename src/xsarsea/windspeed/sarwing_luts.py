@@ -59,3 +59,4 @@ def register_all_sarwing_luts(topdir):
 
         sarwing_model = SarwingLutModel(name, path, pols=pols)
         available_models[sarwing_model.name] = sarwing_model
+
