@@ -170,6 +170,8 @@ def get_lut(name, inc_range=None, phi_range=None, wspd_range=None, allow_interp=
     else:
         raise KeyError('model %s not found.' % name)
 
+    lut.attrs['model'] = model_name
+
     # TODO: check lut is normalized (dims ordering, etc ...)
 
     return lut
