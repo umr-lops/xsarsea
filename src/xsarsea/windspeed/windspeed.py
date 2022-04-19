@@ -17,11 +17,10 @@ def invert_from_model(*args, **kwargs):
         # copol inversion
         inc, sigma0_co, ancillary_wind = args
         sigma0_cr = nan
-        nesz_cr = nan
 
-    elif len(args) == 5:
+    elif len(args) == 4:
         # dualpol inversion
-        inc, sigma0_co, sigma0_cr, nesz_cr, ancillary_wind = args
+        inc, sigma0_co, sigma0_cr, ancillary_wind = args
     else:
         raise TypeError("invert_from_model() takes 3 or 5 positional arguments, but %d were given" % len(args))
 
@@ -29,24 +28,26 @@ def invert_from_model(*args, **kwargs):
     if not isinstance(models_names, tuple):
         models_names = (models_names, None)
 
+    dsig_co = kwargs.pop('dsig_co', 0.1)
+    dsig_cr = kwargs.pop('dsig_cr', 0.1)
+
+    if np.isscalar(dsig_cr):
+        dsig_cr = sigma0_cr * 0 + dsig_cr
+
+
     # to dB
     sigma0_co_db = 10 * np.log10(sigma0_co + 1e-15)
     if sigma0_cr is not nan:
         sigma0_cr_db = 10 * np.log10(sigma0_cr + 1e-15)
     else:
         sigma0_cr_db = nan
-    if nesz_cr is not nan:
-        nesz_cr_db = 10 * np.log10(nesz_cr + 1e-15)
-    else:
-        nesz_cr_db = nan
 
-    def _invert_from_model_numpy(np_inc, np_sigma0_co_db, np_sigma0_cr_db, np_nesz_cr_db, np_ancillary_wind):
+    def _invert_from_model_numpy(np_inc, np_sigma0_co_db, np_sigma0_cr_db, np_dsig_cr, np_ancillary_wind):
         # this wrapper function is only useful if using dask.array.map_blocks:
         # local variables defined here will be available on the worker, and they will be used
         # in _invert_copol_numba
 
 
-        dsig_co = 0.1
         d_antenna = 2
         d_azi = 2
         dwspd_fg = 2
@@ -72,9 +73,7 @@ def invert_from_model(*args, **kwargs):
             np_wspd_lut_cr = np.array([], dtype=np.float64)
             np_sigma0_cr_lut_db = np.array([[]], dtype=np.float64)
 
-
-
-        if (180 - (np_phi_dim[-1] - np_phi_dim[0])) <2:
+        if (180 - (np_phi_dim[-1] - np_phi_dim[0])) < 2:
             # phi is in range [ 0, 180 ] (symetrical lut)
             phi_180 = True
         else:
@@ -82,7 +81,7 @@ def invert_from_model(*args, **kwargs):
 
 
 
-        def __invert_from_model_scalar(one_inc, one_sigma0_co_db, one_sigma0_cr_db, one_nesz_cr_db, one_ancillary_wind):
+        def __invert_from_model_scalar(one_inc, one_sigma0_co_db, one_sigma0_cr_db, one_dsig_cr, one_ancillary_wind):
             # invert from gmf for scalar (float) input.
             # this function will be vectorized with 'numba.vectorize' or 'numpy.frompyfunc'
             # set debug=True below to force 'numpy.frompyfunc', so you can debug this code
@@ -113,10 +112,7 @@ def invert_from_model(*args, **kwargs):
                 np_sigma0_cr_lut_db_inc = np_sigma0_cr_lut_db[:, i_inc]
 
                 Jwind_cr = ((np_wspd_lut_cr - wspd) / dwspd_fg) ** 2.
-                nrcslin = 10. ** (one_sigma0_cr_db / 10.)
-                neszlin = 10. ** (one_nesz_cr_db / 10.)
-                dsig_cr = (1.25 / (nrcslin / neszlin)) ** 4.
-                Jsig_cr = ((np_sigma0_cr_lut_db_inc - one_sigma0_cr_db) / dsig_cr) ** 2.
+                Jsig_cr = ((np_sigma0_cr_lut_db_inc - one_sigma0_cr_db) / one_dsig_cr) ** 2.
                 J_cr = Jsig_cr + Jwind_cr
                 # numba doesn't support nanargmin
                 # having nan in J_cr is an edge case, but if some nan where provided to analytical
@@ -143,10 +139,10 @@ def invert_from_model(*args, **kwargs):
         with warnings.catch_warnings():
             warnings.filterwarnings('ignore', message='.*invalid value encountered.*', category=RuntimeWarning)
             return __invert_from_model_vect(np_inc, np_sigma0_co_db,
-                                            np_sigma0_cr_db, np_nesz_cr_db, np_ancillary_wind)
+                                            np_sigma0_cr_db, dsig_cr, np_ancillary_wind)
 
 
-    def _invert_from_model_any(inc, sigma0_co_db, sigma0_cr_db, nesz_cr_db, ancillary_wind):
+    def _invert_from_model_any(inc, sigma0_co_db, sigma0_cr_db, dsig_cr, ancillary_wind):
         # wrapper to allow computation on any type (xarray, numpy)
 
         try:
@@ -161,12 +157,12 @@ def invert_from_model(*args, **kwargs):
                 if all(
                         [
                             isinstance(v.data, da.Array)
-                            for v in [inc, sigma0_co_db, sigma0_cr_db, nesz_cr_db, ancillary_wind]
+                            for v in [inc, sigma0_co_db, sigma0_cr_db, dsig_cr, ancillary_wind]
                         ]
                 ):
                     da_ws.data = da.map_blocks(
                         _invert_from_model_numpy,
-                        inc.data, sigma0_co_db.data, sigma0_cr_db.data, nesz_cr_db.data, ancillary_wind.data,
+                        inc.data, sigma0_co_db.data, sigma0_cr_db.data, dsig_cr.data, ancillary_wind.data,
                         meta=sigma0_co_db.data
                     )
                     logger.debug('invert with map_blocks')
@@ -179,7 +175,7 @@ def invert_from_model(*args, **kwargs):
                     np.asarray(inc),
                     np.asarray(sigma0_co_db),
                     np.asarray(sigma0_cr_db),
-                    np.asarray(nesz_cr_db),
+                    np.asarray(dsig_cr),
                     np.asarray(ancillary_wind),
                 )
                 logger.debug('invert with xarray.values. no chunks')
@@ -190,12 +186,12 @@ def invert_from_model(*args, **kwargs):
                 inc,
                 sigma0_co_db,
                 sigma0_cr_db,
-                nesz_cr_db,
+                dsig_cr,
                 ancillary_wind
             )
 
         return da_ws
 
     # main
-    ws = _invert_from_model_any(inc, sigma0_co_db, sigma0_cr_db, nesz_cr_db, ancillary_wind)
+    ws = _invert_from_model_any(inc, sigma0_co_db, sigma0_cr_db, dsig_cr, ancillary_wind)
     return ws
