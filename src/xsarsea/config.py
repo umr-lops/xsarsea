@@ -18,9 +18,9 @@ dims["fct_number"] = 1
 
 gmfs_loader.load_lut(pol="copol", tabulated=True,
                      path="/home/vincelhx/Documents/ifremer/data/gmfs/lut_co.nc", dims=dims)
+
 gmfs_loader.load_lut(pol="crpol", tabulated=True,
                      path="/home/vincelhx/Documents/ifremer/data/gmfs/lut_cr.nc", dims=dims)
-
 
 # "point_by_point"
 # "iterative"

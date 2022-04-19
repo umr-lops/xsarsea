@@ -223,7 +223,6 @@ class WindInversion:
                                   args["nrcs_cr"],
                                   args["noise_flattened"],
                                   args["inc"],
-                                  args["noise_flattened"],
                                   args["ancillary_wind_antenna"],
                                   args["mask"],
                                   vectorize=False)
@@ -254,9 +253,10 @@ class WindInversion:
         J_wind_cr = ((self.lut_cr_spd - spd_co)/du10_fg)**2.
 
         nrcslin = 10.**(sigcr/10.)
-        dsig_cr = 1./(1.25/(nrcslin/nesz_cr))**4.
+
+        dsig_cr_local = 1./(1.25/(nrcslin/nesz_cr))**4.
         lut_nrcs_inc_cr = lut_cr_nrcs[index_cp_inc, :]
-        Jsig_cr = ((lut_nrcs_inc_cr-sigcr)*dsig_cr)**2
+        Jsig_cr = ((lut_nrcs_inc_cr-sigcr)*dsig_cr_local)**2
 
         J_cr = Jsig_cr + J_wind_cr
 
