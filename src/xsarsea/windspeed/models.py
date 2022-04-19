@@ -41,7 +41,7 @@ class Model:
                 final_lut = 10. ** (lut / 10.)
                 final_lut.attrs['units'] = 'linear'
         else:
-            raise ValueError('Unit not known: %s' % lut.attrs['units'])
+            raise ValueError("Unit not known: %s. Known are 'dB' or 'linear' " % units)
 
         final_lut.attrs['model'] = self.name
 

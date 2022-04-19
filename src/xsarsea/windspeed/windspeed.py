@@ -22,7 +22,7 @@ def invert_from_model(*args, **kwargs):
         # dualpol inversion
         inc, sigma0_co, sigma0_cr, ancillary_wind = args
     else:
-        raise TypeError("invert_from_model() takes 3 or 5 positional arguments, but %d were given" % len(args))
+        raise TypeError("invert_from_model() takes 3 or 4 positional arguments, but %d were given" % len(args))
 
     models_names = kwargs.pop('model', None)
     if not isinstance(models_names, tuple):
