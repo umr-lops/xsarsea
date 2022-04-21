@@ -14,7 +14,8 @@ setup(
         'opencv-python',
         'importlib-resources',
         'fsspec',
-        'aiohttp'
+        'aiohttp',
+        'numba'
     ],
     license='MIT',
     author='Olivier Archer',
