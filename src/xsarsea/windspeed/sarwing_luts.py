@@ -29,9 +29,11 @@ class SarwingLutModel(LutModel):
 
         if phi is not None:
             dims = ['wspd', 'phi', 'incidence']
+            final_dims = ['incidence', 'wspd', 'phi']
             coords = {'incidence': inc, 'phi': phi, 'wspd': wspd}
         else:
             dims = ['wspd', 'incidence']
+            final_dims = ['incidence', 'wspd']
             coords = {'incidence': inc, 'wspd': wspd}
 
         da_sigma0_db = xr.DataArray(sigma0_db, dims=dims, coords=coords)
@@ -39,7 +41,7 @@ class SarwingLutModel(LutModel):
         da_sigma0_db.name = 'sigma0'
         da_sigma0_db.attrs['units'] = 'dB'
 
-        return da_sigma0_db
+        return da_sigma0_db.transpose(*final_dims)
 
 
 def register_all_sarwing_luts(topdir):

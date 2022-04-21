@@ -2,6 +2,7 @@
 
 from abc import abstractmethod
 import numpy as np
+import xarray as xr
 
 
 class Model:
@@ -23,10 +24,40 @@ class Model:
     def _raw_lut(self):
         pass
 
+    @staticmethod
+    def _check_lut(lut):
+        # check that lut is correct
+        assert isinstance(lut, xr.DataArray)
+        try:
+            units = lut.attrs['units']
+        except KeyError:
+            raise KeyError("lut has no lut.attrs['units']")
+
+        allowed_units = ['linear', 'dB']
+        if units not in allowed_units:
+            raise ValueError("Unknown lut units '%s'. Allowed are '%s'" % (units, allowed_units))
+
+        if lut.ndim == 2:
+            good_dims = ('incidence', 'wspd')
+            if not (lut.dims == good_dims):
+                raise IndexError("Bad dims '%s'. Should be '%s'" % (lut.dims, good_dims))
+        elif lut.ndim == 3:
+            good_dims = ('incidence', 'wspd', 'phi')
+            if not (lut.dims == good_dims):
+                raise IndexError("Bad dims '%s'. Should be '%s'" % (lut.dims, good_dims))
+        else:
+            raise IndexError("Bad dims '%s'" % lut.dims)
+
+        return True
+
+
     def to_lut(self, units='linear'):
         """Get the model's lut"""
 
         lut = self._raw_lut()
+
+        self._check_lut(lut)
+
 
         final_lut = lut
 
@@ -63,19 +94,48 @@ class Model:
 class LutModel(Model):
 
     def __call__(self, inc, wspd, phi=None, units=None):
-        if inc.ndim != 1:
-            raise NotImplementedError('Only 1D array are implemented')
+        try:
+            ndim = inc.ndim
+        except AttributeError:
+            ndim = 0
+
+        if ndim == 2:
+            raise NotImplementedError('2D array are implemented')
         lut = self.to_lut(units=units)
         if 'phi' in lut.dims:
-            return lut.interp(incidence=inc, wspd=wspd, phi=phi)
+            res = lut.interp(incidence=inc, wspd=wspd, phi=phi)
         else:
-            return lut.interp(incidence=inc, wspd=wspd)
+            res = lut.interp(incidence=inc, wspd=wspd)
+
+        if ndim == 0:
+            return res.item()
+        else:
+            return res
 
 
 def available_models(pol=None):
-    return Model.available_models
-    models_found = {}
-    for name, model in Model.available_models.items():
-        models_found[name] = model
+    """
+    get available models
+
+    Parameters
+    ----------
+    pol: str or None
+        Filter models by pol (ie pol='VV')
+        if None, no filters
+
+    Returns
+    -------
+    dict
+        dict of available models. Key is name, value is model.
+
+    """
+    if pol is None:
+        return Model.available_models
+    else:
+        models_found = {}
+        for name, model in Model.available_models.items():
+            if pol in model.pols:
+                models_found[name] = model
+        return models_found
 
     return models_found

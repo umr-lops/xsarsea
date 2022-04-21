@@ -23,13 +23,11 @@ def invert_from_model(*args, **kwargs):
     """
     # default array values if no crosspol
     nan = args[1] * np.nan
-    #default_gmf = ('cmod5n', 'cmodms1ahw')
 
     if len(args) == 3:
         # copol inversion
         inc, sigma0_co, ancillary_wind = args
         sigma0_cr = nan
-
     elif len(args) == 4:
         # dualpol inversion
         inc, sigma0_co, sigma0_cr, ancillary_wind = args
@@ -116,25 +114,27 @@ def invert_from_model(*args, **kwargs):
             ## cost function
             iJ_co = np.argmin(J_co)
             lut_idx = (iJ_co // J_co.shape[-1], iJ_co % J_co.shape[-1])
-            wspd = np_wspd_lut[lut_idx]
+            wspd_co = np_wspd_lut[lut_idx]
+            wspd_dual = wspd_co
 
             if not np.isnan(one_sigma0_cr_db):
                 # crosspol available, do dualpol inversion
                 i_inc = np.argmin(np.abs(np_inc_cr_dim - one_inc))
                 np_sigma0_cr_lut_db_inc = np_sigma0_cr_lut_db[:, i_inc]
 
-                Jwind_cr = ((np_wspd_lut_cr - wspd) / dwspd_fg) ** 2.
+                Jwind_cr = ((np_wspd_lut_cr - wspd_co) / dwspd_fg) ** 2.
                 Jsig_cr = ((np_sigma0_cr_lut_db_inc - one_sigma0_cr_db) / one_dsig_cr) ** 2.
                 J_cr = Jsig_cr + Jwind_cr
                 # numba doesn't support nanargmin
                 # having nan in J_cr is an edge case, but if some nan where provided to analytical
                 # function, we have to handle it
                 # J_cr[np.isnan(J_cr)] = np.nanmax(J_cr)
-                spd_dual = np_wspd_lut_cr[np.argmin(J_cr)]
-                if (spd_dual > 5) and (wspd > 5):
-                    wspd = spd_dual
+                wspd_dual = np_wspd_lut_cr[np.argmin(J_cr)]
+                if (wspd_dual < 5) or (wspd_co < 5):
+                    wspd_dual = wspd_co
 
-            return wspd
+            # numba.vectorize doesn't allow multiple outputs, so we pack wspd_co and wspd_dual into a complex
+            return wspd_co + 1j * wspd_dual
 
         # build a vectorized function from __invert_from_gmf_scalar
         debug = sys.gettrace()
@@ -145,7 +145,7 @@ def invert_from_model(*args, **kwargs):
         else:
             # fastmath can be used, but we will need nan handling
             __invert_from_model_vect = timing(
-                vectorize([float64(float64, float64, float64, float64, complex128)], fastmath={'nnan': False}, target='parallel')
+                vectorize([complex128(float64, float64, float64, float64, complex128)], fastmath={'nnan': False}, target='parallel')
                 (__invert_from_model_scalar)
             )
         with warnings.catch_warnings():
@@ -206,4 +206,12 @@ def invert_from_model(*args, **kwargs):
 
     # main
     ws = _invert_from_model_any(inc, sigma0_co_db, sigma0_cr_db, dsig_cr, ancillary_wind)
-    return ws
+
+    ws_co, ws_dual = (np.real(ws), np.imag(ws))
+
+    if len(args) == 3:
+        # copol inversion
+        return ws_co
+    elif len(args) == 4:
+        # dualpol inversion
+        return ws_co, ws_dual
