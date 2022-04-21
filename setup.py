@@ -15,7 +15,8 @@ setup(
         'importlib-resources',
         'fsspec',
         'aiohttp',
-        'numba'
+        'numba',
+        'scipy'
     ],
     license='MIT',
     author='Olivier Archer',
