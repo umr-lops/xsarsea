@@ -16,4 +16,6 @@ numba
 pytest
 fsspec
 aiohttp
+setuptools
+
 
