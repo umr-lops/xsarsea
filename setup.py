@@ -11,7 +11,10 @@ setup(
     install_requires=[
         'numpy',
         'xarray',
-        'opencv-python'
+        'opencv-python',
+        'importlib-resources',
+        'fsspec',
+        'aiohttp'
     ],
     license='MIT',
     author='Olivier Archer',

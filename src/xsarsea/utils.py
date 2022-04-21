@@ -4,11 +4,19 @@ import fsspec
 import aiohttp
 import zipfile
 from pathlib import Path
-from importlib_resources import files
 import yaml
 from functools import wraps
 import time
 import logging
+
+try:
+    from importlib import metadata
+except ImportError:  # for Python<3.8
+    import importlib_metadata as metadata
+__version__ = metadata.version('xsarsea')
+
+from importlib_resources import files
+
 
 logger = logging.getLogger('xsarsea.utils')
 logger.addHandler(logging.NullHandler())
