@@ -3,10 +3,10 @@ import xarray as xr
 import pickle as pkl
 from ..xsarsea import logger
 import numpy as np
-from .models import Model, available_models
+from .models import LutModel
 
 
-class SarwingLutModel(Model):
+class SarwingLutModel(LutModel):
     def __init__(self, name, path, **kwargs):
         super().__init__(name, **kwargs)
         self.path = path

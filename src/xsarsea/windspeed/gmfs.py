@@ -110,7 +110,8 @@ class GmfModel(Model):
 
         raise TypeError('ftype "%s" not known')
 
-    def __call__(self, inc, wspd, phi=None, numba=True):
+    def _get_function_for_args(self, inc, wspd, phi=None, numba=True):
+        # get vectorized function from argument type
         # input ndim give the function ftype
         try:
             ndim = wspd.ndim
@@ -134,29 +135,68 @@ class GmfModel(Model):
                 ftype = 'vectorize'
 
         gmf_func = self._gmf_function(ftype=ftype)
+        return gmf_func
 
+    def __call__(self, inc, wspd, phi=None, numba=True):
+        gmf_func = self._get_function_for_args(inc, wspd, phi=phi, numba=numba)
         # every gmf needs a phi, even for crosspol, but we will squeeze it after compute (for guvectorize function)
+        try:
+            ndim = wspd.ndim
+        except AttributeError:
+            # scalar input
+            ndim = 0
         squeeze_phi_dim = (phi is None) and (ndim == 1)
         if squeeze_phi_dim:
             phi = np.array([np.nan])
+            try:
+                dims = [inc.dims[0] , wspd.dims[0]]
+            except AttributeError:
+                dims = ['incidence', 'wspd']
+            coords = {dims[0]: inc, dims[1]: wspd}
+        else:
+            try:
+                dims = [inc.dims[0], wspd.dims[0], phi.dims[0]]
+            except AttributeError:
+                dims = ['incidence', 'wspd', 'phi']
+            coords = {dims[0]: inc, dims[1]: wspd, dims[2]: phi}
+
         if phi is None:
             # non guvectorized function with no phi
             phi = wspd * np.nan
 
-        sigma0 = gmf_func(inc, wspd, phi)
-        if squeeze_phi_dim:
-            sigma0 = np.squeeze(sigma0, axis=2)
+        if ndim != 0:
+            sigma0 = gmf_func(np.asarray(inc), np.asarray(wspd), np.asarray(phi))
+            if squeeze_phi_dim:
+                sigma0 = np.squeeze(sigma0, axis=2)
 
-        # add name and comment to variable, if xarray
-        try:
-            sigma0.name = 'sigma0_gmf'
-            sigma0.attrs['comment'] = "sigma0_gmf from '%s'" % self.name
-            sigma0.attrs['units'] = self.units
-        except AttributeError:
-            pass
+            if ndim == 1:
+                # sigma0 is numpy array of shape (inc, wspd, [phi]).
+                # convert it to xarray
+                sigma0 = xr.DataArray(sigma0, dims=dims, coords=coords)
+            else:
+                # sigma0 has same shape as inc
+                try:
+                    # return xarray, if possible
+                    da_sigma0 = inc.copy()
+                    da_sigma0.data = sigma0
+                    sigma0 = da_sigma0
+                    sigma0.attrs.clear()
+                except AttributeError:
+                    # pure numpy
+                    pass
+
+            # add name and comment to variable, if xarray
+            try:
+                sigma0.name = 'sigma0_gmf'
+                sigma0.attrs['model'] = self.name
+                sigma0.attrs['units'] = self.units
+            except AttributeError:
+                pass
+        else:
+            # scalar input
+            sigma0 = gmf_func(inc, wspd, phi)
 
         return sigma0
-
 
 
     def _raw_lut(self, inc_range=None, phi_range=None, wspd_range=None, allow_interp=True):
@@ -187,18 +227,10 @@ class GmfModel(Model):
 
         try:
             phi = np.arange(phi_range[0], phi_range[1] + 2 * phi_step, phi_step)
-            dims = ['incidence', 'wspd', 'phi']
-            coords = {'incidence': inc, 'wspd': wspd, 'phi': phi}
         except TypeError:
             phi = None
-            dims = ['incidence', 'wspd']
-            coords = {'incidence': inc, 'wspd': wspd}
 
-        lut = xr.DataArray(
-            self.__call__(inc, wspd, phi),
-            dims=dims,
-            coords=coords
-        )
+        lut = self.__call__(inc, wspd, phi)
 
         if allow_interp:
             # interp to get high res
@@ -217,8 +249,6 @@ class GmfModel(Model):
             crop_cond = crop_cond & (lut.phi >= phi_range[0]) & (lut.phi <= phi_range[1])
 
         lut = lut.where(crop_cond, drop=True)
-
-        lut.attrs['units'] = self.units
 
         return lut
 

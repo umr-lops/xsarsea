@@ -52,14 +52,28 @@ class Model:
 
         return final_lut
 
+    @abstractmethod
+    def __call__(self, inc, wspd, phi=None):
+        raise NotImplementedError(self.__class__)
+
     def __repr__(self):
         return "<%s('%s') pols=%s>" % (self.__class__.__name__, self.name, self.pols)
 
 
+class LutModel(Model):
+
+    def __call__(self, inc, wspd, phi=None, units=None):
+        if inc.ndim != 1:
+            raise NotImplementedError('Only 1D array are implemented')
+        lut = self.to_lut(units=units)
+        if 'phi' in lut.dims:
+            return lut.interp(incidence=inc, wspd=wspd, phi=phi)
+        else:
+            return lut.interp(incidence=inc, wspd=wspd)
+
+
 def available_models(pol=None):
-
     return Model.available_models
-
     models_found = {}
     for name, model in Model.available_models.items():
         models_found[name] = model
