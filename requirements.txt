@@ -13,3 +13,4 @@ panel
 numpy
 xarray
 numba
+pytest
