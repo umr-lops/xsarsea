@@ -1,10 +1,14 @@
 # class that represent a model (lut or gmf)
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 import numpy as np
 
 
 class Model:
+
+    available_models = {}
+    """dict of available registered models"""
+
     @abstractmethod
     def __init__(self, name, **kwargs):
         self.name = name
@@ -13,6 +17,7 @@ class Model:
         self.inc_range = kwargs.pop('inc_range', None)
         self.phi_range = kwargs.pop('phi_range', None)
         self.wspd_range = kwargs.pop('wspd_range', None)
+        self.__class__.available_models[name] = self
 
     @abstractmethod
     def _raw_lut(self):
@@ -51,5 +56,12 @@ class Model:
         return "<%s('%s') pols=%s>" % (self.__class__.__name__, self.name, self.pols)
 
 
-available_models = {}
-"""dict of available models"""
+def available_models(pol=None):
+
+    return Model.available_models
+
+    models_found = {}
+    for name, model in Model.available_models.items():
+        models_found[name] = model
+
+    return models_found

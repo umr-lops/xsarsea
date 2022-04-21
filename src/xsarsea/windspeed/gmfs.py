@@ -10,9 +10,46 @@ from .models import Model, available_models
 
 
 class GmfModel(Model):
+
+    @classmethod
+    def register(cls, name=None, inc_range=[17., 50.], wspd_range=[0.2, 50.], phi_range=None, pols=None, units='linear'):
+        """TODO: docstring"""
+
+        def inner(func):
+            gmf_name = name or func.__name__
+
+            if not gmf_name.startswith('gmf_'):
+                raise ValueError("gmf function must start with 'gmf_'. Got %s" % gmf_name)
+
+            gmf_model = cls(gmf_name, func, inc_range=inc_range, wspd_range=wspd_range, phi_range=phi_range,
+                                 pols=pols, units=units)
+
+            return gmf_model
+
+        return inner
+
     def __init__(self, name, gmf_pyfunc_scalar, **kwargs):
         super().__init__(name, **kwargs)
         self._gmf_pyfunc_scalar = gmf_pyfunc_scalar
+
+    #def __init__(self, name=None, **kwargs):
+    #    """TODO: docstring"""
+    #    super().__init__(name, **kwargs)
+#
+    #    def inner(func):
+    #        gmf_name = name or func.__name__
+#
+    #        if not gmf_name.startswith('gmf_'):
+    #            raise ValueError("gmf function must start with 'gmf_'. Got %s" % gmf_name)
+#
+    #        self._gmf_pyfunc_scalar = func
+#
+    #        #gmf_model = cls(gmf_name, func, inc_range=inc_range, wspd_range=wspd_range, phi_range=phi_range,
+    #        #                     pols=pols, units=units)
+    #        # available_models[gmf_name] = gmf_model
+#
+    #        return self
+
 
     @timing
     @lru_cache
@@ -106,19 +143,19 @@ class GmfModel(Model):
             # non guvectorized function with no phi
             phi = wspd * np.nan
 
-        sigma0_lin = gmf_func(inc, wspd, phi)
+        sigma0 = gmf_func(inc, wspd, phi)
         if squeeze_phi_dim:
-            sigma0_lin = np.squeeze(sigma0_lin, axis=2)
+            sigma0 = np.squeeze(sigma0, axis=2)
 
         # add name and comment to variable, if xarray
         try:
-            sigma0_lin.name = 'sigma0_gmf'
-            sigma0_lin.attrs['comment'] = "sigma0_gmf from '%s'" % self.name
-            sigma0_lin.attrs['units'] = 'linear'
+            sigma0.name = 'sigma0_gmf'
+            sigma0.attrs['comment'] = "sigma0_gmf from '%s'" % self.name
+            sigma0.attrs['units'] = self.units
         except AttributeError:
             pass
 
-        return sigma0_lin
+        return sigma0
 
 
 
@@ -185,19 +222,3 @@ class GmfModel(Model):
 
         return lut
 
-
-def register_gmf(name=None, inc_range=[17., 50.], wspd_range=[0.2, 50.], phi_range=None, pols=None, units='linear'):
-    """TODO: docstring"""
-
-    def inner(func):
-        gmf_name = name or func.__name__
-
-        if not gmf_name.startswith('gmf_'):
-            raise ValueError("gmf function must start with 'gmf_'. Got %s" % gmf_name)
-
-        gmf_model = GmfModel(gmf_name, func, inc_range=inc_range, wspd_range=wspd_range, phi_range=phi_range, pols=pols, units=units)
-        available_models[gmf_name] = gmf_model
-
-        return func
-
-    return inner
