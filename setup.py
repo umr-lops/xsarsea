@@ -9,7 +9,7 @@ setup(
     setup_requires=['setuptools_scm'],
     include_package_data=True,
     install_requires=[
-        'numpy',
+        'numpy<=1.21',  # numba needs numpy<=1.21
         'xarray',
         'opencv-python',
         'importlib-resources',
