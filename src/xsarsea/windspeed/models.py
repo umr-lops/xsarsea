@@ -97,7 +97,7 @@ class Model:
         raise NotImplementedError(self.__class__)
 
     def __repr__(self):
-        return "<%s('%s') pols=%s>" % (self.__class__.__name__, self.name, self.pols)
+        return "<%s('%s') pol=%s>" % (self.__class__.__name__, self.name, self.pol)
 
 
 class LutModel(Model):
@@ -146,8 +146,6 @@ def available_models(pol=None):
             if pol == model.pol:
                 models_found[name] = model
         return models_found
-
-    return models_found
 
 def get_model(name):
     """

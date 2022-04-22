@@ -17,5 +17,6 @@ pytest
 fsspec
 aiohttp
 setuptools
+yaml
 
 

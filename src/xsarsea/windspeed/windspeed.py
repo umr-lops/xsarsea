@@ -142,7 +142,8 @@ def invert_from_model(*args, **kwargs):
                 np_sigma0_co_lut_db_inc = np_sigma0_co_lut_db[:, :, i_inc]
 
                 # get wind dir components, relative to antenna and azi
-                m_antenna = np.real(one_ancillary_wind)  # antenna (xtrack)
+                # '-'np.real, because for luts and gmf, wind speed is positive when it's xtrack component is negative
+                m_antenna = -np.real(one_ancillary_wind)  # antenna (xtrack)
                 m_azi = np.imag(one_ancillary_wind)  # azi (atrack)
                 if phi_180:
                     m_azi = np.abs(m_azi)  # symetrical lut

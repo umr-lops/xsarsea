@@ -16,7 +16,8 @@ setup(
         'fsspec',
         'aiohttp',
         'numba',
-        'scipy'
+        'scipy',
+        'yaml'
     ],
     license='MIT',
     author='Olivier Archer',
