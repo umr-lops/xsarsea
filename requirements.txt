@@ -18,5 +18,6 @@ fsspec
 aiohttp
 setuptools
 pyyaml
+dask[array]
 
 

@@ -212,7 +212,7 @@ def invert_from_model(*args, **kwargs):
                 # if dask array, use map_blocks
                 # raise ImportError
                 import dask.array as da
-                if all(
+                if any(
                         [
                             isinstance(v.data, da.Array)
                             for v in [inc, sigma0_co_db, sigma0_cr_db, dsig_cr, ancillary_wind]
@@ -264,6 +264,5 @@ def invert_from_model(*args, **kwargs):
             return ws_cr_or_dual
     elif len(args) == 3:
         # dualpol inversion
-        # if (wspd_dual < 5) or (wspd_co < 5):
-        # wspd_dual = wspd_co
-        return ws_co, ws_cr_or_dual
+        wspd_dual = xr.where((ws_co < 5) | (ws_cr_or_dual < 5), ws_co, ws_cr_or_dual)
+        return ws_co, wspd_dual
