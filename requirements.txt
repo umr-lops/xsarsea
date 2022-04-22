@@ -13,3 +13,10 @@ panel
 numpy
 xarray
 numba
+pytest
+fsspec
+aiohttp
+setuptools
+pyyaml
+
+

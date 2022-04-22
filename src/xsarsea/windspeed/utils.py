@@ -2,33 +2,6 @@ import os
 import warnings
 import numpy as np
 
-def wind_to_img(u, v, ground_heading, convention='antenna'):
-    wind_azi = np.sqrt(u ** 2 + v ** 2) * \
-               np.exp(1j * (np.arctan2(u, v) - np.deg2rad(ground_heading)))
-
-    wind_azi.attrs['comment'] = """
-        Ancillary wind, as a complex number.
-        complex angle is the wind direction relative to azimuth (atrack)
-        module is windspeed
-        real part is atrack wind component
-        imag part is xtrack wind component
-        """
-
-    if convention == 'antenna':
-        # transpose real and img to get antenna convention
-        wind_antenna = np.imag(wind_azi) + 1j * np.real(wind_azi)
-        wind_antenna.attrs['comment'] = """
-                Ancillary wind, as a complex number.
-                complex angle is the wind direction relative to antenna (xtrack)
-                module is windspeed
-                real part is antenna (xtrack) wind component 
-                imag part is atrack wind component
-                """
-        return wind_antenna
-    else:
-        return wind_azi
-
-
 def nesz_flattening(noise, inc):
     """
 

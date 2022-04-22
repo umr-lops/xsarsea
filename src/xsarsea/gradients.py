@@ -19,16 +19,9 @@ import cv2
 from functools import reduce, partial
 from operator import mul
 from itertools import product
-from multiprocessing import Pool
 import pandas as pd
-import time
+from xsarsea.utils import timing
 
-try:
-    from xsar.utils import timing
-except ImportError:
-    # null decorator
-    def timing(func):
-        return func
 
 # holoviews and panel are not mandatory
 try:

@@ -7,10 +7,17 @@ setup(
     url='https://github.com/umr-lops/xsarsea',
     use_scm_version=True,
     setup_requires=['setuptools_scm'],
+    include_package_data=True,
     install_requires=[
-        'numpy',
+        'numpy<=1.21',  # numba needs numpy<=1.21
         'xarray',
-        'opencv-python'
+        'opencv-python',
+        'importlib-resources',
+        'fsspec',
+        'aiohttp',
+        'numba',
+        'scipy',
+        'pyyaml'
     ],
     license='MIT',
     author='Olivier Archer',

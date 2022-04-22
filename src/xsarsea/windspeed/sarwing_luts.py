@@ -3,10 +3,10 @@ import xarray as xr
 import pickle as pkl
 from ..xsarsea import logger
 import numpy as np
-from .models import Model, available_models
+from .models import LutModel
 
 
-class SarwingLutModel(Model):
+class SarwingLutModel(LutModel):
     def __init__(self, name, path, **kwargs):
         super().__init__(name, **kwargs)
         self.path = path
@@ -29,9 +29,11 @@ class SarwingLutModel(Model):
 
         if phi is not None:
             dims = ['wspd', 'phi', 'incidence']
+            final_dims = ['incidence', 'wspd', 'phi']
             coords = {'incidence': inc, 'phi': phi, 'wspd': wspd}
         else:
             dims = ['wspd', 'incidence']
+            final_dims = ['incidence', 'wspd']
             coords = {'incidence': inc, 'wspd': wspd}
 
         da_sigma0_db = xr.DataArray(sigma0_db, dims=dims, coords=coords)
@@ -39,7 +41,7 @@ class SarwingLutModel(Model):
         da_sigma0_db.name = 'sigma0'
         da_sigma0_db.attrs['units'] = 'dB'
 
-        return da_sigma0_db
+        return da_sigma0_db.transpose(*final_dims)
 
 
 def register_all_sarwing_luts(topdir):
@@ -51,12 +53,11 @@ def register_all_sarwing_luts(topdir):
 
         # guess available pols from filenames
         if os.path.exists(os.path.join(path, 'wind_speed_and_direction.pkl')):
-            pols = ['VV']
+            pol = 'VV'
         elif os.path.exists(os.path.join(path, 'wind_speed.pkl')):
-            pols = ['VH']
+            pol = 'VH'
         else:
-            pols = None
+            pol = None
 
-        sarwing_model = SarwingLutModel(name, path, pols=pols)
-        available_models[sarwing_model.name] = sarwing_model
+        sarwing_model = SarwingLutModel(name, path, pol=pol)
 
