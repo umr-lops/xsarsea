@@ -17,7 +17,7 @@ setup(
         'aiohttp',
         'numba',
         'scipy',
-        'yaml'
+        'pyyaml'
     ],
     license='MIT',
     author='Olivier Archer',
