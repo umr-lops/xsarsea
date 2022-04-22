@@ -12,7 +12,7 @@ from .models import Model, available_models
 class GmfModel(Model):
 
     @classmethod
-    def register(cls, name=None, inc_range=[17., 50.], wspd_range=[0.2, 50.], phi_range=None, pols=None, units='linear'):
+    def register(cls, name=None, inc_range=[17., 50.], wspd_range=[0.2, 50.], phi_range=None, pol=None, units='linear'):
         """TODO: docstring"""
 
         def inner(func):
@@ -22,7 +22,7 @@ class GmfModel(Model):
                 raise ValueError("gmf function must start with 'gmf_'. Got %s" % gmf_name)
 
             gmf_model = cls(gmf_name, func, inc_range=inc_range, wspd_range=wspd_range, phi_range=phi_range,
-                                 pols=pols, units=units)
+                            pol=pol, units=units)
 
             return gmf_model
 
@@ -31,25 +31,6 @@ class GmfModel(Model):
     def __init__(self, name, gmf_pyfunc_scalar, **kwargs):
         super().__init__(name, **kwargs)
         self._gmf_pyfunc_scalar = gmf_pyfunc_scalar
-
-    #def __init__(self, name=None, **kwargs):
-    #    """TODO: docstring"""
-    #    super().__init__(name, **kwargs)
-#
-    #    def inner(func):
-    #        gmf_name = name or func.__name__
-#
-    #        if not gmf_name.startswith('gmf_'):
-    #            raise ValueError("gmf function must start with 'gmf_'. Got %s" % gmf_name)
-#
-    #        self._gmf_pyfunc_scalar = func
-#
-    #        #gmf_model = cls(gmf_name, func, inc_range=inc_range, wspd_range=wspd_range, phi_range=phi_range,
-    #        #                     pols=pols, units=units)
-    #        # available_models[gmf_name] = gmf_model
-#
-    #        return self
-
 
     @timing
     @lru_cache
@@ -149,7 +130,7 @@ class GmfModel(Model):
         if squeeze_phi_dim:
             phi = np.array([np.nan])
             try:
-                dims = [inc.dims[0] , wspd.dims[0]]
+                dims = [inc.dims[0], wspd.dims[0]]
             except AttributeError:
                 dims = ['incidence', 'wspd']
             coords = {dims[0]: inc, dims[1]: wspd}

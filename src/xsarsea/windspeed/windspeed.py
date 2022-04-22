@@ -6,7 +6,7 @@ import numpy as np
 import warnings
 import xarray as xr
 from ..xsarsea import logger, timing
-from .models import available_models
+from .models import available_models, get_model
 
 @timing
 def invert_from_model(*args, **kwargs):
@@ -21,22 +21,49 @@ def invert_from_model(*args, **kwargs):
     -------
 
     """
-    # default array values if no crosspol
+    # default array values if no dualpol
     nan = args[1] * np.nan
 
-    if len(args) == 3:
-        # copol inversion
-        inc, sigma0_co, ancillary_wind = args
-        sigma0_cr = nan
-    elif len(args) == 4:
-        # dualpol inversion
-        inc, sigma0_co, sigma0_cr, ancillary_wind = args
-    else:
-        raise TypeError("invert_from_model() takes 3 or 4 positional arguments, but %d were given" % len(args))
+    models = kwargs.pop('model', None)
+    if not isinstance(models, tuple):
+        models = (models, None)
 
-    models_names = kwargs.pop('model', None)
-    if not isinstance(models_names, tuple):
-        models_names = (models_names, None)
+    models = tuple(get_model(m) if m is not None else None for m in models)
+
+    ancillary_wind = kwargs.pop('ancillary_wind', nan)
+
+    if len(args) == 2:
+        # mono-pol inversion
+        inc, sigma0 = args
+        try:
+            pol = sigma0.pol
+        except AttributeError:
+            pol = None
+        model_pol = models[0].pol
+        if pol is None:
+            warnings.warn('Unable to check sigma0 pol. Assuming  %s' % model_pol)
+        else:
+            if pol not in model_pol:
+                raise ValueError("sigma0 pol is %s, and model %s can only handle %s" % (pol, models[0].name, model_pol))
+
+        if models[0].iscopol:
+            sigma0_co = sigma0
+            sigma0_cr = nan
+            # copol needs valid ancillary wind
+            assert np.any(~np.isnan(ancillary_wind))
+        elif models[0].iscrosspol:
+            sigma0_co = nan
+            sigma0_cr = sigma0
+            # cross pol only is better with no ancillary wind
+            if not np.all(np.isnan(ancillary_wind)):
+                warnings.warn('crosspol inversion is best without ancillary wind, but using it as requested.')
+            models = (None, models[0])
+    elif len(args) == 3:
+        # dualpol inversion
+        inc, sigma0_co, sigma0_cr = args
+    else:
+        raise TypeError("invert_from_model() takes 2 or 3 positional arguments, but %d were given" % len(args))
+
 
     dsig_co = kwargs.pop('dsig_co', 0.1)
     dsig_cr = kwargs.pop('dsig_cr', 0.1)
@@ -62,18 +89,35 @@ def invert_from_model(*args, **kwargs):
         d_azi = 2
         dwspd_fg = 2
 
-        sigma0_co_lut_db = available_models()[models_names[0]].to_lut(units='dB')  # shape (inc, wspd, phi)
-        np_sigma0_co_lut_db = np.ascontiguousarray(np.asarray(sigma0_co_lut_db.transpose('wspd', 'phi', 'incidence')))
-        np_wspd_dim = np.asarray(sigma0_co_lut_db.wspd)
-        np_phi_dim = np.asarray(sigma0_co_lut_db.phi)
-        np_inc_dim = np.asarray(sigma0_co_lut_db.incidence)
+        try:
+            sigma0_co_lut_db = models[0].to_lut(units='dB')  # shape (inc, wspd, phi)
+            np_sigma0_co_lut_db = np.ascontiguousarray(np.asarray(sigma0_co_lut_db.transpose('wspd', 'phi', 'incidence')))
+            np_wspd_dim = np.asarray(sigma0_co_lut_db.wspd)
+            np_phi_dim = np.asarray(sigma0_co_lut_db.phi)
+            np_inc_dim = np.asarray(sigma0_co_lut_db.incidence)
+
+
+            if (180 - (np_phi_dim[-1] - np_phi_dim[0])) < 2:
+                # phi is in range [ 0, 180 ] (symetrical lut)
+                phi_180 = True
+            else:
+                phi_180 = False
+        except AttributeError:
+            # no copol, crosspol only
+            # declare dummy numpy arrays for numba
+            np_sigma0_co_lut_db = np.array([[[]]], dtype=np.float64)
+            np_wspd_dim = np.array([], dtype=np.float64)
+            np_phi_dim = np.array([], dtype=np.float64)
+            np_inc_dim = np.array([], dtype=np.float64)
+            phi_180 = False
 
         np_phi_lut, np_wspd_lut = np.meshgrid(np_phi_dim, np_wspd_dim)  # shape (wspd,phi)
         np_wspd_lut_co_antenna = np_wspd_lut * np.cos(np.radians(np_phi_lut))  # antenna (xtrack)
         np_wspd_lut_co_azi = np_wspd_lut * np.sin(np.radians(np_phi_lut))  # azi (atrack)
 
+
         if not np.all(np.isnan(np_sigma0_cr_db)):
-            sigma0_cr_lut_db = available_models()[models_names[1]].to_lut(units='dB')
+            sigma0_cr_lut_db = models[1].to_lut(units='dB')
             np_sigma0_cr_lut_db = np.ascontiguousarray(np.asarray(sigma0_cr_lut_db.transpose('wspd', 'incidence')))
             np_wspd_lut_cr = np.asarray(sigma0_cr_lut_db.wspd)
             np_inc_cr_dim = np.asarray(sigma0_cr_lut_db.incidence)
@@ -83,40 +127,38 @@ def invert_from_model(*args, **kwargs):
             np_wspd_lut_cr = np.array([], dtype=np.float64)
             np_sigma0_cr_lut_db = np.array([[]], dtype=np.float64)
 
-        if (180 - (np_phi_dim[-1] - np_phi_dim[0])) < 2:
-            # phi is in range [ 0, 180 ] (symetrical lut)
-            phi_180 = True
-        else:
-            phi_180 = False
-
-
 
         def __invert_from_model_scalar(one_inc, one_sigma0_co_db, one_sigma0_cr_db, one_dsig_cr, one_ancillary_wind):
             # invert from gmf for scalar (float) input.
             # this function will be vectorized with 'numba.vectorize' or 'numpy.frompyfunc'
             # set debug=True below to force 'numpy.frompyfunc', so you can debug this code
 
-            if np.isnan(one_sigma0_co_db) or np.isnan(one_inc):
-                return np.nan
+            if np.isnan(one_inc):
+                return np.nan + 1j * np.nan
 
-            i_inc = np.argmin(np.abs(np_inc_dim-one_inc))
-            np_sigma0_co_lut_db_inc = np_sigma0_co_lut_db[:, :, i_inc]
+            if not np.isnan(one_sigma0_co_db):
+                # copol inversion available
+                i_inc = np.argmin(np.abs(np_inc_dim-one_inc))
+                np_sigma0_co_lut_db_inc = np_sigma0_co_lut_db[:, :, i_inc]
 
-            # get wind dir components, relative to antenna and azi
-            m_antenna = np.real(one_ancillary_wind)  # antenna (xtrack)
-            m_azi = np.imag(one_ancillary_wind)  # azi (atrack)
-            if phi_180:
-                m_azi = np.abs(m_azi)  # symetrical lut
-            Jwind_co = ((np_wspd_lut_co_antenna - m_antenna) / d_antenna) ** 2 + \
-                       ((np_wspd_lut_co_azi - m_azi) / d_azi) ** 2  # shape (phi, wspd)
-            Jsig_co = ((np_sigma0_co_lut_db_inc - one_sigma0_co_db) / dsig_co) ** 2  # shape (wspd, phi)
-            J_co = Jwind_co + Jsig_co
-            ## cost function
-            iJ_co = np.argmin(J_co)
-            lut_idx = (iJ_co // J_co.shape[-1], iJ_co % J_co.shape[-1])
-            wspd_co = np_wspd_lut[lut_idx]
+                # get wind dir components, relative to antenna and azi
+                m_antenna = np.real(one_ancillary_wind)  # antenna (xtrack)
+                m_azi = np.imag(one_ancillary_wind)  # azi (atrack)
+                if phi_180:
+                    m_azi = np.abs(m_azi)  # symetrical lut
+                Jwind_co = ((np_wspd_lut_co_antenna - m_antenna) / d_antenna) ** 2 + \
+                           ((np_wspd_lut_co_azi - m_azi) / d_azi) ** 2  # shape (phi, wspd)
+                Jsig_co = ((np_sigma0_co_lut_db_inc - one_sigma0_co_db) / dsig_co) ** 2  # shape (wspd, phi)
+                J_co = Jwind_co + Jsig_co
+                ## cost function
+                iJ_co = np.argmin(J_co)
+                lut_idx = (iJ_co // J_co.shape[-1], iJ_co % J_co.shape[-1])
+                wspd_co = np_wspd_lut[lut_idx]
+            else:
+                # no copol. use ancillary wind as wspd_co
+                wspd_co = np.abs(one_ancillary_wind)
+
             wspd_dual = wspd_co
-
             if not np.isnan(one_sigma0_cr_db):
                 # crosspol available, do dualpol inversion
                 i_inc = np.argmin(np.abs(np_inc_cr_dim - one_inc))
@@ -124,14 +166,17 @@ def invert_from_model(*args, **kwargs):
 
                 Jwind_cr = ((np_wspd_lut_cr - wspd_co) / dwspd_fg) ** 2.
                 Jsig_cr = ((np_sigma0_cr_lut_db_inc - one_sigma0_cr_db) / one_dsig_cr) ** 2.
-                J_cr = Jsig_cr + Jwind_cr
+                if not np.all(np.isnan(Jwind_cr)):
+                    J_cr = Jsig_cr + Jwind_cr
+                else:
+                    J_cr = Jsig_cr
                 # numba doesn't support nanargmin
                 # having nan in J_cr is an edge case, but if some nan where provided to analytical
                 # function, we have to handle it
                 # J_cr[np.isnan(J_cr)] = np.nanmax(J_cr)
                 wspd_dual = np_wspd_lut_cr[np.argmin(J_cr)]
-                if (wspd_dual < 5) or (wspd_co < 5):
-                    wspd_dual = wspd_co
+                #if (wspd_dual < 5) or (wspd_co < 5):
+                #    wspd_dual = wspd_co
 
             # numba.vectorize doesn't allow multiple outputs, so we pack wspd_co and wspd_dual into a complex
             return wspd_co + 1j * wspd_dual
@@ -207,11 +252,17 @@ def invert_from_model(*args, **kwargs):
     # main
     ws = _invert_from_model_any(inc, sigma0_co_db, sigma0_cr_db, dsig_cr, ancillary_wind)
 
-    ws_co, ws_dual = (np.real(ws), np.imag(ws))
+    # ws is complex128, extract ws_co and  ws_dual
+    ws_co, ws_cr_or_dual = (np.real(ws), np.imag(ws))
 
-    if len(args) == 3:
-        # copol inversion
-        return ws_co
-    elif len(args) == 4:
+    if len(args) == 2:
+        # monopol inversion
+        if models[0] is not None:
+            return ws_co
+        else:
+            return ws_cr_or_dual
+    elif len(args) == 3:
         # dualpol inversion
-        return ws_co, ws_dual
+        # if (wspd_dual < 5) or (wspd_co < 5):
+        # wspd_dual = wspd_co
+        return ws_co, ws_cr_or_dual

@@ -53,11 +53,11 @@ def register_all_sarwing_luts(topdir):
 
         # guess available pols from filenames
         if os.path.exists(os.path.join(path, 'wind_speed_and_direction.pkl')):
-            pols = ['VV']
+            pol = 'VV'
         elif os.path.exists(os.path.join(path, 'wind_speed.pkl')):
-            pols = ['VH']
+            pol = 'VH'
         else:
-            pols = None
+            pol = None
 
-        sarwing_model = SarwingLutModel(name, path, pols=pols)
+        sarwing_model = SarwingLutModel(name, path, pol=pol)
 

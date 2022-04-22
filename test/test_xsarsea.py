@@ -2,7 +2,7 @@ import xsarsea
 from xsarsea import windspeed
 import numpy as np
 
-@windspeed.gmfs.GmfModel.register(inc_range=[17., 50.], wspd_range=[3., 80.], pols=['VH'], units='linear')
+@windspeed.gmfs.GmfModel.register(inc_range=[17., 50.], wspd_range=[3., 80.], pol='VH', units='linear')
 def gmf_dummy(inc, wspd, phi=None):
     a0 = 0.00013106836021008122
     a1 = -4.530598283705591e-06

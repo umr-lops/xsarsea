@@ -13,7 +13,7 @@ class Model:
     @abstractmethod
     def __init__(self, name, **kwargs):
         self.name = name
-        self.pols = kwargs.pop('pols', None)
+        self.pol = kwargs.pop('pol', None)
         self.units = kwargs.pop('units', None)
         self.inc_range = kwargs.pop('inc_range', None)
         self.phi_range = kwargs.pop('phi_range', None)
@@ -50,6 +50,15 @@ class Model:
 
         return True
 
+    @property
+    def iscopol(self):
+        """True if model is copol"""
+        return len(set(self.pol)) == 1
+
+    @property
+    def iscrosspol(self):
+        """True if model is crosspol"""
+        return len(set(self.pol)) == 2
 
     def to_lut(self, units='linear'):
         """Get the model's lut"""
@@ -134,8 +143,28 @@ def available_models(pol=None):
     else:
         models_found = {}
         for name, model in Model.available_models.items():
-            if pol in model.pols:
+            if pol == model.pol:
                 models_found[name] = model
         return models_found
 
     return models_found
+
+def get_model(name):
+    """
+    get model by name
+
+    Parameters
+    ----------
+    name: str
+        model name
+
+    Returns
+    -------
+    Model
+    """
+
+    if isinstance(name, Model):
+        # name is already a model
+        return name
+
+    return available_models()[name]
