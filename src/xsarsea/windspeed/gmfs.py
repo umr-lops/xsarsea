@@ -1,6 +1,6 @@
 import numpy as np
 import warnings
-from ..xsarsea import logger, timing
+from ..utils import logger, timing
 from functools import lru_cache
 from numba import njit, vectorize, guvectorize, float64, float32
 import xarray as xr
@@ -119,63 +119,72 @@ class GmfModel(Model):
         return gmf_func
 
     def __call__(self, inc, wspd, phi=None, numba=True):
-        gmf_func = self._get_function_for_args(inc, wspd, phi=phi, numba=numba)
-        # every gmf needs a phi, even for crosspol, but we will squeeze it after compute (for guvectorize function)
+
+        all_scalar = all(np.isscalar(v) for v in [inc, wspd, phi] if v is not None)
+
+        all_1d = False
         try:
-            ndim = wspd.ndim
+            all_1d = all(v.ndim == 1 for v in [inc, wspd, phi] if v is not None)
         except AttributeError:
-            # scalar input
-            ndim = 0
-        squeeze_phi_dim = (phi is None) and (ndim == 1)
-        if squeeze_phi_dim:
-            phi = np.array([np.nan])
-            try:
-                dims = [inc.dims[0], wspd.dims[0]]
-            except AttributeError:
-                dims = ['incidence', 'wspd']
-            coords = {dims[0]: inc, dims[1]: wspd}
-        else:
-            try:
-                dims = [inc.dims[0], wspd.dims[0], phi.dims[0]]
-            except AttributeError:
-                dims = ['incidence', 'wspd', 'phi']
-            coords = {dims[0]: inc, dims[1]: wspd, dims[2]: phi}
+            all_1d = False
 
-        if phi is None:
-            # non guvectorized function with no phi
-            phi = wspd * np.nan
+        if all_scalar:
+            gmf_func = self._get_function_for_args(inc, wspd, phi=phi, numba=numba)
+            sigma0 = gmf_func(inc, wspd, phi)
+        elif all_1d:
+            # guvectorize like
+            gmf_func = self._get_function_for_args(inc, wspd, phi=phi, numba=numba)
+            has_phi = phi is not None
+            if phi is None:
+                phi = np.array([np.nan])
+                try:
+                    dims = [inc.dims[0], wspd.dims[0]]
+                except AttributeError:
+                    dims = ['incidence', 'wspd']
+                coords = {dims[0]: inc, dims[1]: wspd}
+            else:
+                try:
+                    dims = [inc.dims[0], wspd.dims[0], phi.dims[0]]
+                except AttributeError:
+                    dims = ['incidence', 'wspd', 'phi']
+                coords = {dims[0]: inc, dims[1]: wspd, dims[2]: phi}
+            sigma0 = gmf_func(inc, wspd, phi)
 
-        if ndim != 0:
-            sigma0 = gmf_func(np.asarray(inc), np.asarray(wspd), np.asarray(phi))
-            if squeeze_phi_dim:
+            if not has_phi:
+                # squeeze phi dim
                 sigma0 = np.squeeze(sigma0, axis=2)
 
-            if ndim == 1:
-                # sigma0 is numpy array of shape (inc, wspd, [phi]).
-                # convert it to xarray
-                sigma0 = xr.DataArray(sigma0, dims=dims, coords=coords)
-            else:
-                # sigma0 has same shape as inc
-                try:
-                    # return xarray, if possible
-                    da_sigma0 = inc.copy()
-                    da_sigma0.data = sigma0
-                    sigma0 = da_sigma0
-                    sigma0.attrs.clear()
-                except AttributeError:
-                    # pure numpy
-                    pass
-
-            # add name and comment to variable, if xarray
-            try:
-                sigma0.name = 'sigma0_gmf'
-                sigma0.attrs['model'] = self.name
-                sigma0.attrs['units'] = self.units
-            except AttributeError:
-                pass
+            # sigma0 is numpy array of shape (inc, wspd, [phi]).
+            # convert it to xarray
+            sigma0 = xr.DataArray(sigma0, dims=dims, coords=coords)
         else:
-            # scalar input
-            sigma0 = gmf_func(inc, wspd, phi)
+            # 2d array or more, with possible constants
+            # make all broadcastable
+            if phi is None:
+                inc_b, wspd_b = np.broadcast_arrays(inc, wspd)
+                phi_b = None
+            else:
+                inc_b, wspd_b, phi_b = np.broadcast_arrays(inc, wspd, phi)
+
+            gmf_func = self._get_function_for_args(inc_b, wspd_b, phi=phi_b, numba=numba)
+            sigma0 = gmf_func(inc_b, wspd_b, phi_b)
+
+            # try to match xarray if available
+            for v in (inc, wspd, phi):
+                if v is None:
+                    continue
+                if isinstance(v, xr.DataArray):
+                    da_sigma0 = v.copy()
+                    da_sigma0.data = sigma0
+                    da_sigma0.attrs.clear()
+                    break
+
+        try:
+            sigma0.name = 'sigma0_gmf'
+            sigma0.attrs['model'] = self.name
+            sigma0.attrs['units'] = self.units
+        except AttributeError:
+            pass
 
         return sigma0
 

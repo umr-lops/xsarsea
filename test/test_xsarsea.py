@@ -47,6 +47,17 @@ def test_models():
         phi = np.array([0., 45., 90., 135., 180.])
         res = model(inc, wspd, phi)
 
+        try:
+            # with 2D input and scalar input
+            inc = np.array([[35, 40],[36, 41]])
+            wspd = 10.
+            phi = 15.
+            res = model(inc, wspd, phi)
+            assert res.shape == inc.shape
+        except NotImplementedError:
+            # not implemented for LutModel
+            pass
+
 
 def test_inversion():
     sarwing_owi_file = xsarsea.get_test_file('s1a-iw-owi-xx-20210909t130650-20210909t130715-039605-04AE83.nc')
@@ -109,3 +120,10 @@ def test_inversion():
 
     assert isinstance(windspeed_co.data, np.ndarray)
     assert isinstance(windspeed_dual.data, np.ndarray)
+
+
+#if __name__ == "__main__":
+#    test_available_models()
+#    test_models()
+#    test_inversion()
+

@@ -103,23 +103,35 @@ class Model:
 class LutModel(Model):
 
     def __call__(self, inc, wspd, phi=None, units=None):
-        try:
-            ndim = inc.ndim
-        except AttributeError:
-            ndim = 0
 
-        if ndim == 2:
-            raise NotImplementedError('2D array are implemented')
+        all_scalar = all(np.isscalar(v) for v in [inc, wspd, phi] if v is not None)
+
+        all_1d = False
+        try:
+            all_1d = all(v.ndim == 1 for v in [inc, wspd, phi] if v is not None)
+        except AttributeError:
+            all_1d = False
+
+        if not(all_scalar or  all_1d):
+            raise NotImplementedError('Only scalar or 1D array are implemented for LutModel')
+
         lut = self.to_lut(units=units)
         if 'phi' in lut.dims:
-            res = lut.interp(incidence=inc, wspd=wspd, phi=phi)
+            sigma0 = lut.interp(incidence=inc, wspd=wspd, phi=phi)
         else:
-            res = lut.interp(incidence=inc, wspd=wspd)
+            sigma0 = lut.interp(incidence=inc, wspd=wspd)
 
-        if ndim == 0:
-            return res.item()
+        try:
+            sigma0.name = 'sigma0_gmf'
+            sigma0.attrs['model'] = self.name
+            sigma0.attrs['units'] = self.units
+        except AttributeError:
+            pass
+
+        if all_scalar:
+            return sigma0.item()
         else:
-            return res
+            return sigma0
 
 
 def available_models(pol=None):

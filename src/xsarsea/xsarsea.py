@@ -1,7 +1,8 @@
 import logging
 from pkg_resources import get_distribution
 import numpy as np
-from xsarsea.utils import timing, get_test_file, read_sarwing_owi, geo_dir_to_xtrack
+from .utils import timing, get_test_file, read_sarwing_owi, geo_dir_to_xtrack
+from xsarsea.windspeed.models import get_model
 
 # allow nan without warnings
 # some dask warnings are still non filtered: https://github.com/dask/dask/issues/3245
@@ -145,7 +146,7 @@ def cmodIfr2(wind_speed, wind_dir, inc_angle, subsample=True):
     return sig
 
 @timing
-def sigma0_detrend(sigma0, inc_angle, wind_speed_gmf=10, wind_dir_gmf=45):
+def sigma0_detrend(sigma0, inc_angle, wind_speed_gmf=10., wind_dir_gmf=45., model='gmf_cmodIfr2'):
     """compute `sigma0_detrend` from `sigma0` and `inc_angle`
 
     Parameters
@@ -165,6 +166,10 @@ def sigma0_detrend(sigma0, inc_angle, wind_speed_gmf=10, wind_dir_gmf=45):
         sigma0 detrend.
     """
 
-    sigma0_gmf = cmodIfr2(wind_speed_gmf, wind_dir_gmf, inc_angle)
+
+
+    #sigma0_gmf = cmodIfr2(inc_angle, wind_speed_gmf, wind_dir_gmf)
+    model = get_model(model)
+    sigma0_gmf = model(inc_angle, wind_speed_gmf, wind_dir_gmf)
 
     return np.sqrt(sigma0 / (sigma0_gmf / np.nanmean(sigma0_gmf)))

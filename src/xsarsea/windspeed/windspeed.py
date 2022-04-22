@@ -5,7 +5,7 @@ from numba import vectorize, float64, complex128
 import numpy as np
 import warnings
 import xarray as xr
-from ..xsarsea import logger, timing
+from ..utils import logger, timing
 from .models import available_models, get_model
 
 @timing
