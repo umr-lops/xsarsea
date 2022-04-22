@@ -19,5 +19,6 @@ aiohttp
 setuptools
 pyyaml
 dask[array]
+netcdf4
 
 
