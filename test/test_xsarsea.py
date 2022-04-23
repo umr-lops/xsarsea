@@ -25,7 +25,7 @@ def test_available_models():
     assert 'gmf_dummy' in models
 
     sarwing_luts_subset_path = xsarsea.utils.get_test_file('sarwing_luts_subset')
-    windspeed.sarwing_luts.register_all_sarwing_luts(sarwing_luts_subset_path)
+    windspeed.register_all_sarwing_luts(sarwing_luts_subset_path)
 
     assert 'sarwing_lut_cmodms1ahw' in models
 

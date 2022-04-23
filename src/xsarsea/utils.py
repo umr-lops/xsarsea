@@ -12,12 +12,6 @@ import xarray as xr
 import numpy as np
 import warnings
 
-try:
-    from importlib import metadata
-except ImportError:  # for Python<3.8
-    import importlib_metadata as metadata
-__version__ = metadata.version('xsarsea')
-
 from importlib_resources import files
 
 
@@ -88,27 +82,28 @@ def get_test_file(fname):
                 zip_ref.extractall(res_path)
     return os.path.join(res_path, fname)
 
-def timing(f):
-    """provide a @timing decorator for functions, that log time spent in it"""
+def timing(logger=logger.debug):
+    """provide a @timing decorator() for functions, that log time spent in it"""
 
-    @wraps(f)
-    def wrapper(*args, **kwargs):
-        mem_str = ''
-        process = None
-        if mem_monitor:
-            process = Process(os.getpid())
-            startrss = process.memory_info().rss
-        starttime = time.time()
-        result = f(*args, **kwargs)
-        endtime = time.time()
-        if mem_monitor:
-            endrss = process.memory_info().rss
-            mem_str = 'mem: %+.1fMb' % ((endrss - startrss) / (1024 ** 2))
-        logger.debug(
-            'timing %s : %.2fs. %s' % (f.__name__, endtime - starttime, mem_str))
-        return result
-
-    return wrapper
+    def decorator(f):
+        #@wraps(f)
+        def wrapper(*args, **kwargs):
+            mem_str = ''
+            process = None
+            if mem_monitor:
+                process = Process(os.getpid())
+                startrss = process.memory_info().rss
+            starttime = time.time()
+            result = f(*args, **kwargs)
+            endtime = time.time()
+            if mem_monitor:
+                endrss = process.memory_info().rss
+                mem_str = 'mem: %+.1fMb' % ((endrss - startrss) / (1024 ** 2))
+            logger(
+                'timing %s : %.2fs. %s' % (f.__name__, endtime - starttime, mem_str))
+            return result
+        return wrapper
+    return decorator
 
 def read_sarwing_owi(owi_file):
     """

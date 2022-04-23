@@ -22,6 +22,9 @@ from itertools import product
 import pandas as pd
 from xsarsea.utils import timing
 
+import logging
+logger = logging.getLogger('xsarsea.gradients')
+logger.addHandler(logging.NullHandler())
 
 # holoviews and panel are not mandatory
 try:
@@ -30,14 +33,6 @@ try:
 except ImportError:
     hv = None
     pn = None
-
-import logging
-
-logging.basicConfig()
-logger = logging.getLogger('xsarsea.streaks')
-logging.captureWarnings(True)
-
-from abc import ABC, abstractmethod
 
 
 class Gradients2D:
@@ -83,7 +78,7 @@ class Gradients2D:
         self._windows_at = windows_at
 
     @property
-    @timing
+    @timing(logger=logger.debug)
     def histogram(self):
         """
         direction histogram as a xarray.Dataset, for all windows from `self.stepping_gradients`.
@@ -289,7 +284,7 @@ class Gradients:
         self.stacked_gradients = StackedGradients(self.gradients_list)
 
     @property
-    @timing
+    @timing(logger=logger.info)
     def histogram(self):
         """
         xarray.Dataset

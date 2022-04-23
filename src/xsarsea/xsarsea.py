@@ -2,7 +2,7 @@ import numpy as np
 from .utils import timing, logger, get_test_file, read_sarwing_owi, geo_dir_to_xtrack
 from xsarsea.windspeed.models import get_model
 
-@timing
+@timing(logger=logger.info)
 def sigma0_detrend(sigma0, inc_angle, wind_speed_gmf=10., wind_dir_gmf=45., model='gmf_cmodIfr2'):
     """compute `sigma0_detrend` from `sigma0` and `inc_angle`
 

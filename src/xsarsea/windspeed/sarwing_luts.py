@@ -1,7 +1,7 @@
 import os
 import xarray as xr
 import pickle as pkl
-from ..utils import logger
+from .utils import logger
 import numpy as np
 from .models import LutModel
 

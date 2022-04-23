@@ -18,9 +18,12 @@ windspeed
 =========
 
 .. automodule:: xsarsea.windspeed
-   :imported-members:
-   :members:
+    :members:
+    :imported-members:
+
+..
    :undoc-members:
+..
    :show-inheritance:
 
 windspeed.models

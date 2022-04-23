@@ -1,14 +1,15 @@
-__all__ = ['invert_from_model', 'available_models']
+
 
 import sys
 from numba import vectorize, float64, complex128
 import numpy as np
 import warnings
 import xarray as xr
-from ..utils import logger, timing
+from ..utils import timing
+from .utils import logger
 from .models import available_models, get_model
 
-@timing
+@timing(logger.info)
 def invert_from_model(*args, **kwargs):
     """
 
@@ -187,10 +188,10 @@ def invert_from_model(*args, **kwargs):
         # debug = True  # force np.frompyfunc
         # debug = False
         if debug:
-            __invert_from_model_vect = timing(np.frompyfunc(__invert_from_model_scalar, 5, 1))
+            __invert_from_model_vect = timing(logger=logger.debug)(np.frompyfunc(__invert_from_model_scalar, 5, 1))
         else:
             # fastmath can be used, but we will need nan handling
-            __invert_from_model_vect = timing(
+            __invert_from_model_vect = timing(logger=logger.debug)(
                 vectorize([complex128(float64, float64, float64, float64, complex128)], fastmath={'nnan': False}, target='parallel')
                 (__invert_from_model_scalar)
             )

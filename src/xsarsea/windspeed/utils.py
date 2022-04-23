@@ -2,6 +2,10 @@ import os
 import warnings
 import numpy as np
 
+import logging
+logger = logging.getLogger('xsarsea.windspeed')
+logger.addHandler(logging.NullHandler())
+
 def nesz_flattening(noise, inc):
     """
 

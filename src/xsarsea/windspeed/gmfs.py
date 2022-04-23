@@ -1,13 +1,13 @@
 import numpy as np
 import warnings
-from ..utils import logger, timing
+from ..utils import timing
+from .utils import logger
 from functools import lru_cache
 from numba import njit, vectorize, guvectorize, float64, float32
 import xarray as xr
 import dask.array as da
-from .models import Model, available_models
+from .models import Model
 import time
-
 
 class GmfModel(Model):
 
@@ -32,7 +32,7 @@ class GmfModel(Model):
         super().__init__(name, **kwargs)
         self._gmf_pyfunc_scalar = gmf_pyfunc_scalar
 
-    @timing
+    @timing(logger.debug)
     @lru_cache
     def _gmf_function(self, ftype='numba_vectorize'):
         """
@@ -60,7 +60,6 @@ class GmfModel(Model):
             `sigma0_linear = function(inc, wspd, [phi])`
         """
 
-        t0 = time.time()
         gmf_function = None
 
         if ftype is None:
@@ -92,12 +91,9 @@ class GmfModel(Model):
         else:
             raise TypeError('ftype "%s" not known')
 
-        logger.debug('_gmf_function from %s for ftype %s in %f.1s' % (
-        self._gmf_pyfunc_scalar.__name__, str(ftype), time.time() - t0))
-
         return gmf_function
 
-    @timing
+    @timing(logger.debug)
     def _get_function_for_args(self, inc, wspd, phi=None, numba=True):
         # get vectorized function from argument type
         # input ndim give the function ftype
@@ -125,7 +121,7 @@ class GmfModel(Model):
         gmf_func = self._gmf_function(ftype=ftype)
         return gmf_func
 
-    @timing
+    @timing()
     def __call__(self, inc, wspd, phi=None, broadcast=False, numba=True):
         # if all scalar, will return scalar
         all_scalar = all(np.isscalar(v) for v in [inc, wspd, phi] if v is not None)
@@ -193,7 +189,7 @@ class GmfModel(Model):
         if not has_phi:
             sigma0_gmf = np.squeeze(sigma0_gmf, -1)
             try:
-                sigma0_gmf = sigma0_gmf.drop('phi')
+                sigma0_gmf = sigma0_gmf.drop_dims('phi')
             except AttributeError:
                 pass
 
