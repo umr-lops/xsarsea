@@ -21,7 +21,7 @@ __version__ = metadata.version('xsarsea')
 from importlib_resources import files
 
 
-logger = logging.getLogger('xsarsea.utils')
+logger = logging.getLogger('xsarsea')
 logger.addHandler(logging.NullHandler())
 
 

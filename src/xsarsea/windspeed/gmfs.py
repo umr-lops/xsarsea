@@ -4,9 +4,9 @@ from ..utils import logger, timing
 from functools import lru_cache
 from numba import njit, vectorize, guvectorize, float64, float32
 import xarray as xr
-
+import dask.array as da
 from .models import Model, available_models
-
+import time
 
 
 class GmfModel(Model):
@@ -60,20 +60,21 @@ class GmfModel(Model):
             `sigma0_linear = function(inc, wspd, [phi])`
         """
 
+        t0 = time.time()
+        gmf_function = None
+
         if ftype is None:
-            return self._gmf_pyfunc_scalar
-
-        if ftype == 'numba_njit':
-            return njit([float64(float64, float64, float64)], nogil=True, inline='never')(self._gmf_pyfunc_scalar)
-
-        if ftype == 'numba_vectorize':
-            return vectorize(
+            gmf_function = self._gmf_pyfunc_scalar
+        elif ftype == 'numba_njit':
+            gmf_function = njit([float64(float64, float64, float64)], nogil=True, inline='never')(
+                self._gmf_pyfunc_scalar)
+        elif ftype == 'numba_vectorize':
+            gmf_function = vectorize(
                 [
                     float64(float64, float64, float64),
                     float32(float32, float32, float64)
                 ], target='parallel', nopython=True)(self._gmf_pyfunc_scalar)
-
-        if ftype == 'numba_guvectorize':
+        elif ftype == 'numba_guvectorize':
             func_njit = self._gmf_function(ftype='numba_njit')
 
             @guvectorize(
@@ -87,10 +88,16 @@ class GmfModel(Model):
                         for i_inc, one_inc in enumerate(inc):
                             sigma0_out[i_inc, i_wspd, i_phi] = func_njit(one_inc, one_wspd, one_phi)
 
-            return func
+            gmf_function = func
+        else:
+            raise TypeError('ftype "%s" not known')
 
-        raise TypeError('ftype "%s" not known')
+        logger.debug('_gmf_function from %s for ftype %s in %f.1s' % (
+        self._gmf_pyfunc_scalar.__name__, str(ftype), time.time() - t0))
 
+        return gmf_function
+
+    @timing
     def _get_function_for_args(self, inc, wspd, phi=None, numba=True):
         # get vectorized function from argument type
         # input ndim give the function ftype
@@ -118,76 +125,59 @@ class GmfModel(Model):
         gmf_func = self._gmf_function(ftype=ftype)
         return gmf_func
 
-    def __call__(self, inc, wspd, phi=None, numba=True):
-
+    @timing
+    def __call__(self, inc, wspd, phi=None, broadcast=False, numba=True):
+        # if all scalar, will return scalar
         all_scalar = all(np.isscalar(v) for v in [inc, wspd, phi] if v is not None)
 
-        all_1d = False
-        try:
-            all_1d = all(v.ndim == 1 for v in [inc, wspd, phi] if v is not None)
-        except AttributeError:
-            all_1d = False
+        # if all 1d, will return 2d or 3d shape('incidence', 'wspd', 'phi'), unless broadcast is True
+        all_1d = all(hasattr(v, 'ndim') and v.ndim == 1 for v in [inc, wspd, phi] if v is not None)
 
-        if all_scalar:
-            gmf_func = self._get_function_for_args(inc, wspd, phi=phi, numba=numba)
-            sigma0 = gmf_func(inc, wspd, phi)
-        elif all_1d:
-            # guvectorize like
-            gmf_func = self._get_function_for_args(inc, wspd, phi=phi, numba=numba)
-            has_phi = phi is not None
-            if phi is None:
-                phi = np.array([np.nan])
-                try:
-                    dims = [inc.dims[0], wspd.dims[0]]
-                except AttributeError:
-                    dims = ['incidence', 'wspd']
-                coords = {dims[0]: inc, dims[1]: wspd}
+        # if dask, will use da.map_blocks
+        dask_used = any(hasattr(v, 'data') and isinstance(v.data, da.Array) for v in [inc, wspd, phi])
+
+        # template, if available
+        sigma0_gmf = None
+
+        # if dims >1, will assume broadcastable
+        if any(hasattr(v, 'ndim') and v.ndim > 1 for v in [inc, wspd, phi] if v is not None):
+            broadcast = True
+
+        has_phi = phi is not None
+        if not has_phi:
+            # dummy dim that we will remove later
+            phi = np.array([np.nan])
+
+        # if broadcast is True, try to broadcast arrays to the same shape (the result will have the same shape).
+        if broadcast:
+            if dask_used:
+                broadcast_arrays = da.broadcast_arrays
             else:
-                try:
-                    dims = [inc.dims[0], wspd.dims[0], phi.dims[0]]
-                except AttributeError:
-                    dims = ['incidence', 'wspd', 'phi']
-                coords = {dims[0]: inc, dims[1]: wspd, dims[2]: phi}
-            sigma0 = gmf_func(inc, wspd, phi)
+                broadcast_arrays = np.broadcast_arrays
 
-            if not has_phi:
-                # squeeze phi dim
-                sigma0 = np.squeeze(sigma0, axis=2)
+            inc_b, wspd_b, phi_b = broadcast_arrays(inc, wspd, phi)
 
-            # sigma0 is numpy array of shape (inc, wspd, [phi]).
-            # convert it to xarray
-            sigma0 = xr.DataArray(sigma0, dims=dims, coords=coords)
-        else:
-            # 2d array or more, with possible constants
-            # make all broadcastable
-            if phi is None:
-                inc_b, wspd_b = np.broadcast_arrays(inc, wspd)
-                phi_b = None
-            else:
-                inc_b, wspd_b, phi_b = np.broadcast_arrays(inc, wspd, phi)
+            gmf_func = self._gmf_function(ftype='numba_vectorize' if numba else 'vectorize')
 
-            gmf_func = self._get_function_for_args(inc_b, wspd_b, phi=phi_b, numba=numba)
-            sigma0 = gmf_func(inc_b, wspd_b, phi_b)
-
-            # try to match xarray if available
+            # find datarray in inputs that looks like th result
             for v in (inc, wspd, phi):
-                if v is None:
-                    continue
                 if isinstance(v, xr.DataArray):
-                    da_sigma0 = v.copy()
-                    da_sigma0.data = sigma0
-                    da_sigma0.attrs.clear()
+                    # will use this dataarray as an output template
+                    sigma0_gmf = v.copy().astype(np.float64)
+                    sigma0_gmf.attrs.clear()
                     break
-
-        try:
-            sigma0.name = 'sigma0_gmf'
-            sigma0.attrs['model'] = self.name
-            sigma0.attrs['units'] = self.units
-        except AttributeError:
-            pass
-
-        return sigma0
-
+            sigma0_gmf_data = gmf_func(inc_b, wspd_b, phi_b)  # numpy or dask.array if some input are da
+            if sigma0_gmf is not None:
+                sigma0_gmf.data = sigma0_gmf_data
+            else:
+                # fallback to pure numpy for the result
+                sigma0_gmf = sigma0_gmf_data
+        elif all_1d or all_scalar:
+            gmf_func = self._get_function_for_args(inc, wspd, phi=phi, numba=numba)
+            sigma0_gmf = gmf_func(inc, wspd, phi)
+        else:
+            raise ValueError('Non 1d shape must all have the same shape')
+        return sigma0_gmf
 
     def _raw_lut(self, inc_range=None, phi_range=None, wspd_range=None, allow_interp=True):
         inc_range = inc_range or self.inc_range
@@ -241,4 +231,3 @@ class GmfModel(Model):
         lut = lut.where(crop_cond, drop=True)
 
         return lut
-

@@ -93,7 +93,7 @@ class Model:
         return final_lut
 
     @abstractmethod
-    def __call__(self, inc, wspd, phi=None):
+    def __call__(self, inc, wspd, phi=None, broadcast=False):
         raise NotImplementedError(self.__class__)
 
     def __repr__(self):
