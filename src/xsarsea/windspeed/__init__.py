@@ -1,5 +1,9 @@
-__all__ = ['invert_from_model', 'available_models', 'get_model', 'register_all_sarwing_luts']
-from .windspeed import invert_from_model, available_models, get_model
+"""
+windspeed module, for retrieving wind speed from sigma0 and models.
+"""
+__all__ = ['invert_from_model', 'available_models', 'get_model', 'register_all_sarwing_luts', 'nesz_flattening']
+from .windspeed import invert_from_model
+from .models import available_models, get_model
 from .sarwing_luts import register_all_sarwing_luts
 from .utils import nesz_flattening
 from . import gmfs

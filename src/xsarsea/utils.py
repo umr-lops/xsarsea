@@ -102,6 +102,7 @@ def timing(logger=logger.debug):
             logger(
                 'timing %s : %.2fs. %s' % (f.__name__, endtime - starttime, mem_str))
             return result
+        wrapper.__doc__ = f.__doc__
         return wrapper
     return decorator
 

@@ -10,10 +10,70 @@ from .models import Model
 import time
 
 class GmfModel(Model):
+    """
+    GmfModel class for handling model from analitycal functions. See :func:`~Model`
+    """
 
     @classmethod
     def register(cls, name=None, inc_range=[17., 50.], wspd_range=[0.2, 50.], phi_range=None, pol=None, units='linear'):
-        """TODO: docstring"""
+        """
+        | provide a decorator for registering a gmf function.
+        | The decorated function should be able to handle float as input.
+
+        Parameters
+        ----------
+        name: str
+            name of the registered gmf. Should start with `gmf_`. default to function name.
+        inc_range: list
+            incidence range valitidy. default to `[17., 50.]`
+        wspd_range:
+            wind speed range. default to `[0.2, 50.]`
+        phi_range:
+            | phi range. default to None.
+            | Should be `[0., 180.]` for copol gmf.
+        pol: str
+            gmf polarisation. for ex 'VV' or 'VH'
+        units: str
+            sigma0 units returned by this gmf. Should be 'linear' or 'dB'
+
+        Examples
+        --------
+        Register a new gmf
+
+        >>> @xsarsea.windspeed.gmfs.GmfModel.register(inc_range=[17., 50.], wspd_range=[3., 80.], pol='VH', units='linear')
+        >>> def gmf_dummy(inc, wspd, phi=None):
+        >>>     a0 = 0.00013106836021008122
+        >>>     a1 = -4.530598283705591e-06
+        >>>     a2 = 4.429277425062766e-08
+        >>>     b0 = 1.3925444179360706
+        >>>     b1 = 0.004157838450541205
+        >>>     b2 = 3.4735809771069953e-05
+        >>>
+        >>>     a = a0 + a1 * inc + a2 * inc ** 2
+        >>>     b = b0 + b1 * inc + b2 * inc ** 2
+        >>>     sig = a * wspd ** b
+        >>>    return sig
+        >>>
+        >>> gmf_dummy
+        <GmfModel('gmf_dummy') pol=VH>
+        >>> gmf_dummy(np.arange(20,22), np.arange(10,12))
+        <xarray.DataArray (incidence: 2, wspd: 2)>
+        array([[0.00179606, 0.00207004],
+        [0.0017344 , 0.00200004]])
+        Coordinates:
+        * incidence  (incidence) int64 20 21
+        * wspd       (wspd) int64 10 11
+        Attributes:
+        units:    linear
+
+
+        Returns
+        -------
+        GmfModel
+            (if used as a decorator)
+
+
+        """
 
         def inner(func):
             gmf_name = name or func.__name__
@@ -29,6 +89,7 @@ class GmfModel(Model):
         return inner
 
     def __init__(self, name, gmf_pyfunc_scalar, **kwargs):
+        # register gmf_pyfunc_scalar as model name
         super().__init__(name, **kwargs)
         self._gmf_pyfunc_scalar = gmf_pyfunc_scalar
 
@@ -189,7 +250,7 @@ class GmfModel(Model):
         if not has_phi:
             sigma0_gmf = np.squeeze(sigma0_gmf, -1)
             try:
-                sigma0_gmf = sigma0_gmf.drop_dims('phi')
+                sigma0_gmf = sigma0_gmf.drop_vars('phi')
             except AttributeError:
                 pass
 

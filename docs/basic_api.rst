@@ -20,15 +20,19 @@ windspeed
 .. automodule:: xsarsea.windspeed
     :members:
     :imported-members:
-
-..
-   :undoc-members:
-..
-   :show-inheritance:
+    :show-inheritance:
+    :undoc-members:
 
 windspeed.models
 ----------------
 
 .. automodule:: xsarsea.windspeed.models
     :members:
+
+windspeed.gmfs
+--------------
+
+.. automodule:: xsarsea.windspeed.gmfs
+    :members:
+
 

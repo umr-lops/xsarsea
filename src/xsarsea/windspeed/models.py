@@ -6,9 +6,14 @@ import xarray as xr
 
 
 class Model:
+    """
+    Model class is an abstact class, for handling GMF or LUT.
+    It should not be instanciated by the user.
 
-    available_models = {}
-    """dict of available registered models"""
+    All registered models can be retreived with :func:`~xsarsea.windspeed.available_models`
+    """
+
+    _available_models = {}
 
     @abstractmethod
     def __init__(self, name, **kwargs):
@@ -18,7 +23,7 @@ class Model:
         self.inc_range = kwargs.pop('inc_range', None)
         self.phi_range = kwargs.pop('phi_range', None)
         self.wspd_range = kwargs.pop('wspd_range', None)
-        self.__class__.available_models[name] = self
+        self.__class__._available_models[name] = self
 
     @abstractmethod
     def _raw_lut(self):
@@ -61,13 +66,22 @@ class Model:
         return len(set(self.pol)) == 2
 
     def to_lut(self, units='linear'):
-        """Get the model's lut"""
+        """
+        Get the model lut
+
+        Parameters
+        ----------
+        units: str
+            'linear', 'dB'
+
+        Returns
+        -------
+        xarray.DataArray
+
+        """
 
         lut = self._raw_lut()
-
         self._check_lut(lut)
-
-
         final_lut = lut
 
         if units is None:
@@ -94,6 +108,38 @@ class Model:
 
     @abstractmethod
     def __call__(self, inc, wspd, phi=None, broadcast=False):
+        """
+
+        Parameters
+        ----------
+        inc: array-like
+            incidence
+        wspd: array-like
+            windspeed
+        phi: array-like or None
+            phi
+        broadcast: bool
+            | If True, input arrays will be broadcasted to the same dimensions, and output will have the same dimension.
+            | This option is only available for :func:`~xsarsea.windspeed.gmfs.GmfModel`
+
+        Examples
+        --------
+
+        >>> cmod5 = xsarsea.windspeed.get_model('cmod5')
+        >>> cmod5(np.arange(20,22), np.arange(10,12))
+        <xarray.DataArray (incidence: 2, wspd: 2)>
+        array([[0.00179606, 0.00207004],
+        [0.0017344 , 0.00200004]])
+        Coordinates:
+        * incidence  (incidence) int64 20 21
+        * wspd       (wspd) int64 10 11
+        Attributes:
+        units:    linear
+
+        Returns
+        -------
+        xarray.DataArray
+        """
         raise NotImplementedError(self.__class__)
 
     def __repr__(self):
@@ -101,6 +147,15 @@ class Model:
 
 
 class LutModel(Model):
+    """
+    Abstract class for handling Lut models. See :func:`~Model`
+
+    Examples
+    --------
+
+    >>> isinstance(xsarsea.windspeed.get_model('sarwing_lut_cmodms1ahw'), LutModel)
+    True
+    """
 
     def __call__(self, inc, wspd, phi=None, units=None):
 
@@ -151,10 +206,10 @@ def available_models(pol=None):
 
     """
     if pol is None:
-        return Model.available_models
+        return Model._available_models
     else:
         models_found = {}
-        for name, model in Model.available_models.items():
+        for name, model in Model._available_models.items():
             if pol == model.pol:
                 models_found[name] = model
         return models_found
