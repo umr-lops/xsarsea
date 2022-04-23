@@ -174,9 +174,35 @@ class GmfModel(Model):
                 sigma0_gmf = sigma0_gmf_data
         elif all_1d or all_scalar:
             gmf_func = self._get_function_for_args(inc, wspd, phi=phi, numba=numba)
-            sigma0_gmf = gmf_func(inc, wspd, phi)
+            if all_scalar:
+                sigma0_gmf = gmf_func(inc, wspd, phi)
+            elif all_1d:
+                default_dims = {
+                    'incidence': inc,
+                    'wspd': wspd,
+                    'phi': phi
+                }
+                dims = [v.dims[0] if hasattr(v, 'dims') else default for default, v in default_dims.items()]
+                coords = {dim: default_dims[v] for dim,v in zip(dims, default_dims.keys())}
+                sigma0_gmf = xr.DataArray(np.empty(tuple(len(v) for v in coords.values())), dims=dims, coords=coords)
+                sigma0_gmf.data = gmf_func(inc, wspd, phi)
+
         else:
             raise ValueError('Non 1d shape must all have the same shape')
+
+        if not has_phi:
+            sigma0_gmf = np.squeeze(sigma0_gmf, -1)
+            try:
+                sigma0_gmf = sigma0_gmf.drop('phi')
+            except AttributeError:
+                pass
+
+        try:
+            sigma0_gmf.attrs['units'] = self.units
+        except AttributeError:
+            pass
+
+
         return sigma0_gmf
 
     def _raw_lut(self, inc_range=None, phi_range=None, wspd_range=None, allow_interp=True):

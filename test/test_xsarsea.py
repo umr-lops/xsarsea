@@ -47,24 +47,22 @@ def test_models():
         phi = np.array([0., 45., 90., 135., 180.])
         res = model(inc, wspd, phi)
 
-        # dask check
-        da_inc, da_wspd, da_phi = [ da.from_array(v) for v in [inc, wspd, phi] ]
-        xr_inc = xr.DataArray(da_inc, dims=['incidence'])
-        xr_wspd = xr.DataArray(da_wspd, dims=['wspd'])
-        xr_phi = xr.DataArray(da_phi, dims=['phi'])
-        res = model(xr_inc, xr_wspd, xr_phi)
-        a=10
-
-
         try:
-            # with 2D input and scalar input
-            inc = np.array([[35, 40],[36, 41]])
-            wspd = 10.
-            phi = 15.
+            # 2D check
+            # numpy check
+            inc = np.arange(21).reshape(7, 3) + 20
+            wspd = np.arange(21).reshape(7, 3)
+            phi = np.arange(21).reshape(7, 3) * 9
             res = model(inc, wspd, phi)
-            assert res.shape == inc.shape
+
+            # dask check
+            da_inc, da_wspd, da_phi = [da.from_array(v) for v in [inc, wspd, phi]]
+            xr_inc = xr.DataArray(da_inc, dims=['atrack', 'xtrack'])
+            xr_wspd = xr.DataArray(da_wspd, dims=['atrack', 'xtrack'])
+            xr_phi = xr.DataArray(da_phi, dims=['atrack', 'xtrack'])
+            res = model(xr_inc, xr_wspd, xr_phi)
+            res.compute()
         except NotImplementedError:
-            # not implemented for LutModel
             pass
 
 

@@ -38,8 +38,9 @@ class SarwingLutModel(LutModel):
 
         da_sigma0_db = xr.DataArray(sigma0_db, dims=dims, coords=coords)
 
-        da_sigma0_db.name = 'sigma0'
+        da_sigma0_db.name = 'sigma0_gmf'
         da_sigma0_db.attrs['units'] = 'dB'
+        da_sigma0_db.attrs['comment'] = 'from model %s' % self.name
 
         return da_sigma0_db.transpose(*final_dims)
 
