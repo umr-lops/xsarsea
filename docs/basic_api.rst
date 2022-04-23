@@ -6,7 +6,7 @@ sigma0_detrend
 ==============
 
 .. automodule:: xsarsea
-    :members: sigma0_detrend
+    :members:
 
 gradients
 =========

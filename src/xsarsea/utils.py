@@ -55,6 +55,8 @@ def get_test_file(fname):
     get test file from  https://cyclobs.ifremer.fr/static/sarwing_datarmor/xsardata/
     file is unzipped and extracted to `config['data_dir']`
 
+    This function is for examples only, it should not be not used in production environments.
+
     Parameters
     ----------
     fname: str
@@ -105,43 +107,3 @@ def timing(logger=logger.debug):
         wrapper.__doc__ = f.__doc__
         return wrapper
     return decorator
-
-def read_sarwing_owi(owi_file):
-    """
-
-    Parameters
-    ----------
-    owi_file: str
-
-    Returns
-    -------
-    xarray.Dataset
-        in xsar like format
-    """
-
-    sarwing_ds = xr.open_dataset(owi_file)
-    sarwing_ds = xr.merge([sarwing_ds, xr.open_dataset(owi_file, group='owiInversionTables_UV')])
-    sarwing_ds = sarwing_ds.rename_dims({'owiAzSize': 'atrack', 'owiRaSize': 'xtrack'})
-    sarwing_ds = sarwing_ds.drop_vars(['owiCalConstObsi', 'owiCalConstInci'])
-    sarwing_ds = sarwing_ds.assign_coords({'atrack': np.arange(len(sarwing_ds.atrack)), 'xtrack': np.arange(len(sarwing_ds.xtrack))})
-
-    return sarwing_ds
-
-
-def geo_dir_to_xtrack(geo_dir, ground_heading):
-    """
-    Convert geographical vector to image convention
-
-    Parameters
-    ----------
-    geo_dir: geographical direction in degrees north
-    ground_heading: azimuth at position, in degrees north
-
-    Returns
-    -------
-    np.float64
-        same shape as input. angle in radian, relative to xtrack, anticlockwise
-    """
-
-    return np.pi/2 - np.deg2rad(geo_dir - ground_heading)
-
