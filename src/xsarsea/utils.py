@@ -12,16 +12,10 @@ import xarray as xr
 import numpy as np
 import warnings
 
-try:
-    from importlib import metadata
-except ImportError:  # for Python<3.8
-    import importlib_metadata as metadata
-__version__ = metadata.version('xsarsea')
-
 from importlib_resources import files
 
 
-logger = logging.getLogger('xsarsea.utils')
+logger = logging.getLogger('xsarsea')
 logger.addHandler(logging.NullHandler())
 
 
@@ -61,6 +55,8 @@ def get_test_file(fname):
     get test file from  https://cyclobs.ifremer.fr/static/sarwing_datarmor/xsardata/
     file is unzipped and extracted to `config['data_dir']`
 
+    This function is for examples only, it should not be not used in production environments.
+
     Parameters
     ----------
     fname: str
@@ -88,64 +84,26 @@ def get_test_file(fname):
                 zip_ref.extractall(res_path)
     return os.path.join(res_path, fname)
 
-def timing(f):
-    """provide a @timing decorator for functions, that log time spent in it"""
+def timing(logger=logger.debug):
+    """provide a @timing decorator() for functions, that log time spent in it"""
 
-    @wraps(f)
-    def wrapper(*args, **kwargs):
-        mem_str = ''
-        process = None
-        if mem_monitor:
-            process = Process(os.getpid())
-            startrss = process.memory_info().rss
-        starttime = time.time()
-        result = f(*args, **kwargs)
-        endtime = time.time()
-        if mem_monitor:
-            endrss = process.memory_info().rss
-            mem_str = 'mem: %+.1fMb' % ((endrss - startrss) / (1024 ** 2))
-        logger.debug(
-            'timing %s : %.2fs. %s' % (f.__name__, endtime - starttime, mem_str))
-        return result
-
-    return wrapper
-
-def read_sarwing_owi(owi_file):
-    """
-
-    Parameters
-    ----------
-    owi_file: str
-
-    Returns
-    -------
-    xarray.Dataset
-        in xsar like format
-    """
-
-    sarwing_ds = xr.open_dataset(owi_file)
-    sarwing_ds = xr.merge([sarwing_ds, xr.open_dataset(owi_file, group='owiInversionTables_UV')])
-    sarwing_ds = sarwing_ds.rename_dims({'owiAzSize': 'atrack', 'owiRaSize': 'xtrack'})
-    sarwing_ds = sarwing_ds.drop_vars(['owiCalConstObsi', 'owiCalConstInci'])
-    sarwing_ds = sarwing_ds.assign_coords({'atrack': np.arange(len(sarwing_ds.atrack)), 'xtrack': np.arange(len(sarwing_ds.xtrack))})
-
-    return sarwing_ds
-
-
-def geo_dir_to_xtrack(geo_dir, ground_heading):
-    """
-    Convert geographical vector to image convention
-
-    Parameters
-    ----------
-    geo_dir: geographical direction in degrees north
-    ground_heading: azimuth at position, in degrees north
-
-    Returns
-    -------
-    np.float64
-        same shape as input. angle in radian, relative to xtrack, anticlockwise
-    """
-
-    return np.pi/2 - np.deg2rad(geo_dir - ground_heading)
-
+    def decorator(f):
+        #@wraps(f)
+        def wrapper(*args, **kwargs):
+            mem_str = ''
+            process = None
+            if mem_monitor:
+                process = Process(os.getpid())
+                startrss = process.memory_info().rss
+            starttime = time.time()
+            result = f(*args, **kwargs)
+            endtime = time.time()
+            if mem_monitor:
+                endrss = process.memory_info().rss
+                mem_str = 'mem: %+.1fMb' % ((endrss - startrss) / (1024 ** 2))
+            logger(
+                'timing %s : %.2fs. %s' % (f.__name__, endtime - starttime, mem_str))
+            return result
+        wrapper.__doc__ = f.__doc__
+        return wrapper
+    return decorator

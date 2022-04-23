@@ -25,7 +25,7 @@ def test_available_models():
     assert 'gmf_dummy' in models
 
     sarwing_luts_subset_path = xsarsea.utils.get_test_file('sarwing_luts_subset')
-    windspeed.sarwing_luts.register_all_sarwing_luts(sarwing_luts_subset_path)
+    windspeed.register_all_sarwing_luts(sarwing_luts_subset_path)
 
     assert 'sarwing_lut_cmodms1ahw' in models
 
@@ -46,6 +46,26 @@ def test_models():
         wspd = np.array([15, 17, 20])
         phi = np.array([0., 45., 90., 135., 180.])
         res = model(inc, wspd, phi)
+
+        try:
+            # 2D check
+            # numpy check
+            inc = np.arange(21).reshape(7, 3) + 20
+            wspd = np.arange(21).reshape(7, 3)
+            phi = np.arange(21).reshape(7, 3) * 9
+            res = model(inc, wspd, phi)
+
+            # dask check
+            da_inc, da_wspd, da_phi = [da.from_array(v) for v in [inc, wspd, phi]]
+            xr_inc = xr.DataArray(da_inc, dims=['atrack', 'xtrack'])
+            xr_wspd = xr.DataArray(da_wspd, dims=['atrack', 'xtrack'])
+            xr_phi = xr.DataArray(da_phi, dims=['atrack', 'xtrack'])
+            res = model(xr_inc, xr_wspd, xr_phi)
+            res.compute()
+        except NotImplementedError:
+            pass
+
+
 
 
 def test_inversion():
@@ -109,3 +129,10 @@ def test_inversion():
 
     assert isinstance(windspeed_co.data, np.ndarray)
     assert isinstance(windspeed_dual.data, np.ndarray)
+
+
+#if __name__ == "__main__":
+#    test_available_models()
+#    test_models()
+#    test_inversion()
+

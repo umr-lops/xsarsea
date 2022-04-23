@@ -1,7 +1,7 @@
 import os
 import xarray as xr
 import pickle as pkl
-from ..xsarsea import logger
+from .utils import logger
 import numpy as np
 from .models import LutModel
 
@@ -38,13 +38,46 @@ class SarwingLutModel(LutModel):
 
         da_sigma0_db = xr.DataArray(sigma0_db, dims=dims, coords=coords)
 
-        da_sigma0_db.name = 'sigma0'
+        da_sigma0_db.name = 'sigma0_gmf'
         da_sigma0_db.attrs['units'] = 'dB'
+        da_sigma0_db.attrs['comment'] = 'from model %s' % self.name
 
         return da_sigma0_db.transpose(*final_dims)
 
 
 def register_all_sarwing_luts(topdir):
+    """
+    Register all sarwing luts found under `topdir`.
+
+    This function return nothing. See `xsarsea.windspeed.available_models` to see registered models.
+
+
+
+    Parameters
+    ----------
+    topdir: str
+        top dir path to sarwing luts.
+
+    Examples
+    --------
+    register a subset of sarwing luts
+
+    >>> xsarsea.windspeed.register_all_sarwing_luts(xsarsea.get_test_file('sarwing_luts_subset'))
+
+    register all sarwing lut from ifremer path
+
+    >>> xsarsea.windspeed.register_all_sarwing_luts('/home/datawork-cersat-public/cache/project/sarwing/GMFS/v1.6')
+
+    Notes
+    _____
+    Sarwing lut can be downloaded from https://cyclobs.ifremer.fr/static/sarwing_datarmor/xsardata/sarwing_luts
+
+    See Also
+    --------
+    xsarsea.windspeed.available_models
+    xsarsea.windspeed.gmfs.GmfModel.register
+
+    """
     # TODO: polratio not handled
     for path in os.listdir(topdir):
         sarwing_name = os.path.basename(path)

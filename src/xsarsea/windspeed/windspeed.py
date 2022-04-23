@@ -1,40 +1,73 @@
-__all__ = ['invert_from_model', 'available_models']
+
 
 import sys
 from numba import vectorize, float64, complex128
 import numpy as np
 import warnings
 import xarray as xr
-from ..xsarsea import logger, timing
-from .models import available_models, get_model
+from ..utils import timing
+from .utils import logger
+from .models import get_model
 
-@timing
-def invert_from_model(*args, **kwargs):
+@timing(logger.info)
+def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsig_co=0.1, dsig_cr=0.1, model=None):
     """
+    Invert sigma0 to retrieve windspeed from model (lut or gmf).
 
     Parameters
     ----------
-    args
-    kwargs
+    inc: xarray.DataArray
+        incidence angle
+    sigma0: xarray.DataArray
+        sigma0 to be inverted.
+    sigma0_dual: xarray.DataArray (optional)
+        sigma0 in cross pol for dualpol invertion
+    ancillary_wind=: xarray.DataArray (numpy.complex28)
+        ancillary wind
+
+            | (for example ecmwf winds), in **image convention**
+            | see `xxx`
+    model=: str or tuple
+        model to use.
+
+            | If mono pol invertion, it could be a single str
+            | If dualpol, it should be ordered (model_co, model_cr)
+
+    Other Parameters
+    ----------------
+    dsig_co=: float
+        parameter used for
+
+            | `Jsig_co=((sigma0_gmf - sigma0) / dsig_co) ** 2`
+    dsig_cr=: float or xarray.DataArray
+        parameters used for
+
+            | `Jsig_cr=((sigma0_gmf - sigma0) / dsig_cr) ** 2`
 
     Returns
     -------
+    xarray.DataArray or tuple
+        inverted windspeed in m/s
 
+    See Also
+    --------
+    xsarsea.windspeed.available_models
     """
     # default array values if no dualpol
-    nan = args[1] * np.nan
+    nan = sigma0 * np.nan
 
-    models = kwargs.pop('model', None)
-    if not isinstance(models, tuple):
-        models = (models, None)
+    if not isinstance(model, tuple):
+        models = (model, None)
+    else:
+        models = model
 
     models = tuple(get_model(m) if m is not None else None for m in models)
 
-    ancillary_wind = kwargs.pop('ancillary_wind', nan)
+    if ancillary_wind is None:
+        ancillary_wind = nan
 
-    if len(args) == 2:
+    if sigma0_dual is None:
         # mono-pol inversion
-        inc, sigma0 = args
         try:
             pol = sigma0.pol
         except AttributeError:
@@ -58,15 +91,10 @@ def invert_from_model(*args, **kwargs):
             if not np.all(np.isnan(ancillary_wind)):
                 warnings.warn('crosspol inversion is best without ancillary wind, but using it as requested.')
             models = (None, models[0])
-    elif len(args) == 3:
-        # dualpol inversion
-        inc, sigma0_co, sigma0_cr = args
     else:
-        raise TypeError("invert_from_model() takes 2 or 3 positional arguments, but %d were given" % len(args))
-
-
-    dsig_co = kwargs.pop('dsig_co', 0.1)
-    dsig_cr = kwargs.pop('dsig_cr', 0.1)
+        # dualpol inversion
+        sigma0_co = sigma0
+        sigma0_cr = sigma0_dual
 
     if np.isscalar(dsig_cr):
         dsig_cr = sigma0_cr * 0 + dsig_cr
@@ -187,10 +215,10 @@ def invert_from_model(*args, **kwargs):
         # debug = True  # force np.frompyfunc
         # debug = False
         if debug:
-            __invert_from_model_vect = timing(np.frompyfunc(__invert_from_model_scalar, 5, 1))
+            __invert_from_model_vect = timing(logger=logger.debug)(np.frompyfunc(__invert_from_model_scalar, 5, 1))
         else:
             # fastmath can be used, but we will need nan handling
-            __invert_from_model_vect = timing(
+            __invert_from_model_vect = timing(logger=logger.debug)(
                 vectorize([complex128(float64, float64, float64, float64, complex128)], fastmath={'nnan': False}, target='parallel')
                 (__invert_from_model_scalar)
             )
@@ -256,13 +284,43 @@ def invert_from_model(*args, **kwargs):
     # ws is complex128, extract ws_co and  ws_dual
     ws_co, ws_cr_or_dual = (np.real(ws), np.imag(ws))
 
-    if len(args) == 2:
+    if models[0] and models[0].iscopol:
+        try:
+            ws_co.attrs['comment'] = "windspeed inverted from model %s (%s)" % ( models[0].name, models[0].pol)
+            ws_co.attrs['model'] = models[0].name
+            ws_co.attrs['units'] = 'm/s'
+        except AttributeError:
+            # numpy only
+            pass
+
+
+    if models[1]:
+        if sigma0_dual is None and models[1].iscrosspol:
+            # crosspol only
+            try:
+                ws_cr_or_dual.attrs['comment'] = "windspeed inverted from model %s (%s)" % (models[1].name, models[1].pol)
+                ws_cr_or_dual.attrs['model'] = models[1].name
+                ws_cr_or_dual.attrs['units'] = 'm/s'
+            except AttributeError:
+                # numpy only
+                pass
+
+    if sigma0_dual is None:
         # monopol inversion
         if models[0] is not None:
+            # mono copol
             return ws_co
         else:
+            # mono crosspol
             return ws_cr_or_dual
-    elif len(args) == 3:
+    else:
         # dualpol inversion
         wspd_dual = xr.where((ws_co < 5) | (ws_cr_or_dual < 5), ws_co, ws_cr_or_dual)
+        try:
+            wspd_dual.attrs['comment'] = "windspeed inverted from model %s (%s) and %s (%s)" % (models[0].name, models[0].pol, models[1].name, models[1].pol)
+            wspd_dual.attrs['model'] = "%s %s" % (models[0].name, models[1].name)
+            wspd_dual.attrs['units'] = 'm/s'
+        except AttributeError:
+            # numpy only
+            pass
         return ws_co, wspd_dual

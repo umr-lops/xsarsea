@@ -2,13 +2,18 @@ import os
 import warnings
 import numpy as np
 
+import logging
+logger = logging.getLogger('xsarsea.windspeed')
+logger.addHandler(logging.NullHandler())
+
 def nesz_flattening(noise, inc):
     """
+    Noise flatten by polynomial fit (order 1)
 
     Parameters
     ----------
     noise: array-like
-        noise array (nesz), with shape (atrack, xtrack)
+        linear noise array (nesz), with shape (atrack, xtrack)
     inc: array-like
         incidence array
 
@@ -16,6 +21,17 @@ def nesz_flattening(noise, inc):
     -------
     array-like
         flattened noise
+
+    Examples
+    --------
+    Compute `dsig_cr` keyword for `xsarsea.windspeed.invert_from_model`
+
+    >>> nesz_flat = nesz_flattening(nesz_cr, inc)
+    >>> dsig_cr = (1.25 / (sigma0_cr / nesz_flat )) ** 4.
+
+    See Also
+    --------
+    xsarsea.windspeed.invert_from_model
 
     """
 

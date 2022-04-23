@@ -6,7 +6,7 @@ sigma0_detrend
 ==============
 
 .. automodule:: xsarsea
-    :members: sigma0_detrend
+    :members:
 
 gradients
 =========
@@ -18,14 +18,21 @@ windspeed
 =========
 
 .. automodule:: xsarsea.windspeed
-   :imported-members:
-   :members:
-   :undoc-members:
-   :show-inheritance:
+    :members:
+    :imported-members:
+    :show-inheritance:
+    :undoc-members:
 
 windspeed.models
 ----------------
 
 .. automodule:: xsarsea.windspeed.models
     :members:
+
+windspeed.gmfs
+--------------
+
+.. automodule:: xsarsea.windspeed.gmfs
+    :members:
+
 
