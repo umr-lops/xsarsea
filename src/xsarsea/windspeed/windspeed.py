@@ -285,17 +285,25 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
     ws_co, ws_cr_or_dual = (np.real(ws), np.imag(ws))
 
     if models[0] and models[0].iscopol:
-        ws_co.attrs['comment'] = "windspeed inverted from model %s (%s)" % ( models[0].name, models[0].pol)
-        ws_co.attrs['model'] = models[0].name
-        ws_co.attrs['units'] = 'm/s'
+        try:
+            ws_co.attrs['comment'] = "windspeed inverted from model %s (%s)" % ( models[0].name, models[0].pol)
+            ws_co.attrs['model'] = models[0].name
+            ws_co.attrs['units'] = 'm/s'
+        except AttributeError:
+            # numpy only
+            pass
 
 
     if models[1]:
         if sigma0_dual is None and models[1].iscrosspol:
             # crosspol only
-            ws_cr_or_dual.attrs['comment'] = "windspeed inverted from model %s (%s)" % (models[1].name, models[1].pol)
-            ws_cr_or_dual.attrs['model'] = models[1].name
-            ws_cr_or_dual.attrs['units'] = 'm/s'
+            try:
+                ws_cr_or_dual.attrs['comment'] = "windspeed inverted from model %s (%s)" % (models[1].name, models[1].pol)
+                ws_cr_or_dual.attrs['model'] = models[1].name
+                ws_cr_or_dual.attrs['units'] = 'm/s'
+            except AttributeError:
+                # numpy only
+                pass
 
     if sigma0_dual is None:
         # monopol inversion
@@ -308,7 +316,11 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
     else:
         # dualpol inversion
         wspd_dual = xr.where((ws_co < 5) | (ws_cr_or_dual < 5), ws_co, ws_cr_or_dual)
-        wspd_dual.attrs['comment'] = "windspeed inverted from model %s (%s) and %s (%s)" % (models[0].name, models[0].pol, models[1].name, models[1].pol)
-        wspd_dual.attrs['model'] = "%s %s" % (models[0].name, models[1].name)
-        wspd_dual.attrs['units'] = 'm/s'
+        try:
+            wspd_dual.attrs['comment'] = "windspeed inverted from model %s (%s) and %s (%s)" % (models[0].name, models[0].pol, models[1].name, models[1].pol)
+            wspd_dual.attrs['model'] = "%s %s" % (models[0].name, models[1].name)
+            wspd_dual.attrs['units'] = 'm/s'
+        except AttributeError:
+            # numpy only
+            pass
         return ws_co, wspd_dual
