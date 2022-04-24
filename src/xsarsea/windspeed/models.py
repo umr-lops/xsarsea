@@ -20,9 +20,9 @@ class Model:
         self.name = name
         self.pol = kwargs.pop('pol', None)
         self.units = kwargs.pop('units', None)
-        self.inc_range = kwargs.pop('inc_range', None)
         self.phi_range = kwargs.pop('phi_range', None)
         self.wspd_range = kwargs.pop('wspd_range', None)
+        self.inc_range = [17., 50.]
         self.__class__._available_models[name] = self
 
     @abstractmethod

@@ -24,7 +24,7 @@ def gmf_cmod5_generic(neutral=False):
         name = 'gmf_cmod5n'
 
         
-    @GmfModel.register(name, inc_range=[17., 50.], wspd_range=[0.2, 50.], phi_range=[0., 180.], pol='VV', units='linear')
+    @GmfModel.register(name, wspd_range=[0.2, 50.], pol='VV', units='linear')
     def gmf_cmod5(inc, wspd, phi):
         zpow = 1.6
         thetm = 40.
@@ -79,7 +79,7 @@ def gmf_cmod5_generic(neutral=False):
 gmf_cmod5_generic(neutral=False)
 gmf_cmod5_generic(neutral=True)
 
-@GmfModel.register(inc_range=[17., 50.], wspd_range=[0.2, 50.], phi_range=[0., 180.], pol='VV', units='linear')
+@GmfModel.register( wspd_range=[0.2, 50.], pol='VV', units='linear')
 def gmf_cmodIfr2(inc_angle, wind_speed, wind_dir):
 
     C = np.zeros(26)
@@ -176,7 +176,7 @@ def gmf_cmodIfr2(inc_angle, wind_speed, wind_dir):
 #
 # gmf_dummy example
 #
-#@GmfModel.register(inc_range=[17., 50.], wspd_range=[3., 80.], phi_range=None, pol='VH', units='linear')
+#@GmfModel.register(wspd_range=[3., 80.], pol='VH', units='linear')
 #def gmf_dummy(incidence, speed, phi=None):
 #    a0 = 0.00013106836021008122
 #    a1 = -4.530598283705591e-06
