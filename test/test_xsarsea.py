@@ -73,7 +73,7 @@ def test_inversion():
     sarwing_ds = xsarsea.read_sarwing_owi(sarwing_owi_file).isel(atrack=slice(0, 50), xtrack=slice(0, 60))
 
     owi_ecmwf_wind = sarwing_ds.owiEcmwfWindSpeed * np.exp(
-        1j * xsarsea.geo_dir_to_xtrack(sarwing_ds.owiEcmwfWindDirection, sarwing_ds.owiHeading))
+        1j * xsarsea.dir_geo_to_xtrack(sarwing_ds.owiEcmwfWindDirection, sarwing_ds.owiHeading))
     sarwing_ds = xr.merge([
         sarwing_ds,
         owi_ecmwf_wind.to_dataset(name='owi_ancillary_wind'),

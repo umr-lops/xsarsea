@@ -5,11 +5,8 @@ import aiohttp
 import zipfile
 from pathlib import Path
 import yaml
-from functools import wraps
 import time
 import logging
-import xarray as xr
-import numpy as np
 import warnings
 
 from importlib_resources import files

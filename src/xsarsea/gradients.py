@@ -336,7 +336,7 @@ class PlotGradients:
 
         """
         self.gradients_hist = gradients_hist
-        self._spatial_dims = ['atrack', 'xtrack']
+        self._spatial_dims = ['xtrack', 'atrack']
         # non spatial dims, probably like  ['pol' 'window_dims' 'downscale_factor']
         self._non_spatial_dims = list(set(gradients_hist.dims) - set(self._spatial_dims) - set(['angles']))
 
@@ -399,7 +399,7 @@ class PlotGradients:
                     hv.VectorField(
                         peak2D,
                         vdims=['angle', 'weight'],
-                        kdims=['atrack', 'xtrack'],
+                        kdims=['xtrack', 'atrack'],
                     ).opts(pivot='mid', arrow_heads=False, magnitude='weight', aspect='equal', **style)
                 )
 
@@ -415,14 +415,14 @@ class PlotGradients:
                         hv.Curve(
                             dummy_line,
                             label="%s %s" % (label, item[label].item())
-                        ).redim.label(x='atrack', y='xtrack').opts(**style)
+                        ).redim.label(x='xtrack', y='atrack').opts(**style)
                     )
             self._vectorfield = hv.Overlay(vf_list + legends).opts(active_tools=['wheel_zoom', 'pan'])
 
         if tap:
             atrack = self.peak.atrack.values[self.peak.atrack.size // 2]
             xtrack = self.peak.xtrack.values[self.peak.xtrack.size // 2]
-            self._mouse_stream = hv.streams.Tap(x=atrack, y=xtrack, source=self._vectorfield)
+            self._mouse_stream = hv.streams.Tap(x=xtrack, y=atrack, source=self._vectorfield)
             return self._vectorfield * hv.DynamicMap(self._get_windows, streams=[self._mouse_stream])
 
         return self._vectorfield
@@ -433,26 +433,26 @@ class PlotGradients:
             source = self
         return hv.DynamicMap(source.histogram_plot, streams=[self._mouse_stream]).opts(active_tools=['wheel_zoom'])
 
-    def _get_axtrack(self, atrack=None, xtrack=None, data=None):
+    def _get_xatrack(self, xtrack=None, atrack=None, data=None):
         # called by histogram_plot to normalize coords
         if data is not None:
             # called by hv streams (like a mouse tap)
-            atrack = data[0]
-            xtrack = data[1]
+            xtrack = data[0]
+            atrack = data[1]
         nearest_center = self.peak.sel(atrack=atrack, xtrack=xtrack, method='nearest', tolerance=1e6)
         atrack = nearest_center.atrack.values.item()
         xtrack = nearest_center.xtrack.values.item()
-        return atrack, xtrack
+        return xtrack, atrack
 
-    def _get_windows(self, atrack=None, xtrack=None, x=None, y=None):
+    def _get_windows(self, xtrack=None, atrack=None, x=None, y=None):
 
         if x is not None:
-            atrack = x
+            xtrack = x
         if y is not None:
-            xtrack = y
+            atrack = y
 
         # atrack and xtrack are from mouse or user. get the nearest where histogram is defined
-        atrack, xtrack = self._get_axtrack(atrack=atrack, xtrack=xtrack)
+        xtrack, atrack = self._get_xatrack(xtrack=xtrack, atrack=atrack)
 
         windows_list = []
         try:
@@ -477,22 +477,22 @@ class PlotGradients:
             except (IndexError, KeyError):
                 style = {}
             windows_list.append(
-                hv.Path([[(amin, xmin), (amin, xmax), (amax, xmax), (amax, xmin), (amin, xmin)]]).opts(**style)
+                hv.Path([[(xmin, amin), (xmin, amax), (xmax, amax), (xmax, amin), (xmin, amin)]]).opts(**style)
             )
 
         return hv.Overlay(windows_list)
 
 
-    def histogram_plot(self, atrack=None, xtrack=None, x=None, y=None):
-        """plot histogram at atrack, xtrack"""
+    def histogram_plot(self, xtrack=None, atrack=None, x=None, y=None):
+        """plot histogram at xtrack, atrack"""
 
         if x is not None:
-            atrack = x
+            xtrack = x
         if y is not None:
-            xtrack = y
+            atrack = y
 
         # atrack and xtrack are from mouse or user. get the nearest where histogram is defined
-        atrack, xtrack = self._get_axtrack(atrack=atrack, xtrack=xtrack)
+        xtrack, atrack = self._get_xatrack(xtrack=xtrack, atrack=atrack)
 
         # get histogram
         hist_at = self.gradients_hist.sel(atrack=atrack, xtrack=xtrack, method='nearest', tolerance=500)
@@ -503,13 +503,13 @@ class PlotGradients:
             hist2D360 = circ_hist(hist2D_at['weight'])
             style = self._get_style(hist2D_at)
             hp_list.append(
-                hv.Path(hist2D360, kdims=['atrack_g', 'xtrack_g']).opts(
+                hv.Path(hist2D360, kdims=['xtrack_g', 'atrack_g']).opts(
                     axiswise=False,
                     framewise=False,
                     aspect='equal', **style)
             )
 
-        return hv.Overlay(hp_list).opts(xlabel='atrack %d' % atrack, ylabel='xtrack %d' % xtrack, width=200, height=200)
+        return hv.Overlay(hp_list).opts(xlabel='xtrack %d' % xtrack, ylabel='atrack %d' % atrack, width=200, height=200)
 
 
 def local_gradients(I):
@@ -536,8 +536,8 @@ def local_gradients(I):
 
     """
 
-    grad_r = cv2.Scharr(I.values, cv2.CV_64F, 0, 1)
-    grad_i = cv2.Scharr(I.values, cv2.CV_64F, 1, 0)
+    grad_r = cv2.Scharr(I.values, cv2.CV_64F, 1, 0)
+    grad_i = cv2.Scharr(I.values, cv2.CV_64F, 0, 1)
 
     # to complex
     grad = xr.zeros_like(I, dtype=np.complex128)
@@ -737,7 +737,7 @@ def circ_hist(hist_at):
 
     Returns
     -------
-    pd.DataFrame, with columns ['atrack_g', 'xtrack_g']
+    pd.DataFrame, with columns ['xtrack_g', 'atrack_g']
     """
 
     # convert histogram to circular histogram
@@ -747,8 +747,8 @@ def circ_hist(hist_at):
     # central symmetry, to get 360°
     hist_at = xr.concat([hist_at, -hist_at], 'angles').drop_vars(['atrack', 'xtrack'])
     hist_at['angles'] = np.angle(hist_at)
-    hist_at['atrack_g'] = np.real(hist_at)
-    hist_at['xtrack_g'] = np.imag(hist_at)
+    hist_at['xtrack_g'] = np.real(hist_at)
+    hist_at['atrack_g'] = np.imag(hist_at)
 
     # convert to dataframe (weight no longer needed)
     circ_hist_pts = hist_at.to_dataframe('tmp')[['atrack_g', 'xtrack_g']]
