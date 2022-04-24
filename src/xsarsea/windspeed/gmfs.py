@@ -15,7 +15,7 @@ class GmfModel(Model):
     """
 
     @classmethod
-    def register(cls, name=None, inc_range=[17., 50.], wspd_range=[0.2, 50.], phi_range=None, pol=None, units='linear'):
+    def register(cls, name=None, pol=None, units='linear', **kwargs):
         """
         | provide a decorator for registering a gmf function.
         | The decorated function should be able to handle float as input.
@@ -24,13 +24,8 @@ class GmfModel(Model):
         ----------
         name: str
             name of the registered gmf. Should start with `gmf_`. default to function name.
-        inc_range: list
-            incidence range valitidy. default to `[17., 50.]`
-        wspd_range:
-            wind speed range. default to `[0.2, 50.]`
-        phi_range:
-            | phi range. default to None.
-            | Should be `[0., 180.]` for copol gmf.
+        wspd_range: list
+            windspeed interval validity. Default to [0.2, 50.] for copol, or [3.0, 80.] for crosspol
         pol: str
             gmf polarisation. for ex 'VV' or 'VH'
         units: str
@@ -40,7 +35,7 @@ class GmfModel(Model):
         --------
         Register a new gmf
 
-        >>> @xsarsea.windspeed.gmfs.GmfModel.register(inc_range=[17., 50.], wspd_range=[3., 80.], pol='VH', units='linear')
+        >>> @xsarsea.windspeed.gmfs.GmfModel.register(pol='VH', units='linear')
         >>> def gmf_dummy(inc, wspd, phi=None):
         >>>     a0 = 0.00013106836021008122
         >>>     a1 = -4.530598283705591e-06
@@ -81,16 +76,54 @@ class GmfModel(Model):
             if not gmf_name.startswith('gmf_'):
                 raise ValueError("gmf function must start with 'gmf_'. Got %s" % gmf_name)
 
-            gmf_model = cls(gmf_name, func, inc_range=inc_range, wspd_range=wspd_range, phi_range=phi_range,
-                            pol=pol, units=units)
+            wspd_range = kwargs.pop('wspd_range', None)
+            if wspd_range is None:
+                if len(set(pol)) == 1:
+                    # copol
+                    wspd_range = [0.2, 50.]
+                else:
+                    # crosspol
+                    wspd_range = [3.0, 80.]
+
+            gmf_model = cls(gmf_name, func,
+                            wspd_range=wspd_range, pol=pol, units=units, **kwargs)
 
             return gmf_model
 
         return inner
 
-    def __init__(self, name, gmf_pyfunc_scalar, **kwargs):
+    def __init__(self, name, gmf_pyfunc_scalar, wspd_range=[0.2, 50.], pol=None, units=None, **kwargs):
         # register gmf_pyfunc_scalar as model name
-        super().__init__(name, **kwargs)
+
+        # check the gmf with scalar inputs
+        sigma0_gmf = gmf_pyfunc_scalar(35, 0.2, 90.)  # No try/expect. let TypeError raise if gmf use numpy arrays
+        sigma0_gmf = [sigma0_gmf]
+
+        # check if the gmf accepts phi
+        try:
+            gmf_pyfunc_scalar(35, 0.2, None)
+            phi_range = None
+            logger.debug("%s doesn't needs phi" % name)
+        except TypeError:
+            # gmf needs phi
+            # guess the range [0., 180.] or [0., 360.]
+            # if phi is [0, 180], opposite dir will give the same sigma0
+            phi_list = [0, 90, 180, 270]
+            sigma0_gmf = [np.abs(gmf_pyfunc_scalar(35, 0.2, phi) - gmf_pyfunc_scalar(35, 0.2, -phi)) for phi in phi_list]
+
+            if min(sigma0_gmf) < 1e-15 :
+                # modulo 180
+                logger.debug("%s needs phi %% 180" % name)
+                phi_range = [0., 180.]
+            else:
+                logger.debug("%s needs phi %% 360" % name)
+                phi_range = [0., 360.]
+
+        # we provide a very small windspeed. if units is dB, sigma0 should be negative.
+        if (units == 'dB' and min(sigma0_gmf) > 0) or (units == 'linear' and min(sigma0_gmf) < 0):
+            logger.info("Possible bad units '%s'  for gmf %s" % (units, name))
+
+        super().__init__(name, units=units, pol=pol, wspd_range=wspd_range, phi_range=phi_range, **kwargs)
         self._gmf_pyfunc_scalar = gmf_pyfunc_scalar
 
     @timing(logger.debug)
@@ -262,55 +295,30 @@ class GmfModel(Model):
 
         return sigma0_gmf
 
-    def _raw_lut(self, inc_range=None, phi_range=None, wspd_range=None, allow_interp=True):
-        inc_range = inc_range or self.inc_range
-        phi_range = phi_range or self.phi_range
-        wspd_range = wspd_range or self.wspd_range
+    @timing(logger=logger.debug)
+    def _raw_lut(self, **kwargs):
 
-        inc_step_hr = 0.1
-        wspd_step_hr = 0.1
-        phi_step_hr = 1
+        if self.iscopol:
+            # the lut is generated at low res, for improved performance
+            # self.to_lut() will interp it to high res
 
-        inc_step_lr = 0.2
-        wspd_step_lr = 0.5
-        phi_step_lr = 1
-
-        if allow_interp:
-            inc_step = inc_step_lr
-            wspd_step = wspd_step_lr
-            phi_step = phi_step_lr
+            inc_step = kwargs.pop('inc_step_lr', self.inc_step)
+            wspd_step = kwargs.pop('wspd_step_lr', self.wspd_step)
+            phi_step = kwargs.pop('phi_step_lr', self.phi_step)
         else:
-            inc_step = inc_step_hr
-            wspd_step = wspd_step_hr
-            phi_step = phi_step_hr
+            # copol lut are smaller, use full res
+            inc_step = kwargs.pop('inc_step', self.inc_step)
+            wspd_step = kwargs.pop('wspd_step', self.wspd_step)
+            phi_step = None
 
-        # 2*step, because we want to be sure to not have bounds conditions in interp
-        inc = np.arange(inc_range[0] - inc_step, inc_range[1] + 2 * inc_step, inc_step)
-        wspd = np.arange(np.max([0, wspd_range[0] - wspd_step]), wspd_range[1] + 2 * wspd_step, wspd_step)
-
-        try:
-            phi = np.arange(phi_range[0], phi_range[1] + 2 * phi_step, phi_step)
-        except TypeError:
-            phi = None
+        inc, wspd, phi = [
+            r and np.linspace(r[0], r[1], num=int(np.round((r[1] - r[0]) / step) + 1))
+            for r, step in zip(
+                [self.inc_range, self.wspd_range, self.phi_range],
+                [inc_step, wspd_step, phi_step]
+            )
+        ]
 
         lut = self.__call__(inc, wspd, phi)
-
-        if allow_interp:
-            # interp to get high res
-            interp_kwargs = {}
-            interp_kwargs['incidence'] = np.arange(inc_range[0], inc_range[1] + inc_step_hr, inc_step_hr)
-            interp_kwargs['wspd'] = np.arange(wspd_range[0], wspd_range[1] + wspd_step_hr, wspd_step_hr)
-            if phi is not None:
-                interp_kwargs['phi'] = np.arange(phi_range[0], phi_range[1] + phi_step_hr, phi_step_hr)
-
-            lut = lut.interp(**interp_kwargs, kwargs=dict(bounds_error=True))
-
-        # crop lut to exact range
-        crop_cond = (lut.incidence >= inc_range[0]) & (lut.incidence <= inc_range[1])
-        crop_cond = crop_cond & (lut.wspd >= wspd_range[0]) & (lut.wspd <= wspd_range[1])
-        if phi is not None:
-            crop_cond = crop_cond & (lut.phi >= phi_range[0]) & (lut.phi <= phi_range[1])
-
-        lut = lut.where(crop_cond, drop=True)
 
         return lut
