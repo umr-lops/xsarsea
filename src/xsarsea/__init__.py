@@ -1,7 +1,7 @@
-__all__ = ['sigma0_detrend', 'geo_dir_to_xtrack', 'get_test_file']
+__all__ = ['sigma0_detrend', 'dir_geo_to_xtrack', 'dir_xtrack_to_geo', 'get_test_file']
 
 from .utils import get_test_file
-from .xsarsea import geo_dir_to_xtrack, sigma0_detrend, read_sarwing_owi
+from .xsarsea import dir_geo_to_xtrack, dir_xtrack_to_geo, sigma0_detrend, read_sarwing_owi
 
 try:
     from importlib import metadata

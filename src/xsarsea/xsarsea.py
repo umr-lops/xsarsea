@@ -3,6 +3,7 @@ from .utils import timing, logger, get_test_file
 from xsarsea.windspeed.models import get_model
 import xarray as xr
 
+
 @timing(logger=logger.info)
 def sigma0_detrend(sigma0, inc_angle, wind_speed_gmf=10., wind_dir_gmf=45., model='gmf_cmodIfr2'):
     """compute `sigma0_detrend` from `sigma0` and `inc_angle`
@@ -35,6 +36,7 @@ def sigma0_detrend(sigma0, inc_angle, wind_speed_gmf=10., wind_dir_gmf=45., mode
 
     return detrended
 
+
 def read_sarwing_owi(owi_file):
     """
     read sarwing owi file, compatible with xsar.
@@ -53,14 +55,15 @@ def read_sarwing_owi(owi_file):
     sarwing_ds = xr.merge([sarwing_ds, xr.open_dataset(owi_file, group='owiInversionTables_UV')])
     sarwing_ds = sarwing_ds.rename_dims({'owiAzSize': 'atrack', 'owiRaSize': 'xtrack'})
     sarwing_ds = sarwing_ds.drop_vars(['owiCalConstObsi', 'owiCalConstInci'])
-    sarwing_ds = sarwing_ds.assign_coords({'atrack': np.arange(len(sarwing_ds.atrack)), 'xtrack': np.arange(len(sarwing_ds.xtrack))})
+    sarwing_ds = sarwing_ds.assign_coords(
+        {'atrack': np.arange(len(sarwing_ds.atrack)), 'xtrack': np.arange(len(sarwing_ds.xtrack))})
 
     return sarwing_ds
 
 
-def geo_dir_to_xtrack(geo_dir, ground_heading):
+def dir_geo_to_xtrack(geo_dir, ground_heading):
     """
-    Convert geographical vector to image convention
+    Convert geographical N/S direction to image convention
 
     Parameters
     ----------
@@ -73,5 +76,22 @@ def geo_dir_to_xtrack(geo_dir, ground_heading):
         same shape as input. angle in radian, relative to xtrack, anticlockwise
     """
 
-    return np.pi/2 - np.deg2rad(geo_dir - ground_heading)
+    return np.pi / 2 - np.deg2rad(geo_dir - ground_heading)
 
+
+def dir_xtrack_to_geo(xtrack_dir, ground_heading):
+    """
+    Convert image direction relative to antenna to geographical direction
+
+    Parameters
+    ----------
+    xtrack_dir: geographical direction in degrees north
+    ground_heading: azimuth at position, in degrees north
+
+    Returns
+    -------
+    np.float64
+        same shape as input. angle in radian, relative to xtrack, anticlockwise
+    """
+
+    return 90 - np.rad2deg(xtrack_dir) + ground_heading

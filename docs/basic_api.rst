@@ -2,8 +2,8 @@
 API reference
 #############
 
-sigma0_detrend
-==============
+general functions
+=================
 
 .. automodule:: xsarsea
     :members:
