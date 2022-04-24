@@ -15,7 +15,7 @@ class GmfModel(Model):
     """
 
     @classmethod
-    def register(cls, name=None, wspd_range=[0.2, 50.], pol=None, units='linear', **kwargs):
+    def register(cls, name=None, pol=None, units='linear', **kwargs):
         """
         | provide a decorator for registering a gmf function.
         | The decorated function should be able to handle float as input.
@@ -25,7 +25,7 @@ class GmfModel(Model):
         name: str
             name of the registered gmf. Should start with `gmf_`. default to function name.
         wspd_range: list
-            windspeed interval validity. Default to [0.2, 50.]
+            windspeed interval validity. Default to [0.2, 50.] for copol, or [3.0, 80.] for crosspol
         pol: str
             gmf polarisation. for ex 'VV' or 'VH'
         units: str
@@ -35,7 +35,7 @@ class GmfModel(Model):
         --------
         Register a new gmf
 
-        >>> @xsarsea.windspeed.gmfs.GmfModel.register(wspd_range=[0.2, 80.], pol='VH', units='linear')
+        >>> @xsarsea.windspeed.gmfs.GmfModel.register(pol='VH', units='linear')
         >>> def gmf_dummy(inc, wspd, phi=None):
         >>>     a0 = 0.00013106836021008122
         >>>     a1 = -4.530598283705591e-06
@@ -76,17 +76,23 @@ class GmfModel(Model):
             if not gmf_name.startswith('gmf_'):
                 raise ValueError("gmf function must start with 'gmf_'. Got %s" % gmf_name)
 
-            if len(kwargs.keys()):
-                warnings.warn('%s kwargs are deprecated. An error will be raised in future version.' % (kwargs.keys()))
+            wspd_range = kwargs.pop('wspd_range', None)
+            if wspd_range is None:
+                if len(set(pol)) == 1:
+                    # copol
+                    wspd_range = [0.2, 50.]
+                else:
+                    # crosspol
+                    wspd_range = [3.0, 80.]
 
             gmf_model = cls(gmf_name, func,
-                            wspd_range=wspd_range, pol=pol, units=units)
+                            wspd_range=wspd_range, pol=pol, units=units, **kwargs)
 
             return gmf_model
 
         return inner
 
-    def __init__(self, name, gmf_pyfunc_scalar, wspd_range=[0.2, 50.], pol=None, units=None):
+    def __init__(self, name, gmf_pyfunc_scalar, wspd_range=[0.2, 50.], pol=None, units=None, **kwargs):
         # register gmf_pyfunc_scalar as model name
 
         # check the gmf with scalar inputs
@@ -102,7 +108,7 @@ class GmfModel(Model):
             # gmf needs phi
             # guess the range [0., 180.] or [0., 360.]
             # if phi is [0, 180], opposite dir will give the same sigma0
-            phi_list = [0, 90, 180]
+            phi_list = [0, 90, 180, 270]
             sigma0_gmf = [np.abs(gmf_pyfunc_scalar(35, 0.2, phi) - gmf_pyfunc_scalar(35, 0.2, -phi)) for phi in phi_list]
 
             if min(sigma0_gmf) < 1e-15 :
@@ -113,13 +119,11 @@ class GmfModel(Model):
                 logger.debug("%s needs phi %% 360" % name)
                 phi_range = [0., 360.]
 
-            #phi_range = [0., 180.]
-
         # we provide a very small windspeed. if units is dB, sigma0 should be negative.
         if (units == 'dB' and min(sigma0_gmf) > 0) or (units == 'linear' and min(sigma0_gmf) < 0):
             logger.info("Possible bad units '%s'  for gmf %s" % (units, name))
 
-        super().__init__(name, units=units, pol=pol, phi_range=phi_range, wspd_range=wspd_range)
+        super().__init__(name, units=units, pol=pol, phi_range=phi_range, wspd_range=wspd_range, **kwargs)
         self._gmf_pyfunc_scalar = gmf_pyfunc_scalar
 
     @timing(logger.debug)
@@ -292,60 +296,43 @@ class GmfModel(Model):
         return sigma0_gmf
 
     @timing(logger=logger.debug)
-    def _raw_lut(self, inc_range=None, wspd_range=None, phi_range=None, allow_interp=True):
-        inc_range = inc_range or self.inc_range
-        phi_range = phi_range or self.phi_range
-        wspd_range = wspd_range or self.wspd_range
+    def _raw_lut(self, **kwargs):
 
-        # sarwing original
-        inc_step_hr = 0.1
-        wspd_step_hr = 0.1
-        phi_step_hr = 1
+        # full resolution steps
+        inc_step = kwargs.pop('inc_step', None) or self.inc_step if hasattr(self, 'inc_step') else 0.2
+        wspd_step = kwargs.pop('wspd_step', None) or self.wspd_step if hasattr(self, 'wspd_step') else 0.2
+        phi_step = kwargs.pop('phi_step', None) or self.phi_step if hasattr(self, 'phi_step') else 2
 
-        inc_step_hr = 0.2
-        wspd_step_hr = 0.2
-        phi_step_hr = 2
-
-        #inc_step_lr = 0.2
-        #wspd_step_lr = 0.5
-        #phi_step_lr = 1
-
-        # like cmod7
-        wspd_step_lr = 0.2
-        inc_step_lr = 1
-        phi_step_lr = 2.5
-
-        if allow_interp:
-            inc_step = inc_step_lr
-            wspd_step = wspd_step_lr
-            phi_step = phi_step_lr
-        else:
-            inc_step = inc_step_hr
-            wspd_step = wspd_step_hr
-            phi_step = phi_step_hr
-
+        # full resolution coords
         inc, wspd, phi = [
             r and np.linspace(r[0], r[1], num=int(np.round((r[1] - r[0]) / step) + 1))
             for r, step in zip(
-                [inc_range, wspd_range, phi_range],
+                [self.inc_range, self.wspd_range, self.phi_range],
                 [inc_step, wspd_step, phi_step]
             )
         ]
 
-        lut = self.__call__(inc, wspd, phi)
+        resolution = kwargs.pop('resolution', 'interp')
+        if resolution == 'interp' or resolution == 'low':
+            # will call the gmf with low res, then interp to final step
+            inc_step_lr = kwargs.pop('inc_step_lr', None) or self.inc_step_lr if hasattr(self, 'inc_step_lr') else 1.
+            wspd_step_lr = kwargs.pop('wspd_step_lr', None) or self.wspd_step_lr if hasattr(self, 'wspd_step_lr') else 0.2
+            phi_step_lr = kwargs.pop('phi_step_lr', None) or self.phi_step_lr if hasattr(self, 'phi_step_lr') else 2.5
 
-        if allow_interp:
-            # interp to get high res
-
-            inc, wspd, phi = [
+            inc_lr, wspd_lr, phi_lr = [
                 r and np.linspace(r[0], r[1], num=int(np.round((r[1] - r[0]) / step) + 1))
                 for r, step in zip(
-                    [inc_range, wspd_range, phi_range],
-                    [inc_step_hr, wspd_step_hr, phi_step_hr]
+                    [self.inc_range, self.wspd_range, self.phi_range],
+                    [inc_step_lr, wspd_step_lr, phi_step_lr]
                 )
             ]
 
-            interp_kwargs = { k: v for k,v in zip(['incidence', 'wspd', 'phi'], [inc, wspd, phi]) if v is not None}
-            lut = lut.interp(**interp_kwargs, kwargs=dict(bounds_error=True))
+            lut = self.__call__(inc_lr, wspd_lr, phi_lr)
+
+            if resolution != 'low':
+                interp_kwargs = {k: v for k, v in zip(['incidence', 'wspd', 'phi'], [inc, wspd, phi]) if v is not None}
+                lut = lut.interp(**interp_kwargs, kwargs=dict(bounds_error=True))
+        else:
+            lut = self.__call__(inc, wspd, phi)
 
         return lut

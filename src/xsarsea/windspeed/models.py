@@ -22,7 +22,9 @@ class Model:
         self.units = kwargs.pop('units', None)
         self.phi_range = kwargs.pop('phi_range', None)
         self.wspd_range = kwargs.pop('wspd_range', None)
-        self.inc_range = [17., 50.]
+        self.__dict__.update(kwargs)
+        if not hasattr(self, 'inc_range'):
+            self.inc_range = [17., 50.]
         self.__class__._available_models[name] = self
 
     @abstractmethod
@@ -65,7 +67,7 @@ class Model:
         """True if model is crosspol"""
         return len(set(self.pol)) == 2
 
-    def to_lut(self, units='linear'):
+    def to_lut(self, units='linear', **kwargs):
         """
         Get the model lut
 
@@ -80,7 +82,7 @@ class Model:
 
         """
 
-        lut = self._raw_lut()
+        lut = self._raw_lut(**kwargs)
         self._check_lut(lut)
         final_lut = lut
 
@@ -105,6 +107,18 @@ class Model:
         final_lut.attrs['model'] = self.name
 
         return final_lut
+
+    def to_netcdf(self, file):
+        """
+        Save model as a lut netcdf file.
+
+        Parameters
+        ----------
+        file: str
+        """
+
+        lut = self.to_lut(units='dB')
+        lut.to_netcdf(file)
 
     @abstractmethod
     def __call__(self, inc, wspd, phi=None, broadcast=False):
