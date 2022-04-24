@@ -183,7 +183,7 @@ class GmfModel(Model):
 
             gmf_function = func
         else:
-            raise TypeError('ftype "%s" not known')
+            raise TypeError('ftype "%s" not known' % ftype)
 
         return gmf_function
 

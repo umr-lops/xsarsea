@@ -26,7 +26,6 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
         ancillary wind
 
             | (for example ecmwf winds), in **image convention**
-            | see `xxx`
     model=: str or tuple
         model to use.
 
@@ -213,7 +212,6 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
         # build a vectorized function from __invert_from_gmf_scalar
         debug = sys.gettrace()
         # debug = True  # force np.frompyfunc
-        # debug = False
         if debug:
             __invert_from_model_vect = timing(logger=logger.debug)(np.frompyfunc(__invert_from_model_scalar, 5, 1))
         else:
@@ -233,7 +231,7 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
 
         try:
             # if input is xarray, will return xarray
-            da_ws = xr.zeros_like(sigma0_co_db)
+            da_ws = xr.zeros_like(sigma0_co_db, dtype=np.complex128)
             da_ws.name = 'windspeed_gmf'
             da_ws.attrs.clear()
             try:
@@ -276,7 +274,7 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
                 ancillary_wind
             )
 
-        return da_ws
+        return da_ws.astype(np.complex128)
 
     # main
     ws = _invert_from_model_any(inc, sigma0_co_db, sigma0_cr_db, dsig_cr, ancillary_wind)
