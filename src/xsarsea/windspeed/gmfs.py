@@ -123,7 +123,7 @@ class GmfModel(Model):
         if (units == 'dB' and min(sigma0_gmf) > 0) or (units == 'linear' and min(sigma0_gmf) < 0):
             logger.info("Possible bad units '%s'  for gmf %s" % (units, name))
 
-        super().__init__(name, units=units, pol=pol, phi_range=phi_range, wspd_range=wspd_range, **kwargs)
+        super().__init__(name, units=units, pol=pol, wspd_range=wspd_range, phi_range=phi_range, **kwargs)
         self._gmf_pyfunc_scalar = gmf_pyfunc_scalar
 
     @timing(logger.debug)
@@ -298,12 +298,19 @@ class GmfModel(Model):
     @timing(logger=logger.debug)
     def _raw_lut(self, **kwargs):
 
-        # full resolution steps
-        inc_step = kwargs.pop('inc_step', None) or self.inc_step if hasattr(self, 'inc_step') else 0.2
-        wspd_step = kwargs.pop('wspd_step', None) or self.wspd_step if hasattr(self, 'wspd_step') else 0.2
-        phi_step = kwargs.pop('phi_step', None) or self.phi_step if hasattr(self, 'phi_step') else 2
+        if self.iscopol:
+            # the lut is generated at low res, for improved performance
+            # self.to_lut() will interp it to high res
 
-        # full resolution coords
+            inc_step = kwargs.pop('inc_step_lr', self.inc_step)
+            wspd_step = kwargs.pop('wspd_step_lr', self.wspd_step)
+            phi_step = kwargs.pop('phi_step_lr', self.phi_step)
+        else:
+            # copol lut are smaller, use full res
+            inc_step = kwargs.pop('inc_step', self.inc_step)
+            wspd_step = kwargs.pop('wspd_step', self.wspd_step)
+            phi_step = None
+
         inc, wspd, phi = [
             r and np.linspace(r[0], r[1], num=int(np.round((r[1] - r[0]) / step) + 1))
             for r, step in zip(
@@ -312,27 +319,6 @@ class GmfModel(Model):
             )
         ]
 
-        resolution = kwargs.pop('resolution', 'interp')
-        if resolution == 'interp' or resolution == 'low':
-            # will call the gmf with low res, then interp to final step
-            inc_step_lr = kwargs.pop('inc_step_lr', None) or self.inc_step_lr if hasattr(self, 'inc_step_lr') else 1.
-            wspd_step_lr = kwargs.pop('wspd_step_lr', None) or self.wspd_step_lr if hasattr(self, 'wspd_step_lr') else 0.2
-            phi_step_lr = kwargs.pop('phi_step_lr', None) or self.phi_step_lr if hasattr(self, 'phi_step_lr') else 2.5
-
-            inc_lr, wspd_lr, phi_lr = [
-                r and np.linspace(r[0], r[1], num=int(np.round((r[1] - r[0]) / step) + 1))
-                for r, step in zip(
-                    [self.inc_range, self.wspd_range, self.phi_range],
-                    [inc_step_lr, wspd_step_lr, phi_step_lr]
-                )
-            ]
-
-            lut = self.__call__(inc_lr, wspd_lr, phi_lr)
-
-            if resolution != 'low':
-                interp_kwargs = {k: v for k, v in zip(['incidence', 'wspd', 'phi'], [inc, wspd, phi]) if v is not None}
-                lut = lut.interp(**interp_kwargs, kwargs=dict(bounds_error=True))
-        else:
-            lut = self.__call__(inc, wspd, phi)
+        lut = self.__call__(inc, wspd, phi)
 
         return lut

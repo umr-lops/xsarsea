@@ -3,6 +3,7 @@
 from abc import abstractmethod
 import numpy as np
 import xarray as xr
+import os
 
 
 class Model:
@@ -25,6 +26,16 @@ class Model:
         self.__dict__.update(kwargs)
         if not hasattr(self, 'inc_range'):
             self.inc_range = [17., 50.]
+        # steps for generated luts
+        self.inc_step = kwargs.pop('inc_step', 0.2)
+        self.wspd_step = kwargs.pop('wspd_step', 0.2)
+        self.phi_step = kwargs.pop('phi_step', 2)
+
+        # steps for low res luts
+        self.inc_step_lr = kwargs.pop('inc_step', 1.)
+        self.wspd_step_lr = kwargs.pop('wspd_step', 0.4)
+        self.phi_step_lr = kwargs.pop('phi_step', 2.5)
+
         self.__class__._available_models[name] = self
 
     @abstractmethod
@@ -82,8 +93,36 @@ class Model:
 
         """
 
-        lut = self._raw_lut(**kwargs)
+        lut = self._raw_lut()
         self._check_lut(lut)
+
+        if self.iscopol:
+            # interp the the lut
+            resolution = kwargs.pop('resolution', 'high')
+
+            if resolution is not None:
+                if resolution == 'high':
+                    # full resolution steps
+                    inc_step = kwargs.pop('inc_step', self.inc_step)
+                    wspd_step = kwargs.pop('wspd_step', self.wspd_step)
+                    phi_step = kwargs.pop('phi_step', self.phi_step)
+                elif resolution == 'low':
+                    # low resolution steps
+                    inc_step = kwargs.pop('inc_step_lr', self.inc_step_lr)
+                    wspd_step = kwargs.pop('wspd_step_lr', self.wspd_step_lr)
+                    phi_step = kwargs.pop('phi_step_lr', self.phi_step_lr)
+
+                inc, wspd, phi = [
+                    r and np.linspace(r[0], r[1], num=int(np.round((r[1] - r[0]) / step) + 1))
+                    for r, step in zip(
+                        [self.inc_range, self.wspd_range, self.phi_range],
+                        [inc_step, wspd_step, phi_step]
+                    )
+                ]
+
+                interp_kwargs = {k: v for k, v in zip(['incidence', 'wspd', 'phi'], [inc, wspd, phi]) if v is not None}
+                lut = lut.interp(**interp_kwargs, kwargs=dict(bounds_error=True))
+
         final_lut = lut
 
         if units is None:
@@ -105,6 +144,7 @@ class Model:
             raise ValueError("Unit not known: %s. Known are 'dB' or 'linear' " % units)
 
         final_lut.attrs['model'] = self.name
+        final_lut.name = 'sigma0_model'
 
         return final_lut
 
@@ -117,7 +157,8 @@ class Model:
         file: str
         """
 
-        lut = self.to_lut(units='dB')
+        lut = self.to_lut(resolution='low', units='dB')
+        lut.attrs['pol'] = self.pol
         lut.to_netcdf(file)
 
     @abstractmethod
@@ -181,7 +222,7 @@ class LutModel(Model):
         except AttributeError:
             all_1d = False
 
-        if not(all_scalar or  all_1d):
+        if not (all_scalar or all_1d):
             raise NotImplementedError('Only scalar or 1D array are implemented for LutModel')
 
         lut = self.to_lut(units=units)
@@ -201,6 +242,32 @@ class LutModel(Model):
             return sigma0.item()
         else:
             return sigma0
+
+
+class XsarseaLutModel(LutModel):
+    """
+    Class to handle luts in netcdf xsarsea format
+    """
+
+    def __init__(self, path, **kwargs):
+        name = os.path.splitext(os.path.basename(path))[0]
+        super().__init__(name, **kwargs)
+        self.path = path
+
+    def _raw_lut(self):
+        if not os.path.isfile(self.path):
+            raise FileNotFoundError(self.path)
+        lut = xr.open_dataset(self.path)
+        lut = lut.sigma0_model
+        self.pol = lut.attrs['pol']
+        self.inc_range = [np.min(lut['incidence']), np.max(lut['incidence'])]
+        self.wspd_range = [np.min(lut['wspd']), np.max(lut['wspd'])]
+        if 'phi' in lut.dims:
+            self.phi_range = [np.min(lut['phi']), np.max(lut['phi'])]
+        else:
+            self.phi_range = None
+
+        return lut
 
 
 def available_models(pol=None):
@@ -227,6 +294,7 @@ def available_models(pol=None):
             if pol == model.pol:
                 models_found[name] = model
         return models_found
+
 
 def get_model(name):
     """
