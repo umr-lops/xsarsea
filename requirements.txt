@@ -20,5 +20,6 @@ setuptools
 pyyaml
 dask[array]
 netcdf4
+typer
 
 
