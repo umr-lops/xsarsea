@@ -7,11 +7,14 @@ from .models import LutModel
 
 
 class SarwingLutModel(LutModel):
+
+    _name_prefix = 'sarwing_lut_'
+
     def __init__(self, name, path, **kwargs):
         super().__init__(name, **kwargs)
         self.path = path
 
-    def _raw_lut(self):
+    def _raw_lut(self, **kwargs):
         if not os.path.isdir(self.path):
             raise FileNotFoundError(self.path)
 
@@ -27,20 +30,37 @@ class SarwingLutModel(LutModel):
             phi = None
             wspd = pkl.load(open(os.path.join(self.path, 'wind_speed.pkl'), 'rb'), encoding='iso-8859-1')
 
+        self.wspd_step = np.round(np.unique(np.diff(wspd)), decimals=2)[0]
+        self.inc_step = np.round(np.unique(np.diff(inc)), decimals=2)[0]
+        self.inc_range = [ np.round(np.min(inc), decimals=2), np.round(np.max(inc), decimals=2) ]
+        self.wspd_range = [np.round(np.min(wspd), decimals=2), np.round(np.max(wspd), decimals=2)]
+
+
         if phi is not None:
             dims = ['wspd', 'phi', 'incidence']
             final_dims = ['incidence', 'wspd', 'phi']
             coords = {'incidence': inc, 'phi': phi, 'wspd': wspd}
+            self.phi_step = np.round(np.unique(np.diff(phi)), decimals=2)[0]
+            # low res parameters, for downsampling
+            self.inc_step_lr = 1.
+            self.wspd_step_lr = 0.4
+            self.phi_step_lr = 2.5
+            self.phi_range = [np.round(np.min(phi), decimals=2), np.round(np.max(phi), decimals=2)]
         else:
             dims = ['wspd', 'incidence']
             final_dims = ['incidence', 'wspd']
             coords = {'incidence': inc, 'wspd': wspd}
+            # low res parameters, for downsampling. those a close to high res, as crosspol lut has quite small
+            self.inc_step_lr = 1.
+            self.wspd_step_lr = 0.1
+            self.phi_step_lr = 1
 
         da_sigma0_db = xr.DataArray(sigma0_db, dims=dims, coords=coords)
 
         da_sigma0_db.name = 'sigma0_gmf'
         da_sigma0_db.attrs['units'] = 'dB'
-        da_sigma0_db.attrs['comment'] = 'from model %s' % self.name
+        da_sigma0_db.attrs['model'] = self.name
+        da_sigma0_db.attrs['resolution'] = 'high'
 
         return da_sigma0_db.transpose(*final_dims)
 
@@ -82,7 +102,7 @@ def register_all_sarwing_luts(topdir):
     for path in os.listdir(topdir):
         sarwing_name = os.path.basename(path)
         path = os.path.abspath(os.path.join(topdir, path))
-        name = sarwing_name.replace('GMF_', 'sarwing_lut_')
+        name = sarwing_name.replace('GMF_', SarwingLutModel._name_prefix)
 
         # guess available pols from filenames
         if os.path.exists(os.path.join(path, 'wind_speed_and_direction.pkl')):
