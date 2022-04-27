@@ -7,6 +7,7 @@ import os
 import glob
 import netCDF4
 import logging
+import pandas as pd
 
 logger = logging.getLogger('xsarsea.windspeed')
 
@@ -23,6 +24,7 @@ class Model:
 
     _available_models = {}
     _name_prefix = ''
+    _priority = None
 
     @abstractmethod
     def __init__(self, name, **kwargs):
@@ -181,19 +183,25 @@ class Model:
         file: str
         """
 
-        resolution = 'low'
+        if self.iscopol:
+            resolution = 'low'
+        else:
+            resolution = 'high'
         lut = self.to_lut(resolution=resolution, units='dB')
         ds_lut = lut.to_dataset(promote_attrs=True)
         ds_lut.sigma0_model.attrs.clear()
         ds_lut.attrs['pol'] = self.pol
         ds_lut.attrs['inc_range'] = self.inc_range
-        ds_lut.attrs['inc_step'] = self.inc_step_lr
         ds_lut.attrs['wspd_range'] = self.wspd_range
-        ds_lut.attrs['wspd_step'] = self.wspd_step_lr
         ds_lut.attrs['resolution'] = resolution
+        ds_lut.attrs['model'] = self.short_name
         if 'phi' in lut.dims:
             ds_lut.attrs['phi_range'] = self.phi_range
-            ds_lut.attrs['phi_step'] = self.phi_step_lr
+
+        ds_lut.attrs['wspd_step'] = np.round(np.unique(np.diff(lut.wspd)), decimals=2)[0]
+        ds_lut.attrs['inc_step'] = np.round(np.unique(np.diff(lut.incidence)), decimals=2)[0]
+        if 'phi' in lut.dims:
+            ds_lut.attrs['phi_step'] = np.round(np.unique(np.diff(lut.phi)), decimals=2)[0]
 
         ds_lut.to_netcdf(file)
 
@@ -250,6 +258,7 @@ class LutModel(Model):
     """
 
     _name_prefix = 'nc_lut_'
+    _priority = None
 
     def __call__(self, inc, wspd, phi=None, units=None, **kwargs):
 
@@ -288,11 +297,17 @@ class NcLutModel(LutModel):
     Class to handle luts in netcdf xsarsea format
     """
 
+    _priority = 10
+
+    @property
+    def short_name(self):
+        return self._short_name
+
     def __init__(self, path, **kwargs):
         name = os.path.splitext(os.path.basename(path))[0]
         # we do not want to read full dataset at this step, we just want global attributes
         with netCDF4.Dataset(path) as ncfile:
-            for attr in ['units', 'pol', 'inc_range', 'wspd_range', 'phi_range', 'inc_step', 'wspd_step', 'phi_step']:
+            for attr in ['units', 'pol', 'model', 'resolution', 'inc_range', 'wspd_range', 'phi_range', 'inc_step', 'wspd_step', 'phi_step']:
                 try:
                     kwargs[attr]=ncfile.getncattr(attr)
                     if isinstance(kwargs[attr], np.ndarray):
@@ -300,6 +315,12 @@ class NcLutModel(LutModel):
                 except AttributeError as e:
                     if 'phi' not in attr:
                         raise AttributeError('Attr %s not found in %s' % (attr, path))
+        self._short_name = kwargs.pop('model')
+        if kwargs['resolution'] == 'low':
+            kwargs['inc_step_lr'] = kwargs.pop('inc_step')
+            kwargs['wspd_step_lr'] = kwargs.pop('wspd_step')
+            kwargs['phi_step_lr'] = kwargs.pop('phi_step', None)
+
         super().__init__(name, **kwargs)
         self.path = path
 
@@ -312,6 +333,7 @@ class NcLutModel(LutModel):
         lut.attrs['units'] = ds_lut.attrs['units']
         lut.attrs['model'] = ds_lut.attrs['model']
         lut.attrs['resolution'] = ds_lut.attrs['resolution']
+
 
         return lut
 
@@ -364,10 +386,35 @@ def available_models(pol=None):
 
     Returns
     -------
-    dict
-        dict of available models. Key is name, value is model.
+    pandas.DataFrame
 
     """
+
+    avail_models = pd.DataFrame(columns=['short_name', 'priority', 'pol', 'model'], index=[])
+
+    for name, model in Model._available_models.items():
+        # print('%s: %s' % (name, model))
+        avail_models.loc[name, 'model'] = model
+        avail_models.loc[name, 'pol'] = model.pol
+        avail_models.loc[name, 'priority'] = model._priority
+        avail_models.loc[name, 'short_name'] = model.short_name
+
+    aliased = avail_models.sort_values('priority', ascending=False).drop_duplicates('short_name').rename(
+        columns=dict(short_name='alias')).drop(columns='priority')
+
+    non_aliased = avail_models.drop(aliased.index).drop(columns='priority').rename(columns=dict(short_name='alias'))
+    non_aliased['alias'] = None
+    # aliased.merge(non_aliased)
+    # aliased
+    avail_models = pd.concat([aliased, non_aliased])
+
+    # filter
+    if pol is not None:
+        avail_models = avail_models[avail_models.pol == pol]
+
+    return avail_models
+
+
     if pol is None:
         return Model._available_models
     else:
@@ -396,4 +443,14 @@ def get_model(name):
         # name is already a model
         return name
 
-    return available_models()[name]
+    avail_models = available_models()
+
+    try:
+        model = avail_models.loc[name].model
+    except KeyError:
+        try:
+            model = avail_models[avail_models.alias == name].model.item()
+        except ValueError:
+            raise KeyError('model %s not found' % name)
+
+    return model

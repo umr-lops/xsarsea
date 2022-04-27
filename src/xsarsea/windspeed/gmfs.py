@@ -15,6 +15,7 @@ class GmfModel(Model):
     """
 
     _name_prefix = 'gmf_'
+    _priority = 3
 
     @classmethod
     def register(cls, name=None, pol=None, units='linear', **kwargs):

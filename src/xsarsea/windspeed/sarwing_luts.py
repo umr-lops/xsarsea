@@ -9,6 +9,7 @@ from .models import LutModel
 class SarwingLutModel(LutModel):
 
     _name_prefix = 'sarwing_lut_'
+    _priority = 1
 
     def __init__(self, name, path, **kwargs):
         super().__init__(name, **kwargs)

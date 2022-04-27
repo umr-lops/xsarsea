@@ -13,7 +13,8 @@ def models_to_nc(
     if sarwing_dir is not None:
         xsarsea.windspeed.register_all_sarwing_luts(sarwing_dir)
     prefix = xsarsea.windspeed.models.LutModel._name_prefix
-    for model_name, model in xsarsea.windspeed.available_models().items():
+    for model_name, row_model in xsarsea.windspeed.available_models().iterrows():
+        model = row_model.model
         if not isinstance(model, xsarsea.windspeed.models.NcLutModel):
             try:
                 outfile = os.path.join(export_dir, '%s%s.nc' % (prefix, model.name))
