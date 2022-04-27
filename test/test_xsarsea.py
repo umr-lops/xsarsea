@@ -20,18 +20,24 @@ def gmf_dummy(inc, wspd, phi=None):
     return sig
 
 def test_available_models():
-    models = windspeed.available_models()
+    models = windspeed.available_models().index
     assert 'gmf_cmod5n' in models
     assert 'gmf_dummy' in models
 
     sarwing_luts_subset_path = xsarsea.utils.get_test_file('sarwing_luts_subset')
     windspeed.register_all_sarwing_luts(sarwing_luts_subset_path)
+    assert 'sarwing_lut_cmodms1ahw' in windspeed.available_models().index
 
-    assert 'sarwing_lut_cmodms1ahw' in models
+    nc_luts_path = xsarsea.utils.get_test_file('xsarsea_luts')
+    windspeed.models.register_all_nc_luts(nc_luts_path)
+    assert 'nc_lut_sarwing_lut_cmod5n' in windspeed.available_models().index
+
+    assert 'sarwing_lut_cmodms1ahw' in windspeed.available_models().index
 
 
 def test_models():
-    for model_name, model in windspeed.available_models().items():
+    for model_name, model_row in windspeed.available_models().iterrows():
+        model = model_row.model
         print('checking model %s' % model_name)
         lut = model.to_lut()
 
