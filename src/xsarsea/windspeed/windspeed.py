@@ -10,7 +10,7 @@ from .utils import logger
 from .models import get_model
 
 @timing(logger.info)
-def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsig_co=0.1, dsig_cr=0.1, model=None):
+def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsig_co=0.1, dsig_cr=0.1, model=None, **kwargs):
     """
     Invert sigma0 to retrieve windspeed from model (lut or gmf).
 
@@ -117,7 +117,7 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
         dwspd_fg = 2
 
         try:
-            sigma0_co_lut_db = models[0].to_lut(units='dB')  # shape (inc, wspd, phi)
+            sigma0_co_lut_db = models[0].to_lut(units='dB', **kwargs)  # shape (inc, wspd, phi)
             np_sigma0_co_lut_db = np.ascontiguousarray(np.asarray(sigma0_co_lut_db.transpose('wspd', 'phi', 'incidence')))
             np_wspd_dim = np.asarray(sigma0_co_lut_db.wspd)
             np_phi_dim = np.asarray(sigma0_co_lut_db.phi)
@@ -144,7 +144,7 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
 
 
         if not np.all(np.isnan(np_sigma0_cr_db)):
-            sigma0_cr_lut_db = models[1].to_lut(units='dB')
+            sigma0_cr_lut_db = models[1].to_lut(units='dB', **kwargs)
             np_sigma0_cr_lut_db = np.ascontiguousarray(np.asarray(sigma0_cr_lut_db.transpose('wspd', 'incidence')))
             np_wspd_lut_cr = np.asarray(sigma0_cr_lut_db.wspd)
             np_inc_cr_dim = np.asarray(sigma0_cr_lut_db.incidence)

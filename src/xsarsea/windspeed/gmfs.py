@@ -14,6 +14,9 @@ class GmfModel(Model):
     GmfModel class for handling model from analitycal functions. See :func:`~Model`
     """
 
+    _name_prefix = 'gmf_'
+    _priority = 3
+
     @classmethod
     def register(cls, name=None, pol=None, units='linear', **kwargs):
         """
@@ -73,8 +76,8 @@ class GmfModel(Model):
         def inner(func):
             gmf_name = name or func.__name__
 
-            if not gmf_name.startswith('gmf_'):
-                raise ValueError("gmf function must start with 'gmf_'. Got %s" % gmf_name)
+            if not gmf_name.startswith(cls._name_prefix):
+                raise ValueError("gmf function must start with '%s'. Got %s" % ( cls._name_prefix, gmf_name ))
 
             wspd_range = kwargs.pop('wspd_range', None)
             if wspd_range is None:
@@ -298,18 +301,28 @@ class GmfModel(Model):
     @timing(logger=logger.debug)
     def _raw_lut(self, **kwargs):
 
-        if self.iscopol:
+
+        resolution = kwargs.pop('resolution', 'low')  # low res by default
+        if resolution is None:
+            if self.iscopol:
+                # low resolution by default if phi (copol)
+                resolution = 'low'
+            else:
+                resolution = 'high'
+
+        logger.debug('_raw_lut gmf at res %s' % resolution)
+
+        if resolution == 'low':
             # the lut is generated at low res, for improved performance
             # self.to_lut() will interp it to high res
 
-            inc_step = kwargs.pop('inc_step_lr', self.inc_step)
-            wspd_step = kwargs.pop('wspd_step_lr', self.wspd_step)
-            phi_step = kwargs.pop('phi_step_lr', self.phi_step)
-        else:
-            # copol lut are smaller, use full res
+            inc_step = kwargs.pop('inc_step_lr', self.inc_step_lr)
+            wspd_step = kwargs.pop('wspd_step_lr', self.wspd_step_lr)
+            phi_step = kwargs.pop('phi_step_lr', self.phi_step_lr)
+        elif resolution == 'high':
             inc_step = kwargs.pop('inc_step', self.inc_step)
             wspd_step = kwargs.pop('wspd_step', self.wspd_step)
-            phi_step = None
+            phi_step = kwargs.pop('phi_step', self.phi_step)
 
         inc, wspd, phi = [
             r and np.linspace(r[0], r[1], num=int(np.round((r[1] - r[0]) / step) + 1))
@@ -320,5 +333,6 @@ class GmfModel(Model):
         ]
 
         lut = self.__call__(inc, wspd, phi)
+        lut.attrs['resolution'] = resolution
 
         return lut
