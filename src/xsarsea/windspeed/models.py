@@ -4,6 +4,13 @@ from abc import abstractmethod
 import numpy as np
 import xarray as xr
 import os
+import glob
+import netCDF4
+import logging
+
+logger = logging.getLogger('xsarsea.windspeed')
+
+
 
 
 class Model:
@@ -15,6 +22,7 @@ class Model:
     """
 
     _available_models = {}
+    _name_prefix = ''
 
     @abstractmethod
     def __init__(self, name, **kwargs):
@@ -26,24 +34,45 @@ class Model:
         self.__dict__.update(kwargs)
         if not hasattr(self, 'inc_range'):
             self.inc_range = [17., 50.]
-        # steps for generated luts
-        self.inc_step = kwargs.pop('inc_step', 0.2)
-        self.wspd_step = kwargs.pop('wspd_step', 0.2)
-        self.phi_step = kwargs.pop('phi_step', 2)
 
-        # steps for low res luts
-        self.inc_step_lr = kwargs.pop('inc_step', 1.)
-        self.wspd_step_lr = kwargs.pop('wspd_step', 0.4)
-        self.phi_step_lr = kwargs.pop('phi_step', 2.5)
+        # steps for generated luts
+        if self.phi_range is not None:
+            # luts with 'phi' (copol) can be big.
+            # we define steps for low res lut (used for storage, and to call the gmf)
+
+            self.inc_step_lr = kwargs.pop('inc_step', 1.)
+            self.wspd_step_lr = kwargs.pop('wspd_step', 0.4)
+            self.phi_step_lr = kwargs.pop('phi_step', 2.5)
+
+            # and for high res luts, to interpolate the low res lut at high res
+            self.inc_step = kwargs.pop('inc_step', 0.2)
+            self.wspd_step = kwargs.pop('wspd_step', 0.2)
+            self.phi_step = kwargs.pop('phi_step', 2)
+        else:
+            # lut with no phi_range are small, and can be directly used at high res
+            self.inc_step = kwargs.pop('inc_step', 0.1)
+            self.wspd_step = kwargs.pop('wspd_step', 0.1)
+            self.phi_step = None
+
+            self.inc_step_lr = None
+            self.wspd_step_lr = None
+            self.phi_step_lr = None
 
         self.__class__._available_models[name] = self
+
+    @property
+    @abstractmethod
+    def short_name(self):
+        if self.__class__._name_prefix and self.name.startswith(self.__class__._name_prefix):
+            return self.name.replace(self.__class__._name_prefix, '', 1)
+        else:
+            return None
 
     @abstractmethod
     def _raw_lut(self):
         pass
 
-    @staticmethod
-    def _check_lut(lut):
+    def _normalize_lut(self, lut, **kwargs):
         # check that lut is correct
         assert isinstance(lut, xr.DataArray)
         try:
@@ -66,7 +95,41 @@ class Model:
         else:
             raise IndexError("Bad dims '%s'" % lut.dims)
 
-        return True
+        assert 'resolution' in lut.attrs
+
+        # we check if the lut needs interpolation
+        resolution = kwargs.pop('resolution', 'high')
+        if resolution is None:
+            # high res by default
+            resolution = 'high'
+
+        lut_resolution = lut.attrs['resolution']
+
+        if resolution is not None and resolution != lut_resolution:
+            if resolution == 'high':
+                # high resolution steps
+                inc_step = kwargs.pop('inc_step', self.inc_step)
+                wspd_step = kwargs.pop('wspd_step', self.wspd_step)
+                phi_step = kwargs.pop('phi_step', self.phi_step)
+            elif resolution == 'low':
+                # low resolution steps
+                inc_step = kwargs.pop('inc_step_lr', self.inc_step_lr)
+                wspd_step = kwargs.pop('wspd_step_lr', self.wspd_step_lr)
+                phi_step = kwargs.pop('phi_step_lr', self.phi_step_lr)
+
+            inc, wspd, phi = [
+                r and np.linspace(r[0], r[1], num=int(np.round((r[1] - r[0]) / step) + 1))
+                for r, step in zip(
+                    [self.inc_range, self.wspd_range, self.phi_range],
+                    [inc_step, wspd_step, phi_step]
+                )
+            ]
+            logger.debug('interp lut %s to high res' % self.name)
+            interp_kwargs = {k: v for k, v in zip(['incidence', 'wspd', 'phi'], [inc, wspd, phi]) if v is not None}
+            lut = lut.interp(**interp_kwargs, kwargs=dict(bounds_error=True))
+            lut.attrs['resolution'] = resolution
+
+        return lut
 
     @property
     def iscopol(self):
@@ -93,35 +156,9 @@ class Model:
 
         """
 
-        lut = self._raw_lut()
-        self._check_lut(lut)
+        lut = self._raw_lut(**kwargs)
 
-        if self.iscopol:
-            # interp the the lut
-            resolution = kwargs.pop('resolution', 'high')
-
-            if resolution is not None:
-                if resolution == 'high':
-                    # full resolution steps
-                    inc_step = kwargs.pop('inc_step', self.inc_step)
-                    wspd_step = kwargs.pop('wspd_step', self.wspd_step)
-                    phi_step = kwargs.pop('phi_step', self.phi_step)
-                elif resolution == 'low':
-                    # low resolution steps
-                    inc_step = kwargs.pop('inc_step_lr', self.inc_step_lr)
-                    wspd_step = kwargs.pop('wspd_step_lr', self.wspd_step_lr)
-                    phi_step = kwargs.pop('phi_step_lr', self.phi_step_lr)
-
-                inc, wspd, phi = [
-                    r and np.linspace(r[0], r[1], num=int(np.round((r[1] - r[0]) / step) + 1))
-                    for r, step in zip(
-                        [self.inc_range, self.wspd_range, self.phi_range],
-                        [inc_step, wspd_step, phi_step]
-                    )
-                ]
-
-                interp_kwargs = {k: v for k, v in zip(['incidence', 'wspd', 'phi'], [inc, wspd, phi]) if v is not None}
-                lut = lut.interp(**interp_kwargs, kwargs=dict(bounds_error=True))
+        lut = self._normalize_lut(lut, **kwargs)
 
         final_lut = lut
 
@@ -144,6 +181,7 @@ class Model:
             raise ValueError("Unit not known: %s. Known are 'dB' or 'linear' " % units)
 
         final_lut.attrs['model'] = self.name
+        final_lut.attrs['pol'] = self.pol
         final_lut.name = 'sigma0_model'
 
         return final_lut
@@ -157,9 +195,22 @@ class Model:
         file: str
         """
 
-        lut = self.to_lut(resolution='low', units='dB')
-        lut.attrs['pol'] = self.pol
-        lut.to_netcdf(file)
+        resolution = 'low'
+        lut = self.to_lut(resolution=resolution, units='dB')
+        ds_lut = lut.to_dataset(promote_attrs=True)
+        ds_lut.sigma0_model.attrs.clear()
+        ds_lut.attrs['pol'] = self.pol
+        ds_lut.attrs['inc_range'] = self.inc_range
+        ds_lut.attrs['inc_step'] = self.inc_step_lr
+        ds_lut.attrs['wspd_range'] = self.wspd_range
+        ds_lut.attrs['wspd_step'] = self.wspd_step_lr
+        ds_lut.attrs['resolution'] = resolution
+        if 'phi' in lut.dims:
+            ds_lut.attrs['phi_range'] = self.phi_range
+            ds_lut.attrs['phi_step'] = self.phi_step_lr
+
+        ds_lut.to_netcdf(file)
+
 
     @abstractmethod
     def __call__(self, inc, wspd, phi=None, broadcast=False):
@@ -212,7 +263,9 @@ class LutModel(Model):
     True
     """
 
-    def __call__(self, inc, wspd, phi=None, units=None):
+    _name_prefix = 'nc_lut_'
+
+    def __call__(self, inc, wspd, phi=None, units=None, **kwargs):
 
         all_scalar = all(np.isscalar(v) for v in [inc, wspd, phi] if v is not None)
 
@@ -225,7 +278,7 @@ class LutModel(Model):
         if not (all_scalar or all_1d):
             raise NotImplementedError('Only scalar or 1D array are implemented for LutModel')
 
-        lut = self.to_lut(units=units)
+        lut = self.to_lut(units=units, **kwargs)
         if 'phi' in lut.dims:
             sigma0 = lut.interp(incidence=inc, wspd=wspd, phi=phi)
         else:
@@ -244,30 +297,73 @@ class LutModel(Model):
             return sigma0
 
 
-class XsarseaLutModel(LutModel):
+class NcLutModel(LutModel):
     """
     Class to handle luts in netcdf xsarsea format
     """
 
     def __init__(self, path, **kwargs):
         name = os.path.splitext(os.path.basename(path))[0]
+        # we do not want to read full dataset at this step, we just want global attributes
+        with netCDF4.Dataset(path) as ncfile:
+            for attr in ['units', 'pol', 'inc_range', 'wspd_range', 'phi_range', 'inc_step', 'wspd_step', 'phi_step']:
+                try:
+                    kwargs[attr]=ncfile.getncattr(attr)
+                    if isinstance(kwargs[attr], np.ndarray):
+                        kwargs[attr] = list(kwargs[attr])
+                except AttributeError as e:
+                    if 'phi' not in attr:
+                        raise AttributeError('Attr %s not found in %s' % (attr, path))
         super().__init__(name, **kwargs)
         self.path = path
 
-    def _raw_lut(self):
+    def _raw_lut(self, **kwargs):
         if not os.path.isfile(self.path):
             raise FileNotFoundError(self.path)
-        lut = xr.open_dataset(self.path)
-        lut = lut.sigma0_model
-        self.pol = lut.attrs['pol']
-        self.inc_range = [np.min(lut['incidence']), np.max(lut['incidence'])]
-        self.wspd_range = [np.min(lut['wspd']), np.max(lut['wspd'])]
-        if 'phi' in lut.dims:
-            self.phi_range = [np.min(lut['phi']), np.max(lut['phi'])]
-        else:
-            self.phi_range = None
+        ds_lut = xr.open_dataset(self.path)
+
+        lut = ds_lut.sigma0_model
+        lut.attrs['units'] = ds_lut.attrs['units']
+        lut.attrs['model'] = ds_lut.attrs['model']
+        lut.attrs['resolution'] = ds_lut.attrs['resolution']
 
         return lut
+
+def register_all_nc_luts(topdir):
+    """
+    Register all netcdf luts found under `topdir`.
+
+    This function return nothing. See `xsarsea.windspeed.available_models` to see registered models.
+
+    Parameters
+    ----------
+    topdir: str
+        top dir path to netcdf luts.
+
+    Examples
+    --------
+    register a subset of sarwing luts
+
+    >>> xsarsea.windspeed.register_all_nc_luts(xsarsea.get_test_file('nc_luts_subset'))
+
+    register all sarwing lut from ifremer path
+
+    >>> xsarsea.windspeed.register_all_sarwing_luts('/home/datawork-cersat-public/cache/project/sarwing/xsardata/nc_luts')
+
+    Notes
+    _____
+    Sarwing lut can be downloaded from https://cyclobs.ifremer.fr/static/sarwing_datarmor/xsardata/nc_luts
+
+    See Also
+    --------
+    xsarsea.windspeed.available_models
+    xsarsea.windspeed.gmfs.GmfModel.register
+
+    """
+    for path in glob.glob(os.path.join(topdir, "%s*.nc" % NcLutModel._name_prefix)):
+        path = os.path.abspath(os.path.join(topdir, path))
+
+        sarwing_model = NcLutModel(path)
 
 
 def available_models(pol=None):

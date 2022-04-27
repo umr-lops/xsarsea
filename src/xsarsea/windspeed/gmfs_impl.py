@@ -80,7 +80,7 @@ gmf_cmod5_generic(neutral=False)
 gmf_cmod5_generic(neutral=True)
 
 @GmfModel.register( wspd_range=[0.2, 50.], pol='VV', units='linear')
-def gmf_cmodIfr2(inc_angle, wind_speed, wind_dir):
+def gmf_cmodifr2(inc_angle, wind_speed, wind_dir):
 
     C = np.zeros(26)
 
