@@ -36,27 +36,13 @@ class Model:
             self.inc_range = [17., 50.]
 
         # steps for generated luts
-        if self.phi_range is not None:
-            # luts with 'phi' (copol) can be big.
-            # we define steps for low res lut (used for storage, and to call the gmf)
+        self.inc_step_lr = kwargs.pop('inc_step_lr', 1.)
+        self.wspd_step_lr = kwargs.pop('wspd_step_lr', 0.4)
+        self.phi_step_lr = kwargs.pop('phi_step_lr', 2.5)
 
-            self.inc_step_lr = kwargs.pop('inc_step', 1.)
-            self.wspd_step_lr = kwargs.pop('wspd_step', 0.4)
-            self.phi_step_lr = kwargs.pop('phi_step', 2.5)
-
-            # and for high res luts, to interpolate the low res lut at high res
-            self.inc_step = kwargs.pop('inc_step', 0.2)
-            self.wspd_step = kwargs.pop('wspd_step', 0.2)
-            self.phi_step = kwargs.pop('phi_step', 2)
-        else:
-            # lut with no phi_range are small, and can be directly used at high res
-            self.inc_step = kwargs.pop('inc_step', 0.1)
-            self.wspd_step = kwargs.pop('wspd_step', 0.1)
-            self.phi_step = None
-
-            self.inc_step_lr = None
-            self.wspd_step_lr = None
-            self.phi_step_lr = None
+        self.inc_step = kwargs.pop('inc_step', 0.2)
+        self.wspd_step = kwargs.pop('wspd_step', 0.2)
+        self.phi_step = kwargs.pop('phi_step', 2)
 
         self.__class__._available_models[name] = self
 

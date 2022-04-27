@@ -32,6 +32,7 @@ def test_available_models():
 
 def test_models():
     for model_name, model in windspeed.available_models().items():
+        print('checking model %s' % model_name)
         lut = model.to_lut()
 
         # scalar check
