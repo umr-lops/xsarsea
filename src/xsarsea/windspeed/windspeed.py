@@ -154,71 +154,6 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
             np_wspd_lut_cr = np.array([], dtype=np.float64)
             np_sigma0_cr_lut_db = np.array([[]], dtype=np.float64)
 
-
-        #def __invert_from_model_scalar(one_inc, one_sigma0_co_db, one_sigma0_cr_db, one_dsig_cr, one_ancillary_wind):
-        #    # invert from gmf for scalar (float) input.
-        #    # this function will be vectorized with 'numba.vectorize' or 'numpy.frompyfunc'
-        #    # set debug=True below to force 'numpy.frompyfunc', so you can debug this code
-#
-        #    if np.isnan(one_inc):
-        #        return np.nan + 1j * np.nan
-#
-        #    if not np.isnan(one_sigma0_co_db):
-        #        # copol inversion available
-        #        i_inc = np.argmin(np.abs(np_inc_dim-one_inc))
-        #        np_sigma0_co_lut_db_inc = np_sigma0_co_lut_db[:, :, i_inc]
-#
-        #        # get wind dir components, relative to antenna and azi
-        #        # '-'np.real, because for luts and gmf, wind speed is positive when it's xtrack component is negative
-        #        m_antenna = -np.real(one_ancillary_wind)  # antenna (xtrack)
-        #        m_azi = np.imag(one_ancillary_wind)  # azi (atrack)
-        #        if phi_180:
-        #            m_azi = np.abs(m_azi)  # symetrical lut
-        #        Jwind_co = ((np_wspd_lut_co_antenna - m_antenna) / d_antenna) ** 2 + \
-        #                   ((np_wspd_lut_co_azi - m_azi) / d_azi) ** 2  # shape (phi, wspd)
-        #        Jsig_co = ((np_sigma0_co_lut_db_inc - one_sigma0_co_db) / dsig_co) ** 2  # shape (wspd, phi)
-        #        J_co = Jwind_co + Jsig_co
-        #        ## cost function
-        #        iJ_co = np.argmin(J_co)
-        #        lut_idx = (iJ_co // J_co.shape[-1], iJ_co % J_co.shape[-1])
-        #        wspd_co = np_wspd_lut[lut_idx]
-        #    else:
-        #        # no copol. use ancillary wind as wspd_co
-        #        wspd_co = np.abs(one_ancillary_wind)
-#
-        #    wspd_dual = wspd_co
-        #    if not np.isnan(one_sigma0_cr_db):
-        #        # crosspol available, do dualpol inversion
-        #        i_inc = np.argmin(np.abs(np_inc_cr_dim - one_inc))
-        #        np_sigma0_cr_lut_db_inc = np_sigma0_cr_lut_db[:, i_inc]
-#
-        #        Jwind_cr = ((np_wspd_lut_cr - wspd_co) / dwspd_fg) ** 2.
-        #        Jsig_cr = ((np_sigma0_cr_lut_db_inc - one_sigma0_cr_db) / one_dsig_cr) ** 2.
-        #        if not np.all(np.isnan(Jwind_cr)):
-        #            J_cr = Jsig_cr + Jwind_cr
-        #        else:
-        #            J_cr = Jsig_cr
-        #        # numba doesn't support nanargmin
-        #        # having nan in J_cr is an edge case, but if some nan where provided to analytical
-        #        # function, we have to handle it
-        #        # J_cr[np.isnan(J_cr)] = np.nanmax(J_cr)
-        #        wspd_dual = np_wspd_lut_cr[np.argmin(J_cr)]
-#
-        #    # numba.vectorize doesn't allow multiple outputs, so we pack wspd_co and wspd_dual into a complex
-        #    return wspd_co + 1j * wspd_dual
-#
-        ## build a vectorized function from __invert_from_gmf_scalar
-        #debug = sys.gettrace()
-        ## debug = True  # force np.frompyfunc
-        #if debug:
-        #    __invert_from_model_vect = timing(logger=logger.debug)(np.frompyfunc(__invert_from_model_scalar, 5, 1))
-        #else:
-        #    # fastmath can be used, but we will need nan handling
-        #    __invert_from_model_vect = timing(logger=logger.debug)(
-        #        vectorize([complex128(float64, float64, float64, float64, complex128)], fastmath={'nnan': False}, target='parallel')
-        #        (__invert_from_model_scalar)
-        #    )
-
         def __invert_from_model_1d(inc_1d, sigma0_co_db_1d, sigma0_cr_db_1d, dsig_cr_1d, ancillary_wind_1d, out_co, out_cr):
             # invert from gmf for 1d vector (float) input.
             # this function will be vectorized with 'numba.guvectorize' or 'numpy.frompyfunc'
@@ -282,7 +217,7 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
 
         # build a vectorized function from __invert_from_gmf_scalar
         debug = sys.gettrace()
-        # debug = True  # force np.frompyfunc
+        # debug = True  # force pure python
         # debug = False # force numba.guvectorize
         if debug:
             logger.debug('using __invert_from_model_1d in pure python mode (debug)')
@@ -298,7 +233,10 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
         else:
             # fastmath can be used, but we will need nan handling
             __invert_from_model_vect = timing(logger=logger.debug)(
-                guvectorize([void(float64[:], float64[:], float64[:], float64[:], complex128[:], float64[:], float64[:])],'(n),(n),(n),(n),(n)->(n),(n)', fastmath={'nnan': False}, target='parallel')
+                guvectorize(
+                    [void(float64[:], float64[:], float64[:], float64[:], complex128[:], float64[:], float64[:])],
+                    '(n),(n),(n),(n),(n)->(n),(n)',
+                    fastmath={'nnan': False}, target='parallel')
                 (__invert_from_model_1d)
             )
 
@@ -332,7 +270,7 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
                 ):
                     da_ws_co.data, da_ws_cr.data = da.apply_gufunc(
                         _invert_from_model_numpy,
-                        "(m),(m),(m),(m),(m)->(m),(m)",
+                        '(n),(n),(n),(n),(n)->(n),(n)',
                         inc.data, sigma0_co_db.data, sigma0_cr_db.data, dsig_cr.data, ancillary_wind.data
                     )
                     logger.debug('invert with map_blocks')
@@ -360,7 +298,6 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
                 ancillary_wind
             )
 
-        #return da_ws.astype(np.complex128)
         return da_ws_co, da_ws_cr
 
     # main
