@@ -1,5 +1,3 @@
-
-
 import sys
 from numba import vectorize, guvectorize, float64, complex128, void
 import numpy as np
@@ -25,7 +23,7 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
     ancillary_wind=: xarray.DataArray (numpy.complex28)
         ancillary wind
 
-            | (for example ecmwf winds), in **image convention**
+            | (for example ecmwf winds), in **model convention**
     model=: str or tuple
         model to use.
 
@@ -46,7 +44,9 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
     Returns
     -------
     xarray.DataArray or tuple
-        inverted windspeed in m/s
+        inverted windspeed in m/s.
+        If available (copol or dualpol), the returned array is `np.complex64`, with the angle of the returned array is
+        inverted direction in **gmf convention** (use `-np.conj(result))` to get it in standard convention)
 
     See Also
     --------
@@ -158,6 +158,13 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
             # invert from gmf for 1d vector (float) input.
             # this function will be vectorized with 'numba.guvectorize' or 'numpy.frompyfunc'
             # set debug=True below to force 'numpy.frompyfunc', so you can debug this code
+
+            # gmf and lut doesn't have the same direction convention than xsarsea in the xtrack direction
+            # for xsarsea, positive xtrack means in the xtrack increasing direction
+            # for gmf and lut, positive means in the xtrack decreasing direction
+            # we switch ancillary wind to the gmf convention
+            #ancillary_wind_1d = -np.conj(ancillary_wind_1d)
+
             for i in range(len(inc_1d)):
                 one_inc = inc_1d[i]
                 one_sigma0_co_db = sigma0_co_db_1d[i]
@@ -175,8 +182,7 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
                     np_sigma0_co_lut_db_inc = np_sigma0_co_lut_db[:, :, i_inc]
 
                     # get wind dir components, relative to antenna and azi
-                    # '-'np.real, because for luts and gmf, wind speed is positive when it's xtrack component is negative
-                    m_antenna = -np.real(one_ancillary_wind)  # antenna (xtrack)
+                    m_antenna = np.real(one_ancillary_wind)  # antenna (xtrack)
                     m_azi = np.imag(one_ancillary_wind)  # azi (atrack)
                     if phi_180:
                         m_azi = np.abs(m_azi)  # symetrical lut
@@ -188,32 +194,53 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
                     iJ_co = np.argmin(J_co)
                     lut_idx = (iJ_co // J_co.shape[-1], iJ_co % J_co.shape[-1])
                     wspd_co = np_wspd_lut[lut_idx]
-                else:
-                    # no copol. use ancillary wind as wspd_co
-                    wspd_co = np.abs(one_ancillary_wind)
+                    wphi_co = np_phi_lut[lut_idx]
 
-                wspd_dual = wspd_co
+                    if phi_180:
+                        # two phi solution. choose closest from ancillary wind
+                        diff_angle = np.angle(one_ancillary_wind / (wspd_co + np.exp(1j * np.deg2rad(wphi_co))) )
+                        wphi_co_rad = np.arctan2(np.sin(diff_angle), np.cos(diff_angle))
+                    else:
+                        wphi_co_rad = np.deg2rad(wphi_co)
+                    wind_co = wspd_co * np.exp(1j * wphi_co_rad)
+
+
+                else:
+                    # no copol. use ancillary wind as wspd_co (if available)
+                    wind_co = one_ancillary_wind
+                    #wspd_co = np.abs(one_ancillary_wind)
+
+                #wspd_dual = np.abs(wind_co)
+                wind_dual = 0*1j
                 if not np.isnan(one_sigma0_cr_db):
                     # crosspol available, do dualpol inversion
                     i_inc = np.argmin(np.abs(np_inc_cr_dim - one_inc))
                     np_sigma0_cr_lut_db_inc = np_sigma0_cr_lut_db[:, i_inc]
 
-                    Jwind_cr = ((np_wspd_lut_cr - wspd_co) / dwspd_fg) ** 2.
+                    Jwind_cr = ((np_wspd_lut_cr - np.abs(wind_co)) / dwspd_fg) ** 2.
                     Jsig_cr = ((np_sigma0_cr_lut_db_inc - one_sigma0_cr_db) / one_dsig_cr) ** 2.
-                    if not np.all(np.isnan(Jwind_cr)):
+                    if not np.isnan(np.abs(wind_co)):
+                        # dualpol inversion, or crosspol with ancillary wind
                         J_cr = Jsig_cr + Jwind_cr
                     else:
+                        # crosspol only inversion
                         J_cr = Jsig_cr
                     # numba doesn't support nanargmin
                     # having nan in J_cr is an edge case, but if some nan where provided to analytical
                     # function, we have to handle it
                     # J_cr[np.isnan(J_cr)] = np.nanmax(J_cr)
                     wspd_dual = np_wspd_lut_cr[np.argmin(J_cr)]
+                    if not np.isnan(np.abs(wind_co)):
+                        # dualpol inversion, or crosspol with ancillary wind
+                        phi_dual = np.angle(wind_co)
+                    else:
+                        # crosspol only, no direction
+                        phi_dual = 0
+                    wind_dual = wspd_dual * np.exp(1j*phi_dual)
 
-                # numba.vectorize doesn't allow multiple outputs, so we pack wspd_co and wspd_dual into a complex
-                out_co[i] = wspd_co
-                out_cr[i] = wspd_dual
-            #return wspd_co + 1j * wspd_dual
+                out_co[i] = wind_co
+                out_cr[i] = wind_dual
+            return None
 
         # build a vectorized function from __invert_from_gmf_scalar
         debug = sys.gettrace()
@@ -234,7 +261,7 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
             # fastmath can be used, but we will need nan handling
             __invert_from_model_vect = timing(logger=logger.debug)(
                 guvectorize(
-                    [void(float64[:], float64[:], float64[:], float64[:], complex128[:], float64[:], float64[:])],
+                    [void(float64[:], float64[:], float64[:], float64[:], complex128[:], complex128[:], complex128[:])],
                     '(n),(n),(n),(n),(n)->(n),(n)',
                     fastmath={'nnan': False}, target='parallel')
                 (__invert_from_model_1d)
@@ -251,7 +278,7 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
 
         try:
             # if input is xarray, will return xarray
-            da_ws_co = xr.zeros_like(sigma0_co_db, dtype=np.float64)
+            da_ws_co = xr.zeros_like(sigma0_co_db, dtype=np.complex128)
             da_ws_co.name = 'windspeed_gmf'
             da_ws_co.attrs.clear()
             da_ws_cr = xr.zeros_like(sigma0_co_db, dtype=np.float64)
@@ -305,7 +332,7 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
 
     if models[0] and models[0].iscopol:
         try:
-            ws_co.attrs['comment'] = "windspeed inverted from model %s (%s)" % ( models[0].name, models[0].pol)
+            ws_co.attrs['comment'] = "wind speed and direction inverted from model %s (%s)" % ( models[0].name, models[0].pol)
             ws_co.attrs['model'] = models[0].name
             ws_co.attrs['units'] = 'm/s'
         except AttributeError:
@@ -317,7 +344,7 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
         if sigma0_dual is None and models[1].iscrosspol:
             # crosspol only
             try:
-                ws_cr_or_dual.attrs['comment'] = "windspeed inverted from model %s (%s)" % (models[1].name, models[1].pol)
+                ws_cr_or_dual.attrs['comment'] = "wind speed inverted from model %s (%s)" % (models[1].name, models[1].pol)
                 ws_cr_or_dual.attrs['model'] = models[1].name
                 ws_cr_or_dual.attrs['units'] = 'm/s'
             except AttributeError:
@@ -330,13 +357,15 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
             # mono copol
             return ws_co
         else:
-            # mono crosspol
-            return ws_cr_or_dual
+            # mono crosspol (no wind direction)
+            ws_cr = np.abs(ws_cr_or_dual)
+            return ws_cr
     else:
         # dualpol inversion
-        wspd_dual = xr.where((ws_co < 5) | (ws_cr_or_dual < 5), ws_co, ws_cr_or_dual)
+        wspd_dual = xr.where((np.abs(ws_co) < 5) | (np.abs(ws_cr_or_dual) < 5), ws_co, ws_cr_or_dual)
+        #wspd_dual = ws_cr_or_dual
         try:
-            wspd_dual.attrs['comment'] = "windspeed inverted from model %s (%s) and %s (%s)" % (models[0].name, models[0].pol, models[1].name, models[1].pol)
+            wspd_dual.attrs['comment'] = "wind speed and direction inverted from model %s (%s) and %s (%s)" % (models[0].name, models[0].pol, models[1].name, models[1].pol)
             wspd_dual.attrs['model'] = "%s %s" % (models[0].name, models[1].name)
             wspd_dual.attrs['units'] = 'm/s'
         except AttributeError:
