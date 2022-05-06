@@ -208,11 +208,8 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
                 else:
                     # no copol. use ancillary wind as wspd_co (if available)
                     wind_co = one_ancillary_wind
-                    #wspd_co = np.abs(one_ancillary_wind)
 
-                #wspd_dual = np.abs(wind_co)
-                wind_dual = 0*1j
-                if not np.isnan(one_sigma0_cr_db):
+                if not np.isnan(one_sigma0_cr_db) and not np.isnan(one_dsig_cr):
                     # crosspol available, do dualpol inversion
                     i_inc = np.argmin(np.abs(np_inc_cr_dim - one_inc))
                     np_sigma0_cr_lut_db_inc = np_sigma0_cr_lut_db[:, i_inc]
@@ -237,6 +234,8 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
                         # crosspol only, no direction
                         phi_dual = 0
                     wind_dual = wspd_dual * np.exp(1j*phi_dual)
+                else:
+                    wind_dual = np.nan * 1j
 
                 out_co[i] = wind_co
                 out_cr[i] = wind_dual
