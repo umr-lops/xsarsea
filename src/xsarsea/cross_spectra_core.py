@@ -8,52 +8,18 @@ import scipy
 import matplotlib.pyplot as plt
 import xrft
 import logging
-import xsar
-import os
 
-def get_imagette_indice(onetiff,wv_slc_meta):
-    good_indice = None
-    # find the indice of the tiff
-    imagette_number = os.path.basename(onetiff).split('-')[-1].replace('.tiff','')
-    logging.info('imagette_number : %s',imagette_number)
-    for ddi,ddname in enumerate(wv_slc_meta.subdatasets) :
-        if 'WV_'+imagette_number in ddname :
-            logging.info("matching ddname : %s",ddname)
-            good_indice = ddi
-    logging.info('indice in meta sentinel1 gdal driver is : %s',good_indice)
-    return good_indice
-
-def read_slc(onetiff,slice_subdomain=None,resolution=None,resampling=None):
+def read_slc(s1ds):
     """
-
-    :param one_wv: SAFE (str) full path without the last /
-    :param slice_subdomain : slice objet to define the sub part of imagette to perform cross spectra
-    :param resolution: dict for instance for 200m {'atrack' : int(np.round(200 / sar_meta.pixel_atrack_m)), 'xtrack': int(np.round(200 / sar_meta.pixel_xtrack_m))}
-    :param rasterio.enums.Resampling.rms for instance
+    Parameters
+    ----------
+        s1ds:  (xsar Sentinel1Dataset: obj xarray Dataset)  from tiff product
     :return:
     """
-    logging.info('tiff: %s',onetiff)
-    logging.info('resampling : %s',resampling)
-    safepath = os.path.dirname(os.path.dirname(onetiff))
-    logging.info('safepath: %s',safepath)
-    wv_slc_meta = xsar.Sentinel1Meta(safepath)
-    logging.debug('wv_slc_meta %s',wv_slc_meta)
-    good_indice = get_imagette_indice(onetiff,wv_slc_meta)
-    if resolution is not None:
-        if resolution['atrack']==1 and resolution['xtrack']==1:
-            #June 2021, a patch because currently resolution 1:1 for image and rasterio returns an error
-            s1ds = xsar.Sentinel1Dataset(wv_slc_meta.subdatasets[good_indice],resolution=None,resampling=None)
-        else:
-            s1ds = xsar.Sentinel1Dataset(wv_slc_meta.subdatasets[good_indice],resolution=resolution,resampling=resampling)
-    else:
-        s1ds = xsar.Sentinel1Dataset(wv_slc_meta.subdatasets[good_indice])
     slc = s1ds.dataset
     logging.info('max xtrack val : %s',slc['xtrack'].values[-1])
     slc = slc.rename({'atrack' : 'azimuth','xtrack' : 'range'})
     azimuthSpacing, rangeSpacing = s1ds.s1meta.image['ground_pixel_spacing']
-    #rangeSpacing = slc.attrs['pixel_xtrack_m']
-    #azimuthSpacing= slc.attrs['pixel_atrack_m']
-
     platform_heading = slc.attrs['platform_heading']
     #changement des coordinates range and azimuth like Nouguier
     raxis = np.arange(len(slc['range']))
@@ -67,15 +33,7 @@ def read_slc(onetiff,slice_subdomain=None,resolution=None,resampling=None):
     # en WV on attend du 4.1m environ pour le ground range pixel spacing! dixit doc ESA, Nouguier et annotations (en slant)
     slc.attrs.update({'azimuthSpacing' : azimuthSpacing,'rangeGroundSpacing' : rangeSpacing,
                        'heading' : platform_heading})
-    # test agrouaze 18 oct 21
-    # slc.attrs.update({'azimuthSpacing' : azimuthSpacing,'rangeSpacing' : rangeSpacing,
-    #                    'heading' : platform_heading})
-    # compute modulation
-    #slc['modulation'] = slc['digital_number']/np.mean(abs(slc['digital_number'].values))#*0.0000000001 - 1000000. #division by 1000 for test
-    #slc['modulation'] = slc['digital_number']
-    if slice_subdomain is not None:
-        logging.info('subset in the image: %s',slice_subdomain)
-        slc = slc.isel(range=slice_subdomain['range'],azimuth=slice_subdomain['azimuth'],pol=0)
+
     return slc
 
 def ground_regularization(ds, *,method='nearest', **kwargs):
