@@ -20,7 +20,8 @@ setup(
         'numba',
         'scipy',
         'pyyaml',
-        'typer'
+        'typer',
+        'netCDF4'
     ],
     license='MIT',
     author='Olivier Archer',
