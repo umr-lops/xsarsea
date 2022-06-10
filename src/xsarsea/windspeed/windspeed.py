@@ -68,7 +68,7 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
     if sigma0_dual is None:
         # mono-pol inversion
         try:
-            pol = sigma0.pol
+            pol = sigma0.pol.values.item()  
         except AttributeError:
             pol = None
         model_pol = models[0].pol
