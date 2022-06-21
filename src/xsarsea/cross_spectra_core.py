@@ -1,5 +1,5 @@
 """
-author Antoine Grouazel:
+IFREMER LOPS SIAM
 original code provided by Frederic Nouguier the 29 March 2022
 """
 import numpy as np
@@ -9,89 +9,27 @@ import matplotlib.pyplot as plt
 import xrft
 import logging
 
-def read_slc(s1ds):
+def read_slc(slc):
     """
+    change coordinates
     Parameters
     ----------
-        s1ds:  (xsar Sentinel1Dataset: obj xarray Dataset)  from tiff product
+        slc: (xarray.Dataset)
     :return:
     """
-    slc = s1ds.dataset
     logging.info('max xtrack val : %s',slc['xtrack'].values[-1])
     slc = slc.rename({'atrack' : 'azimuth','xtrack' : 'range'})
-    azimuthSpacing, rangeSpacing = s1ds.s1meta.image['ground_pixel_spacing']
-    platform_heading = slc.attrs['platform_heading']
-    #changement des coordinates range and azimuth like Nouguier
     raxis = np.arange(len(slc['range']))
     aaxis = np.arange(len(slc['azimuth']))
-    raxis = raxis * rangeSpacing
-    aaxis = aaxis * azimuthSpacing
+    raxis = raxis * slc.attrs['pixel_xtrack_m'] #this one comes from the annotation
+    aaxis = aaxis * slc.attrs['pixel_atrack_m']
     logging.info('range coords before : %s',slc['range'].values)
     slc = slc.assign_coords({'range' : raxis,'azimuth' : aaxis}) # I put back the coords change because otherwise I cannot get the energy pattern expected like Nouguier
     logging.info('max range val : %s',raxis[-1])
     logging.info('range coords after : %s',slc['range'].values)
-    # en WV on attend du 4.1m environ pour le ground range pixel spacing! dixit doc ESA, Nouguier et annotations (en slant)
-    slc.attrs.update({'azimuthSpacing' : azimuthSpacing,'rangeGroundSpacing' : rangeSpacing,
-                       'heading' : platform_heading})
-
     return slc
 
-def ground_regularization(ds, *,method='nearest', **kwargs):
-    """
-    pcopy paste from /home1/datahome/fnouguie/research/numeric/R3S/SAR/postprocessing.py (april 2021)
-    Compute ground regularization: Interpolation of ds variables on a regular ground grid.
-
-    Args:
-        ds (xarray): xarray on (slant_range, azimuth coordinates)
-
-    Keyword Args:
-        method (str): method of interpolation (nearest seems to give the best results)
-        range_spacing (float, optional): ground spacing [meter]. If not defined, the mean of projected ranges steps is used. You should provide the NOT padded ground range resolution
-
-    Returns:
-        (xarray): same as ds but interpolated on (range, azimuth) coordinates
-    """
-    import warnings
-    warnings.warn('Update slant to ground projection with sinc interpolation.')
-    logging.debug('type ds: %s',type(ds))
-    #tmp = xr.DataArray(np.array([50000]),dims='altitude',coords={'altitude':np.arange(1)}) #added agrouaze for test
-
-
-    #ds = ds.rename({'xtrack':'slant_range'})
-    #ds = ds.rename({'atrack' : 'azimuth'})
-    #
-    #ds['altitude'] = tmp*
-    #ds.attrs['altitude'] = 0.5
-    logging.info('ds.coords : %s',ds.coords)
-    if 'range' in ds.coords:
-        print('Ground regularization: range coordinates already in SLC object. SLC is assumed to be on ground range coordinates already.')
-        return ds
-    if 'slant_range' not in ds.coords:
-        raise ValueError('Please provide ds with slant_range coordinates')
-
-    if 'altitude' in kwargs:
-        altitude = kwargs.pop('altitude')
-    elif 'altitude' in ds.attrs:
-        altitude = ds.altitude
-    else:
-        raise ValueError('Please provide range spacing value or altitude in kwargs')
-    logging.debug('all finite slant ranges? %s',np.isfinite(ds['slant_range'].values).all())
-    logging.debug('min slant %s',ds['slant_range'].values.min())
-    ground_ranges = np.sqrt(ds['slant_range']**2-altitude**2).rename('ground_range')
-    logging.debug('all finite ground ranges? %s',np.isfinite(ground_ranges.values).all())
-    logging.debug('ground_ranges !: %s',ground_ranges)
-    range_spacing = kwargs.pop('range_spacing', np.diff(ground_ranges).mean().data)
-    logging.debug('range spaceing : %s',range_spacing)
-    range = np.arange(ground_ranges.min(), ground_ranges.max(), range_spacing)
-    logging.debug('range : %s \n %s all ifinite? %s',range.shape,range,np.isfinite(range).all())
-    range = xr.DataArray(range, dims=('range',), coords={'range':range})
-    tmptmp = ds.assign_coords(slant_range=ground_ranges).interp(**{'slant_range':range},
-                                                              method=method)
-    logging.debug('tmptmp: %s',tmptmp)
-    #return tmptmp.dropna(dim='range').drop('slant_range')
-    return tmptmp.drop('slant_range')
-
-def compute_SAR_cross_spectrum2(slc, *, N_look=3, look_width=0.25, look_overlap=0., look_window=None,
+def compute_SAR_cross_spectrum2(gslc, *, N_look=3, look_width=0.25, look_overlap=0., look_window=None,
                                 range_spacing=None, welsh_window='hanning', nperseg={'range': 512, 'azimuth': 512},
                                 noverlap={'range': 256, 'azimuth': 256}, spacing_tol=1e-3, **kwargs):
     """
@@ -99,7 +37,7 @@ def compute_SAR_cross_spectrum2(slc, *, N_look=3, look_width=0.25, look_overlap=
     If ds contains only one cycle, spectrum wavenumbers are added as coordinates in returned DataSet, othrewise, they are passed as variables (k_range, k_azimuth).
 
     Args:
-        slc (xarray): SAR Single Look Complex image. Output of sar_processor()
+        gslc (xarray.DataArray): SAR Single Look Complex image, also called Digital Numbers.
 
     Keyword Args:
 
@@ -107,10 +45,10 @@ def compute_SAR_cross_spectrum2(slc, *, N_look=3, look_width=0.25, look_overlap=
         look_width (float): Percent of the total bandwidth used for a single look in [0,1]
         look_overlap (float): Percent of look overlaping [0,1]. Negative values means space between two looks
         look_window (xarray): window used in look processing
-        range_spacing (float, optional): range spacing used in slant range to ground range projection. Automattically chosen if left as None
+        range_spacing (float, optional): range spacing used in slant range to ground range projection. Automatically chosen if left as None
         welsh_window (str, optional): name of the window used in welsh
         nperseg (dict, optional): dict with keys 'range' and 'azimuth'. Values are the number of points used to define a look shape
-        noverlap (dict, optional): dict with keys 'range' and 'azimuth'. Values are the number of overlaping points between two looks
+        noverlap (dict, optional): dict with keys 'range' and 'azimuth'. Values are the number of overlapping points between two looks
         spacing_tol (float, optional): spacing tolerance of range azimuth sampling step.
         kwargs (dict): other arguments passed to ground_regularization()
 
@@ -119,26 +57,7 @@ def compute_SAR_cross_spectrum2(slc, *, N_look=3, look_width=0.25, look_overlap=
     """
 
     if np.abs(look_width) >= 1: raise ValueError('look_width must be in [0,1] range')
-
-    with xr.set_options(keep_attrs=True):
-        gslc = ground_regularization(slc, range_spacing=range_spacing, **kwargs)
-
     gslc = gslc.drop(list(set(gslc.coords).intersection(set(['valid_pulse', 'valid_time', 'padded_tau']))))
-
-    if isinstance(welsh_window, str) or type(welsh_window) is tuple:
-        winx = scipy.signal.get_window(welsh_window, nperseg['range'])
-        winy = scipy.signal.get_window(welsh_window, nperseg['azimuth'])
-        win = np.outer(winx, winy)
-    else:
-        win = np.asarray(welsh_window)
-        if len(win.shape) != 2:
-            raise ValueError('window must be 2-D')
-        if win.shape[0] > x.shape[-2]:
-            raise ValueError('window is longer than x.')
-        if win.shape[1] > x.shape[-1]:
-            raise ValueError('window is longer than y.')
-        nperseg['range'] = win.shape[-2]
-        nperseg['azimuth'] = win.shape[-1]
 
     stepra = nperseg['range'] - noverlap['range']
     stepaz = nperseg['azimuth'] - noverlap['azimuth']
@@ -158,13 +77,6 @@ def compute_SAR_cross_spectrum2(slc, *, N_look=3, look_width=0.25, look_overlap=
         for ky, indy in enumerate(indicesy):
             index.append([indx, indx + nperseg['range'], indy, indy + nperseg['azimuth']])
 
-    #             plot = True if ((kx==0) and (ky==0)) else False
-    #             sub = gslc[{'range':slice(indx, indx+nperseg['range']), 'azimuth':slice(indy, indy+nperseg['azimuth'])}]
-    #             sub.data = scipy.signal.detrend(sub, sub.get_axis_num('range'))
-    #             sub=sub/np.abs(sub).mean(dim=['range', 'azimuth'])
-    #             sub = sub*win
-    #             xspecs.append(compute_looks(sub, N_look=N_look, look_width=look_width, look_overlap=look_overlap, look_window=look_window, plot=plot))
-
     xspecs = compute_looks_threaded(gslc, index)
     fazimuth = np.fft.fftfreq(xspecs[0]['0tau'][0].sizes['freq_azimuth'], dia[0] / (look_width * 2 * np.pi))
     allspecs = list()
@@ -175,7 +87,6 @@ def compute_SAR_cross_spectrum2(slc, *, N_look=3, look_width=0.25, look_overlap=
     allspecs = xr.merge(allspecs, join='outer', fill_value=np.nan)
     allspecs = allspecs.assign_coords(freq_range=np.fft.fftshift(frange))
     allspecs = allspecs.assign_coords(freq_azimuth=np.fft.fftshift(fazimuth))
-    #allspecs.attrs.update({'tau': slc.synthetic_duration * (look_width - look_overlap)}) #TODO fix this
     allspecs = allspecs.rename(freq_range='kx', freq_azimuth='ky')
     allspecs.kx.attrs.update({'long_name': 'wavenumber in range direction', 'units': 'rad/m'})
     allspecs.ky.attrs.update({'long_name': 'wavenumber in azimuth direction', 'units': 'rad/m'})
