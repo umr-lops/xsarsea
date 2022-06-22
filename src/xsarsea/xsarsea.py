@@ -27,7 +27,17 @@ def sigma0_detrend(sigma0, inc_angle, wind_speed_gmf=10., wind_dir_gmf=45., mode
     model = get_model(model)
 
     # get model for one atrack (all incidences)
-    sigma0_gmf_xtrack = model(inc_angle.isel(atrack=0), wind_speed_gmf, wind_dir_gmf, broadcast=True)
+    try:
+        # if using dask, model is unpicklable. The workaround is to use map_blocks
+        sigma0_gmf_xtrack = inc_angle.isel(atrack=0).map_blocks(
+            model, (wind_speed_gmf, wind_dir_gmf),
+            template=inc_angle.isel(atrack=0),
+            kwargs={'broadcast': True}
+        )
+    except AttributeError:
+        # this should be the standard way
+        # see https://github.com/dask/distributed/issues/3450#issuecomment-585255484
+        sigma0_gmf_xtrack = model(inc_angle.isel(atrack=0), wind_speed_gmf, wind_dir_gmf, broadcast=True)
 
     gmf_ratio_xtrack = sigma0_gmf_xtrack / np.nanmean(sigma0_gmf_xtrack)
     detrended = sigma0 / gmf_ratio_xtrack.broadcast_like(sigma0)
