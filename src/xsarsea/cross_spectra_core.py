@@ -23,10 +23,10 @@ def read_slc(slc):
     aaxis = np.arange(len(slc['azimuth']))
     raxis = raxis * slc.attrs['pixel_xtrack_m'] #this one comes from the annotation
     aaxis = aaxis * slc.attrs['pixel_atrack_m']
-    logging.info('range coords before : %s',slc['range'].values)
+    logging.debug('range coords before : %s',slc['range'].values)
     slc = slc.assign_coords({'range' : raxis,'azimuth' : aaxis}) # I put back the coords change because otherwise I cannot get the energy pattern expected like Nouguier
-    logging.info('max range val : %s',raxis[-1])
-    logging.info('range coords after : %s',slc['range'].values)
+    logging.debug('max range val : %s',raxis[-1])
+    logging.debug('range coords after : %s',slc['range'].values)
     return slc
 
 def compute_SAR_cross_spectrum2(gslc, *, N_look=3, look_width=0.25, look_overlap=0., look_window=None,
@@ -77,7 +77,7 @@ def compute_SAR_cross_spectrum2(gslc, *, N_look=3, look_width=0.25, look_overlap
         for ky, indy in enumerate(indicesy):
             index.append([indx, indx + nperseg['range'], indy, indy + nperseg['azimuth']])
 
-    xspecs = compute_looks_threaded(gslc, index)
+    xspecs = compute_looks_threaded(gslc, index,nlook=N_look,look_width=look_width,look_overlap=look_overlap)
     fazimuth = np.fft.fftfreq(xspecs[0]['0tau'][0].sizes['freq_azimuth'], dia[0] / (look_width * 2 * np.pi))
     allspecs = list()
     for tau in range(N_look):
@@ -120,7 +120,6 @@ def compute_looks(gslc, *, N_look=3, look_width=0.25, look_overlap=0., look_wind
     indices = indices - int(nlook / 2) if N_look % 2 else indices - int(noverlap / 2)
     indices = indices[np.where(np.logical_and(indices > 0, indices < Np - nlook + 1))]
     indices = np.sort(indices[np.argsort(np.abs(indices + int(nlook / 2) - i0))[0:N_look]])
-
     if look_window is None:
         win = 1.
     elif isinstance(look_window, str) or type(look_window) is tuple:
@@ -156,20 +155,20 @@ def compute_looks(gslc, *, N_look=3, look_width=0.25, look_overlap=0., look_wind
     return xspecs
 
 
-def compute_looks_threaded(gslc, index, **kwargs):
+def compute_looks_threaded(gslc, index,nlook,look_width,look_overlap, **kwargs):
     """
     """
     import threading, multiprocessing
 
     out = np.empty(len(index), dtype=dict)
 
-    def my_compute_looks(gslc, ind, j):
+    def my_compute_looks(gslc, ind, j,nlook,look_width,look_overlap):
         sub = gslc[{'range': slice(ind[0], ind[1]), 'azimuth': slice(ind[2], ind[3])}]
         sub.data = scipy.signal.detrend(sub, sub.get_axis_num('range'))
         sub = sub / np.abs(sub).mean(dim=['range', 'azimuth'])
-        out[j] = compute_looks(sub)
+        out[j] = compute_looks(sub,N_look=nlook,look_width=look_width,look_overlap=look_overlap)
 
-    tt = [threading.Thread(target=my_compute_looks, args=(gslc, index[j], j)) for j in range(len(index))]
+    tt = [threading.Thread(target=my_compute_looks, args=(gslc, index[j], j,nlook,look_width,look_overlap)) for j in range(len(index))]
     [t.start() for t in tt]
     [t.join() for t in tt]
     return out
