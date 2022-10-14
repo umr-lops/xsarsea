@@ -2,7 +2,10 @@
 IFREMER LOPS SIAM
 original code provided by Frederic Nouguier the 29 March 2022
 """
+import pdb
+
 import numpy as np
+import xarray
 import xarray as xr
 import scipy
 import matplotlib.pyplot as plt
@@ -17,12 +20,19 @@ def read_slc(slc):
         slc: (xarray.Dataset)
     :return:
     """
-    logging.info('max xtrack val : %s',slc['xtrack'].values[-1])
-    slc = slc.rename({'atrack' : 'azimuth','xtrack' : 'range'})
+    if 'xtrack' in slc:
+        logging.debug('max xtrack val : %s',slc['xtrack'].values[-1])
+        slc = slc.rename({'atrack' : 'azimuth','xtrack' : 'range'})
+    if 'sample' in slc:
+        slc = slc.rename({'line': 'azimuth', 'sample': 'range'})
     raxis = np.arange(len(slc['range']))
     aaxis = np.arange(len(slc['azimuth']))
-    raxis = raxis * slc.attrs['pixel_xtrack_m'] #this one comes from the annotation
-    aaxis = aaxis * slc.attrs['pixel_atrack_m']
+    #raxis = raxis * slc['range_ground_spacing'] #kx is not evenly spaced - FFT not possible
+    #raxis = raxis * slc.attrs['pixel_xtrack_m'] #this one comes from the annotation
+    raxis = xarray.DataArray(raxis * np.ones(len(raxis))*slc['range_ground_spacing'].mean().values,coords={'range':np.arange(len(raxis))},dims=['range'],attrs={'unit':'m'})
+    azimuth_spacing = slc['lineSpacing'].values
+    #aaxis = aaxis * slc.attrs['pixel_atrack_m']
+    aaxis = aaxis * azimuth_spacing
     logging.debug('range coords before : %s',slc['range'].values)
     slc = slc.assign_coords({'range' : raxis,'azimuth' : aaxis}) # I put back the coords change because otherwise I cannot get the energy pattern expected like Nouguier
     logging.debug('max range val : %s',raxis[-1])
