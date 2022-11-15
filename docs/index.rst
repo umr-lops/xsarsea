@@ -23,11 +23,14 @@ Examples
 Those examples show how to:
     * `Detrend sigma0`_ (also called *roughness* or *nice display*)
     * `Wind streaks direction`_
+    * `Computation of cross-spectrum from WV SLC acquisition`_
 
 
 * :doc:`examples/xsarsea`
 
 * :doc:`examples/streaks`
+
+* :doc:`examples/ATBD_xsarsea_crossspectra_WV`
 
 Help & Reference
 ................
@@ -59,6 +62,7 @@ Last documentation build: |today|
 
    examples/xsarsea
    examples/streaks
+   examples/ATBD_xsarsea_crossspectra_WV
 
 .. toctree::
    :maxdepth: 1
