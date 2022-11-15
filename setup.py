@@ -21,7 +21,9 @@ setup(
         'scipy',
         'pyyaml',
         'typer',
-        'netCDF4'
+        'netCDF4',
+        'matplotlib',
+        'xrft'
     ],
     license='MIT',
     author='Olivier Archer',
