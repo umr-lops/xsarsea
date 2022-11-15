@@ -22,3 +22,7 @@ cd xsarsea
 pip install -r requirements.txt
 pip install -e .
 ```
+
+# Documentation and examples
+
+https://cyclobs.ifremer.fr/static/sarwing_datarmor/xsarsea

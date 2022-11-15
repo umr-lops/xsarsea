@@ -32,6 +32,10 @@ Those examples show how to:
 
 * :doc:`examples/ATBD_xsarsea_crossspectra_WV`
 
+* :doc:`examples/windspeed_inversion`
+
+* :doc:`examples/gmfs_and_luts`
+
 Help & Reference
 ................
 
@@ -62,6 +66,8 @@ Last documentation build: |today|
 
    examples/xsarsea
    examples/streaks
+   examples/windspeed_inversion
+   examples/gmfs_and_luts
    examples/ATBD_xsarsea_crossspectra_WV
 
 .. toctree::

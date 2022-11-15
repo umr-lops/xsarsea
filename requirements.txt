@@ -10,3 +10,16 @@ nbsphinx
 jupyter-sphinx
 holoviews
 panel
+numpy
+xarray
+numba
+pytest
+fsspec
+aiohttp
+setuptools
+pyyaml
+dask[array]
+netcdf4
+typer
+
+
