@@ -13,7 +13,7 @@ def nesz_flattening(noise, inc):
     Parameters
     ----------
     noise: array-like
-        linear noise array (nesz), with shape (atrack, xtrack)
+        linear noise array (nesz), with shape (line, sample)
     inc: array-like
         incidence array
 
@@ -73,5 +73,5 @@ def nesz_flattening(noise, inc):
 
         return noise_flat
 
-    # incidence is almost constant along atrack dim, so we can make it 1D
+    # incidence is almost constant along line dim, so we can make it 1D
     return np.apply_along_axis(_noise_flattening_1row, 1, noise, np.nanmean(inc, axis=0))

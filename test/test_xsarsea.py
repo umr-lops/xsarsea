@@ -64,9 +64,9 @@ def test_models():
 
             # dask check
             da_inc, da_wspd, da_phi = [da.from_array(v) for v in [inc, wspd, phi]]
-            xr_inc = xr.DataArray(da_inc, dims=['atrack', 'xtrack'])
-            xr_wspd = xr.DataArray(da_wspd, dims=['atrack', 'xtrack'])
-            xr_phi = xr.DataArray(da_phi, dims=['atrack', 'xtrack'])
+            xr_inc = xr.DataArray(da_inc, dims=['line', 'sample'])
+            xr_wspd = xr.DataArray(da_wspd, dims=['line', 'sample'])
+            xr_phi = xr.DataArray(da_phi, dims=['line', 'sample'])
             res = model(xr_inc, xr_wspd, xr_phi)
             res.compute()
         except NotImplementedError:
@@ -77,10 +77,10 @@ def test_models():
 
 def test_inversion():
     sarwing_owi_file = xsarsea.get_test_file('s1a-iw-owi-xx-20210909t130650-20210909t130715-039605-04AE83.nc')
-    sarwing_ds = xsarsea.read_sarwing_owi(sarwing_owi_file).isel(atrack=slice(0, 50), xtrack=slice(0, 60))
+    sarwing_ds = xsarsea.read_sarwing_owi(sarwing_owi_file).isel(line=slice(0, 50), sample=slice(0, 60))
 
     owi_ecmwf_wind = sarwing_ds.owiEcmwfWindSpeed * np.exp(
-        1j * xsarsea.dir_geo_to_xtrack(sarwing_ds.owiEcmwfWindDirection, sarwing_ds.owiHeading))
+        1j * xsarsea.dir_geo_to_sample(sarwing_ds.owiEcmwfWindDirection, sarwing_ds.owiHeading))
     sarwing_ds = xr.merge([
         sarwing_ds,
         owi_ecmwf_wind.to_dataset(name='owi_ancillary_wind'),

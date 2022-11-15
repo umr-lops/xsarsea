@@ -139,8 +139,8 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
             phi_180 = False
 
         np_phi_lut, np_wspd_lut = np.meshgrid(np_phi_dim, np_wspd_dim)  # shape (wspd,phi)
-        np_wspd_lut_co_antenna = np_wspd_lut * np.cos(np.radians(np_phi_lut))  # antenna (xtrack)
-        np_wspd_lut_co_azi = np_wspd_lut * np.sin(np.radians(np_phi_lut))  # azi (atrack)
+        np_wspd_lut_co_antenna = np_wspd_lut * np.cos(np.radians(np_phi_lut))  # antenna (sample)
+        np_wspd_lut_co_azi = np_wspd_lut * np.sin(np.radians(np_phi_lut))  # azi (line)
 
 
         if not np.all(np.isnan(np_sigma0_cr_db)):
@@ -159,9 +159,9 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
             # this function will be vectorized with 'numba.guvectorize' or 'numpy.frompyfunc'
             # set debug=True below to force 'numpy.frompyfunc', so you can debug this code
 
-            # gmf and lut doesn't have the same direction convention than xsarsea in the xtrack direction
-            # for xsarsea, positive xtrack means in the xtrack increasing direction
-            # for gmf and lut, positive means in the xtrack decreasing direction
+            # gmf and lut doesn't have the same direction convention than xsarsea in the sample direction
+            # for xsarsea, positive sample means in the sample increasing direction
+            # for gmf and lut, positive means in the sample decreasing direction
             # we switch ancillary wind to the gmf convention
             #ancillary_wind_1d = -np.conj(ancillary_wind_1d)
 
@@ -182,8 +182,8 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
                     np_sigma0_co_lut_db_inc = np_sigma0_co_lut_db[:, :, i_inc]
 
                     # get wind dir components, relative to antenna and azi
-                    m_antenna = np.real(one_ancillary_wind)  # antenna (xtrack)
-                    m_azi = np.imag(one_ancillary_wind)  # azi (atrack)
+                    m_antenna = np.real(one_ancillary_wind)  # antenna (sample)
+                    m_azi = np.imag(one_ancillary_wind)  # azi (line)
                     if phi_180:
                         m_azi = np.abs(m_azi)  # symetrical lut
                     Jwind_co = ((np_wspd_lut_co_antenna - m_antenna) / d_antenna) ** 2 + \
