@@ -23,7 +23,7 @@ Examples
 Those examples show how to:
     * `Detrend sigma0`_ (also called *roughness* or *nice display*)
     * `Wind streaks direction`_
-    * `Computation of cross-spectrum from WV SLC acquisition`_
+    * `Compute cross-spectrum from WV SLC acquisition`_
 
 
 * :doc:`examples/xsarsea`
@@ -82,4 +82,5 @@ Last documentation build: |today|
 .. _xsar: https://cyclobs.ifremer.fr/static/sarwing_datarmor/xsar
 .. _Detrend sigma0: examples/xsarsea.ipynb#Sigma0-detrending
 .. _Wind streaks direction: examples/streaks.ipynb#Streaks-analysis
+.. _Compute cross-spectrum from WV SLC acquisition: examples/ATBD_xsarsea_crossspectra_WV#cross-spectrum-computation
 
