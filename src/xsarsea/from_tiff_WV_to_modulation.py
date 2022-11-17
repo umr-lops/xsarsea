@@ -7,10 +7,8 @@ import os
 import logging
 import xsar
 import copy
-import sys
-#sys.path.insert(0,'/home1/datahome/agrouaze/git/xsarsea/src/') #
 import xsarsea
-print('xsarsea',xsarsea.__file__)
+
 import numpy as np
 from xsarsea.slc_image_normalization import get_normalized_image
 import logging
@@ -42,8 +40,6 @@ def from_tiff_to_modulation(tiff_full_path,polarization='VV'):
     s1obj = xsar.Sentinel1Dataset(str_gdal)
     s1obj.add_high_resolution_variables()
     s1dataset = s1obj.dataset
-
-    print(s1dataset)
     DN_vv_slc_meters_modulation = from_datasetSLC_to_modulation(s1dataset, polarization=polarization)
     return DN_vv_slc_meters_modulation
 
