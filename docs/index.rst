@@ -4,7 +4,7 @@ xsarsea: science module for xsar reader
 
 **xsarsea** is an level-1 SAR product analysis tool.
 
-It works with `xarray`_ datasets, and might be used with `xsar`_.
+It works with `xarray`_ datasets, and some of the methods are designed to used `xsar`_ outputs.
 
 
 

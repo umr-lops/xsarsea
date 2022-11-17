@@ -28,9 +28,9 @@ def get_normalized_image(sub_g_slc,im_spacing,lowpass_width=[750., 750.]):
     int_mean = intensity.mean()
     if lowpass_width is not None:
         lowpass_sigma = np.array(lowpass_width) / im_spacing
-        logging.info('lowpass_sigma = %s',lowpass_sigma)
+        logging.debug('lowpass_sigma = %s',lowpass_sigma)
         lowpass = gaussian_lowpass(intensity, lowpass_sigma)
-        logging.info('lowpass %s mean: %s',lowpass.shape,np.mean(lowpass))
+        logging.debug('lowpass %s mean: %s',lowpass.shape,np.mean(lowpass))
     else:
         lowpass = int_mean
     sub_g_slc /= np.sqrt(lowpass)
@@ -91,12 +91,12 @@ def gaussian_lowpass(values, sigma, axes=None, truncate=4., norm=True):
     # Inverse Fourier transform
     #dt0 = datetime.datetime.utcnow()
     outslice = tuple(outslice)
-    logging.info('lp %s',lp.shape)
-    logging.info('outslice %s', outslice)
-    logging.info('fftshape %s', fftshape)
-    logging.info('axes %s', axes)
+    logging.debug('lp %s',lp.shape)
+    logging.debug('outslice %s', outslice)
+    logging.debug('fftshape %s', fftshape)
+    logging.debug('axes %s', axes)
     tmp = irfftn(lp, fftshape, axes)
-    logging.info('tmp : %s',tmp.shape)
+    logging.debug('tmp : %s',tmp.shape)
     lp = irfftn(lp, fftshape, axes)[outslice]
     #print datetime.datetime.utcnow() - dt0
 
