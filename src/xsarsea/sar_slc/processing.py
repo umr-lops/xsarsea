@@ -88,8 +88,8 @@ def compute_subswath_interburst_xspectra(dt, tile_width={'sample': 20.e3, 'line'
     Return:
         (xarray): xspectra.
     """
-    azimuth_steering_rate = dt.attrs['azimuthSteeringRate'].item()
-    azimuth_time_interval = dt.attrs['azimuthTimeInterval'].item()
+    azimuth_steering_rate = dt['image'].ds['azimuthSteeringRate'].item()
+    azimuth_time_interval = dt['image'].ds['azimuthTimeInterval'].item()
     xspectra = list()
     for b in range(dt['bursts'].sizes['burst'] - 1):
         burst0 = crop_burst(dt['measurement'].ds, dt['bursts'].ds, burst_number=b, valid=True,
@@ -531,7 +531,7 @@ def tile_bursts_overlap_to_xspectra(burst0, burst1, tile_width, tile_overlap, az
     Keyword Args:
         kwargs: keyword arguments passed to compute_interburst_xspectrum()
     """
-    from tools import get_corner_tile, get_middle_tile
+    from xsarsea.sar_slc.tools import get_corner_tile, get_middle_tile
 
     # find overlapping burst portion
     az0 = burst0[{'sample': 0}].azimuth_time.load()
