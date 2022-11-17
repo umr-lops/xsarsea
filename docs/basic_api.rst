@@ -47,7 +47,7 @@ WV SLC
 IW/EW SLC
 ---------
 
-.. automodule:: xsarsea.sar_slc
+.. automodule:: xsarsea.sar_slc.processing
     :members:
     :imported-members:
     :show-inheritance:
