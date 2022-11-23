@@ -1,0 +1,34 @@
+---
+nlooks: 3
+look_width: 0.2
+look_overlap: 0.
+look_window: null
+intra:
+    tile_width:
+        range: 20.e3
+        azimuth: 20.e3
+    tile_overlap:
+        range: 10.e3
+        azimuth: 10.e3
+    lowpass_width:
+        range: 1000.
+        azimuth: 1000.
+    nperseg:
+        range: 512
+        azimuth: 512
+    noverlap:
+        range: 256
+        azimuth: 256
+inter:
+    lowpass_width_overlap:
+        range: 1000.
+        azimuth: 1000.
+    nperseg:
+        range: 512
+        azimuth: null
+    noverlap:
+        range: 256
+        azimuth: 0
+
+
+

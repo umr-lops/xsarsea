@@ -4,33 +4,38 @@
 """
 import numpy as np
 import xarray as xr
-
+from tqdm import tqdm
 from scipy.constants import c as celerity
 from xsarsea.sar_slc.tools import xtiling, xndindex
-
+import resource
 
 def compute_subswath_xspectra(dt):
     """
     Main function to compute inter and intra burst spectra. It has to be modified to be able to change Xspectra options
     """
     import datatree
-    from xsarsea.slc_sar.tools import netcdf_compliant
+    # from xsarsea.slc_sar.tools import netcdf_compliant
+    from xsarsea import netcdf_compliant
 
     intra_xs = compute_subswath_intraburst_xspectra(dt)
 
     intra_xs = intra_xs.drop('spatial_ref')
-    intra_xs.attrs.update({'start_date': str(xspectra.start_date)})
-    intra_xs.attrs.update({'stop_date': str(xspectra.stop_date)})
-    intra_xs.attrs.update({'footprint': str(xspectra.footprint)})
+    intra_xs.attrs.update({'start_date': str(intra_xs.start_date)})
+    intra_xs.attrs.update({'stop_date': str(intra_xs.stop_date)})
+    intra_xs.attrs.update({'footprint': str(intra_xs.footprint)})
+    intra_xs.attrs.update({'multidataset': str(intra_xs.multidataset)})
+    intra_xs.attrs.update({'land_mask_computed_by_burst': str(intra_xs.land_mask_computed_by_burst)})
     intra_xs.attrs.pop('pixel_line_m')
     intra_xs.attrs.pop('pixel_sample_m')
 
-    inter_xs = compute_subswath_interburst_xspectra(dt)
+    inter_xs = compute_subswath_interburst_xspectra(dt,nperseg={'sample':512, 'line':115})
 
     inter_xs = inter_xs.drop('spatial_ref')
-    inter_xs.attrs.update({'start_date': str(xspectra.start_date)})
-    inter_xs.attrs.update({'stop_date': str(xspectra.stop_date)})
-    inter_xs.attrs.update({'footprint': str(xspectra.footprint)})
+    inter_xs.attrs.update({'start_date': str(inter_xs.start_date)})
+    inter_xs.attrs.update({'stop_date': str(inter_xs.stop_date)})
+    inter_xs.attrs.update({'footprint': str(inter_xs.footprint)})
+    inter_xs.attrs.update({'multidataset': str(inter_xs.multidataset)})
+    inter_xs.attrs.update({'land_mask_computed_by_burst': str(inter_xs.land_mask_computed_by_burst)})
     inter_xs.attrs.pop('pixel_line_m')
     inter_xs.attrs.pop('pixel_sample_m')
 
@@ -57,7 +62,10 @@ def compute_subswath_intraburst_xspectra(dt, tile_width={'sample': 20.e3, 'line'
     """
     radar_frequency = float(dt['image'].ds['radarFrequency'])
     xspectra = list()
-    for b in range(dt['bursts'].sizes['burst']):
+    pbar = tqdm(range(dt['bursts'].sizes['burst']), desc='start intra burst processing', position=1, leave=False)
+    for b in pbar:
+        str_mem = 'peak memory usage: %s Mbytes', resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1000.
+        pbar.set_description('#### total:%s MeM:%s' % (dt['bursts'].sizes['burst'], str_mem))
         burst = crop_burst(dt['measurement'].ds, dt['bursts'].ds, burst_number=b, valid=True).sel(pol='VV')
         deramped_burst = deramp_burst(burst, dt)
         burst = xr.merge([burst, deramped_burst.drop('azimuthTime')], combine_attrs='drop_conflicts')
@@ -68,14 +76,13 @@ def compute_subswath_intraburst_xspectra(dt, tile_width={'sample': 20.e3, 'line'
     xspectra = xr.concat(xspectra, dim='burst')
     return xspectra
 
-
-def compute_subswath_interburst_xspectra(dt, tile_width={'sample': 20.e3, 'line': 20.e3},
-                                         tile_overlap={'sample': 10.e3, 'line': 10.e3}, **kwargs):
+def compute_subswath_interburst_xspectra(dt, tile_width={'sample':20.e3, 'line':20.e3}, tile_overlap={'sample':10.e3, 'line':10.e3}, **kwargs):
     """
     Compute IW subswath inter-burst xspectra. No deramping is applied since only magnitude is used.
     
     Note: If requested tile is larger than the size of availabe data. tile will be set to maximum available size
-    Note: The overlap is short in azimuth (line) direction. Keep nperseg = {'line':None} in Xspectra computation to keep maximum number of point in azimuth.
+    Note: The overlap is short in azimuth (line) direction. Keeping nperseg = {'line':None} in Xspectra computation
+    keeps maximum number of point in azimuth but is not ensuring the same number of overlapping point for all burst
     
     Args:
         dt (xarray.Datatree): datatree contraining subswath information
@@ -91,18 +98,17 @@ def compute_subswath_interburst_xspectra(dt, tile_width={'sample': 20.e3, 'line'
     azimuth_steering_rate = dt['image'].ds['azimuthSteeringRate'].item()
     azimuth_time_interval = dt['image'].ds['azimuthTimeInterval'].item()
     xspectra = list()
-    for b in range(dt['bursts'].sizes['burst'] - 1):
-        burst0 = crop_burst(dt['measurement'].ds, dt['bursts'].ds, burst_number=b, valid=True,
-                            merge_burst_annotation=True).sel(pol='VV')
-        burst1 = crop_burst(dt['measurement'].ds, dt['bursts'].ds, burst_number=b + 1, valid=True,
-                            merge_burst_annotation=True).sel(pol='VV')
-
-        interburst_xspectra = tile_bursts_overlap_to_xspectra(burst0, burst1, tile_width, tile_overlap,
-                                                              azimuth_steering_rate, azimuth_time_interval)
-        xspectra.append(interburst_xspectra.drop(['tile_line', 'tile_sample']))
-
+    for b in range(dt['bursts'].sizes['burst']-1):
+        
+        burst0 = crop_burst(dt['measurement'].ds, dt['bursts'].ds, burst_number = b, valid=True, merge_burst_annotation = True).sel(pol='VV')
+        burst1 = crop_burst(dt['measurement'].ds, dt['bursts'].ds, burst_number = b+1, valid=True, merge_burst_annotation = True).sel(pol='VV')
+        
+        interburst_xspectra = tile_bursts_overlap_to_xspectra(burst0, burst1, tile_width, tile_overlap, azimuth_steering_rate, azimuth_time_interval, **kwargs)
+        xspectra.append(interburst_xspectra.drop(['tile_line','tile_sample']))
+    
     xspectra = xr.concat(xspectra, dim='burst')
     return xspectra
+
 
 
 def tile_burst_to_xspectra(burst, tile_width, tile_overlap, radar_frequency,
@@ -120,8 +126,8 @@ def tile_burst_to_xspectra(burst, tile_width, tile_overlap, radar_frequency,
     Keyword Args:
         kwargs: keyword arguments passed to compute_intraburst_xspectrum()
     """
-    from xsarsea.sar_slc.tools import get_corner_tile, get_middle_tile
-
+    #from xsarsea.sar_slc.tools import get_corner_tile, get_middle_tile
+    from xsarsea import get_corner_tile, get_middle_tile
     burst.load()
     mean_ground_spacing = float(burst['sampleSpacing']) / np.sin(np.radians(burst['incidence'].mean()))
     azimuth_spacing = float(burst['lineSpacing'])
@@ -262,7 +268,9 @@ def deramp_burst(burst, dt):
     Return:
         (xarray.DataArray): deramped digital numbers
     """
-    from sar_slc.deramping import compute_midburst_azimuthtime, compute_slant_range_time, compute_Doppler_centroid_rate, \
+    # from sar_slc.deramping import compute_midburst_azimuthtime, compute_slant_range_time, compute_Doppler_centroid_rate, \
+    #     compute_reference_time, compute_deramping_phase, compute_DopplerCentroid_frequency
+    from xsarsea import compute_midburst_azimuthtime, compute_slant_range_time, compute_Doppler_centroid_rate, \
         compute_reference_time, compute_deramping_phase, compute_DopplerCentroid_frequency
 
     FMrate = dt['FMrate'].ds
@@ -302,8 +310,8 @@ def compute_modulation(ds, lowpass_width, spacing):
 
     """
     from scipy.signal import fftconvolve
-    from xsarsea.sar_slc.tools import gaussian_kernel
-
+    # from xsarsea.sar_slc.tools import gaussian_kernel
+    from xsarsea import gaussian_kernel
     # ground_spacing = float(ds['sampleSpacing'])/np.sin(np.radians(ds['incidence'].mean()))
 
     mask = np.isfinite(ds)
@@ -531,7 +539,8 @@ def tile_bursts_overlap_to_xspectra(burst0, burst1, tile_width, tile_overlap, az
     Keyword Args:
         kwargs: keyword arguments passed to compute_interburst_xspectrum()
     """
-    from xsarsea.sar_slc.tools import get_corner_tile, get_middle_tile
+#    from xsarsea.sar_slc.tools import get_corner_tile, get_middle_tile
+    from xsarsea import get_corner_tile, get_middle_tile
 
     # find overlapping burst portion
     az0 = burst0[{'sample': 0}].azimuth_time.load()
