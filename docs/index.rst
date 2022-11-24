@@ -32,6 +32,8 @@ Those examples show how to:
 
 * :doc:`examples/ATBD_xsarsea_crossspectra_WV`
 
+* :doc:`examples/xspec_IW_intra_and_inter_burst`
+
 * :doc:`examples/windspeed_inversion`
 
 * :doc:`examples/gmfs_and_luts`
@@ -69,6 +71,7 @@ Last documentation build: |today|
    examples/windspeed_inversion
    examples/gmfs_and_luts
    examples/ATBD_xsarsea_crossspectra_WV
+   examples/xspec_IW_intra_and_inter_burst
 
 .. toctree::
    :maxdepth: 1
