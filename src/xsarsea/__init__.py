@@ -3,6 +3,9 @@ __all__ = ['sigma0_detrend', 'dir_geo_to_sample', 'dir_sample_to_geo', 'get_test
 from .utils import get_test_file
 from .xsarsea import dir_geo_to_sample, dir_sample_to_geo, sigma0_detrend, read_sarwing_owi
 from .cross_spectra_core import *
+from .sar_slc.processing import *
+from .sar_slc.tools import *
+from .sar_slc.deramping import *
 try:
     from importlib import metadata
 except ImportError:  # for Python<3.8

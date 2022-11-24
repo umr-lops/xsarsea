@@ -4,7 +4,7 @@ xsarsea: science module for xsar reader
 
 **xsarsea** is an level-1 SAR product analysis tool.
 
-It works with `xarray`_ datasets, and might be used with `xsar`_.
+It works with `xarray`_ datasets, and some of the methods are designed to used `xsar`_ outputs.
 
 
 
@@ -31,6 +31,8 @@ Those examples show how to:
 * :doc:`examples/streaks`
 
 * :doc:`examples/ATBD_xsarsea_crossspectra_WV`
+
+* :doc:`examples/xspec_IW_intra_and_inter_burst`
 
 * :doc:`examples/windspeed_inversion`
 
@@ -69,6 +71,7 @@ Last documentation build: |today|
    examples/windspeed_inversion
    examples/gmfs_and_luts
    examples/ATBD_xsarsea_crossspectra_WV
+   examples/xspec_IW_intra_and_inter_burst
 
 .. toctree::
    :maxdepth: 1
