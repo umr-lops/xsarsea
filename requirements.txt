@@ -20,6 +20,8 @@ setuptools
 pyyaml
 dask[array]
 netcdf4
+tqdm
 typer
+
 
 
