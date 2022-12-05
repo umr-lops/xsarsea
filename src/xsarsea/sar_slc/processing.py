@@ -132,11 +132,14 @@ def tile_burst_to_xspectra(burst, tile_width, tile_overlap, radar_frequency,
     #from xsarsea.sar_slc.tools import get_corner_tile, get_middle_tile
     from xsarsea import get_corner_tile, get_middle_tile
     burst.load()
-    mean_ground_spacing = float(burst['sampleSpacing']) / np.sin(np.radians(burst['incidence'].mean()))
-    azimuth_spacing = float(burst['lineSpacing'])
-    spacing = {'sample': mean_ground_spacing, 'line': azimuth_spacing}
 
-    nperseg = {d: int(tile_width[d] / spacing[d]) for d in tile_width.keys()}
+
+    mean_ground_spacing = float(burst['sampleSpacing']/np.sin(np.radians(burst['incidence'].mean())))
+    azimuth_spacing = float(burst['lineSpacing'])  
+    spacing = {'sample':mean_ground_spacing, 'line':azimuth_spacing}
+    
+    nperseg = {d:int(np.rint(tile_width[d]/spacing[d])) for d in tile_width.keys()}
+
     if tile_overlap in (0., None):
         noverlap = {d: 0 for k in nperseg.keys()}
     else:

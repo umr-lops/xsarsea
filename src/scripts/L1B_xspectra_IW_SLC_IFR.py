@@ -188,7 +188,9 @@ def generate_IW_L1Bxspec_product(safe,polarization=POLARIZATION,subswath=None,de
         imagette_number = os.path.basename(slc_iw_path).split('-')[1].replace('iw', '')
         fullpathsafeSLC = os.path.dirname(os.path.dirname(slc_iw_path))
         str_gdal = 'SENTINEL1_DS:%s:IW%s' % (fullpathsafeSLC, imagette_number)
-        xsarobj = xsar.Sentinel1Dataset(str_gdal)
+        bu = xsar.Sentinel1Meta(str_gdal)._bursts
+        chunksize = {'line': int(bu['linesPerBurst'].values), 'sample': int(bu['samplesPerBurst'].values)}
+        xsarobj = xsar.Sentinel1Dataset(str_gdal,chunks=chunksize)
         xsarobj.add_high_resolution_variables()
         # dt = xsar.open_datatree(slc_iw_path)
         dt = xsarobj.datatree
