@@ -182,12 +182,13 @@ def generate_IW_L1Bxspec_product(safe,subswath=None,dev=False):
     pbar = tqdm(range(len(lst_tiff)), desc='start')
     all_subwath_xspec = {}
     for ii in pbar:
-
         str_mem = 'peak memory usage: %s Mbytes', resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1000.
         slc_iw_path = lst_tiff[ii]
-        imagette_number = os.path.basename(slc_iw_path).split('-')[1].replace('iw', '')
+        subswath_number = os.path.basename(slc_iw_path).split('-')[1]
+        polarization =os.path.basename(slc_iw_path).split('-')[3]
+        tiff_number = os.path.basename(slc_iw_path).split('-')[1].replace('iw', '')
         fullpathsafeSLC = os.path.dirname(os.path.dirname(slc_iw_path))
-        str_gdal = 'SENTINEL1_DS:%s:IW%s' % (fullpathsafeSLC, imagette_number)
+        str_gdal = 'SENTINEL1_DS:%s:IW%s' % (fullpathsafeSLC, tiff_number)
         bu = xsar.Sentinel1Meta(str_gdal)._bursts
         chunksize = {'line': int(bu['linesPerBurst'].values), 'sample': int(bu['samplesPerBurst'].values)}
         xsarobj = xsar.Sentinel1Dataset(str_gdal,chunks=chunksize)
@@ -204,7 +205,8 @@ def generate_IW_L1Bxspec_product(safe,subswath=None,dev=False):
         
             one_subswath_xspectrum_dt = proc.compute_subswath_xspectra(dt)
         logging.info('xspec intra and inter ready for %s',slc_iw_path)
-        all_subwath_xspec['subswath_%s'%(ii+1)] =one_subswath_xspectrum_dt
+        #all_subwath_xspec['subswath_%s'%(ii+1)] =one_subswath_xspectrum_dt
+        all_subswath_xspec['%s_%s'%(subswath_number,polarization)] = one_subswath_xspectrum_dt
         # if False:
         #     import pdb
         #     import pickle
