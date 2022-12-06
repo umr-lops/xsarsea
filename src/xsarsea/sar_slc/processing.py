@@ -75,7 +75,9 @@ def compute_subswath_intraburst_xspectra(dt, tile_width={'sample': 20.e3, 'line'
         burst.load()
         burst_xspectra = tile_burst_to_xspectra(burst, tile_width, tile_overlap, radar_frequency, **kwargs)
         xspectra.append(burst_xspectra.drop(['tile_line', 'tile_sample']))
-
+    # -------Returned xspecs have different shape in range (between burst). Lines below only select common portions of xspectra-----
+    Nfreq_min = min([xs.sizes['freq_sample'] for xs in xspectra])
+    xspectra = [xs[{'freq_sample': slice(None, Nfreq_min)}] for xs in xspectra]
     xspectra = xr.concat(xspectra, dim='burst')
     xspectra = xspectra.assign_coords({'k_rg': xspectra.k_rg, 'k_az': xspectra.k_az})  # move wavenumbers as coordinates
     return xspectra
