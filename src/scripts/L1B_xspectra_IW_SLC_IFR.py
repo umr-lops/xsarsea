@@ -33,9 +33,10 @@ from scipy import interpolate
 # N_look = 3
 # look_width = 0.2
 # look_overlap = 0.1
-POLARIZATION = 'VV'
-PRODUCT_VERSION = '0.1'
-XSPEC_WL_LIMIT = 40 #m
+#POLARIZATION = 'VV'
+PRODUCT_VERSION = '0.1' # version from release 17nov2022 with wavenumbers not aligned
+PRODUCT_VERSION = '0.2' # version from release 5dec2022 with wavenumbers aligned
+#XSPEC_WL_LIMIT = 40 #m
 # ref_kx = np.array([-0.85173872, -0.84841162, -0.84508451, -0.84175741, -0.83843031,
 #        -0.8351032 , -0.8317761 , -0.82844899, -0.82512189, -0.82179478,
 #        -0.81846768, -0.81514057, -0.81181347, -0.80848637, -0.80515926,
@@ -165,18 +166,17 @@ XSPEC_WL_LIMIT = 40 #m
 stream = open(os.path.join(os.path.dirname(__file__),'configuration_L1B_xspectra_IW_SLC_IFR_v1.yml'), 'r')
 conf = load(stream, Loader=Loader) #TODO : add argument to compute_subswath_xspectra(conf=conf)
 
-def generate_IW_L1Bxspec_product(safe,polarization=POLARIZATION,subswath=None,dev=False):
+def generate_IW_L1Bxspec_product(safe,subswath=None,dev=False):
     """
 
     :param safe: str
-    :param polarization: str VV or HH
     :param subswath: str iw1 iw2 or iw3, if None -> all the subswath are treated
     :return:
     """
     if subswath is not None:
-        pattern = '*%s*%s*tiff' %(subswath,polarization.lower())
+        pattern = '*%s*tiff' %(subswath)
     else:
-        pattern = '*%s*tiff' % polarization.lower()
+        pattern = '*tiff'
     lst_tiff = sorted(glob.glob(os.path.join(safe, 'measurement', pattern)))
     logging.info('Nb tiff found : %s',len(lst_tiff))
     pbar = tqdm(range(len(lst_tiff)), desc='start')
@@ -308,10 +308,10 @@ if __name__ == '__main__':
     else:
         safepath = args.safe
     output_filename = os.path.join(args.outputdir, os.path.basename(
-        safepath) + '_L1B_xspec_IFR_' + POLARIZATION + '_' + PRODUCT_VERSION + '.nc')
+        safepath) + '_L1B_xspec_IFR_' + PRODUCT_VERSION + '.nc')
     if os.path.exists(output_filename) and args.overwrite is False:
         logging.info('%s already exists',output_filename)
     else:
-        generate_IW_L1Bxspec_product(safe=safepath,polarization=POLARIZATION,subswath=args.subswath,dev=False)
+        generate_IW_L1Bxspec_product(safe=safepath,subswath=args.subswath,dev=False)
     logging.info('peak memory usage: %s Mbytes', resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1000.)
     logging.info('done in %1.3f min', (time.time() - t0) / 60.)

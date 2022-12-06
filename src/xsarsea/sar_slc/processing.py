@@ -9,6 +9,7 @@ from scipy.constants import c as celerity
 from xsarsea.sar_slc.tools import xtiling, xndindex
 import resource
 
+
 def compute_subswath_xspectra(dt):
     """
     Main function to compute inter and intra burst spectra. It has to be modified to be able to change Xspectra options
@@ -25,10 +26,11 @@ def compute_subswath_xspectra(dt):
     intra_xs.attrs.update({'footprint': str(intra_xs.footprint)})
     intra_xs.attrs.update({'multidataset': str(intra_xs.multidataset)})
     intra_xs.attrs.update({'land_mask_computed_by_burst': str(intra_xs.land_mask_computed_by_burst)})
-    intra_xs.attrs.pop('pixel_line_m')
-    intra_xs.attrs.pop('pixel_sample_m')
+    if "pixel_line_m" in intra_xs.attrs:
+        intra_xs.attrs.pop('pixel_line_m')
+        intra_xs.attrs.pop('pixel_sample_m')
 
-    inter_xs = compute_subswath_interburst_xspectra(dt,nperseg={'sample':512, 'line':115})
+    inter_xs = compute_subswath_interburst_xspectra(dt)
 
     inter_xs = inter_xs.drop('spatial_ref')
     inter_xs.attrs.update({'start_date': str(inter_xs.start_date)})
@@ -36,8 +38,9 @@ def compute_subswath_xspectra(dt):
     inter_xs.attrs.update({'footprint': str(inter_xs.footprint)})
     inter_xs.attrs.update({'multidataset': str(inter_xs.multidataset)})
     inter_xs.attrs.update({'land_mask_computed_by_burst': str(inter_xs.land_mask_computed_by_burst)})
-    inter_xs.attrs.pop('pixel_line_m')
-    inter_xs.attrs.pop('pixel_sample_m')
+    if "pixel_line_m" in inter_xs.attrs:
+        inter_xs.attrs.pop('pixel_line_m')
+        inter_xs.attrs.pop('pixel_sample_m')
 
     dt = datatree.DataTree.from_dict(
         {'interburst_xspectra': netcdf_compliant(inter_xs), 'intraburst_xspectra': netcdf_compliant(intra_xs)})
@@ -74,9 +77,12 @@ def compute_subswath_intraburst_xspectra(dt, tile_width={'sample': 20.e3, 'line'
         xspectra.append(burst_xspectra.drop(['tile_line', 'tile_sample']))
 
     xspectra = xr.concat(xspectra, dim='burst')
+    xspectra = xspectra.assign_coords({'k_rg': xspectra.k_rg, 'k_az': xspectra.k_az})  # move wavenumbers as coordinates
     return xspectra
 
-def compute_subswath_interburst_xspectra(dt, tile_width={'sample':20.e3, 'line':20.e3}, tile_overlap={'sample':10.e3, 'line':10.e3}, **kwargs):
+
+def compute_subswath_interburst_xspectra(dt, tile_width={'sample': 20.e3, 'line': 20.e3},
+                                         tile_overlap={'sample': 10.e3, 'line': 10.e3}, **kwargs):
     """
     Compute IW subswath inter-burst xspectra. No deramping is applied since only magnitude is used.
     
@@ -98,24 +104,29 @@ def compute_subswath_interburst_xspectra(dt, tile_width={'sample':20.e3, 'line':
     azimuth_steering_rate = dt['image'].ds['azimuthSteeringRate'].item()
     azimuth_time_interval = dt['image'].ds['azimuthTimeInterval'].item()
     xspectra = list()
-    #for b in range(dt['bursts'].sizes['burst']-1):
-    pbar = tqdm(range(dt['bursts'].sizes['burst']-1), desc='start inter burst processing', position=1, leave=False)
+    # for b in range(dt['bursts'].sizes['burst']-1):
+    pbar = tqdm(range(dt['bursts'].sizes['burst'] - 1), desc='start inter burst processing', position=1, leave=False)
     for b in pbar:
         str_mem = 'peak memory usage: %s Mbytes', resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1000.
-        pbar.set_description('#### total:%s MeM:%s' % (dt['bursts'].sizes['burst']-1, str_mem))
-        burst0 = crop_burst(dt['measurement'].ds, dt['bursts'].ds, burst_number = b, valid=True, merge_burst_annotation = True).sel(pol='VV')
-        burst1 = crop_burst(dt['measurement'].ds, dt['bursts'].ds, burst_number = b+1, valid=True, merge_burst_annotation = True).sel(pol='VV')
-        
-        interburst_xspectra = tile_bursts_overlap_to_xspectra(burst0, burst1, tile_width, tile_overlap, azimuth_steering_rate, azimuth_time_interval, **kwargs)
-        xspectra.append(interburst_xspectra.drop(['tile_line','tile_sample']))
-    
+        pbar.set_description('#### total:%s MeM:%s' % (dt['bursts'].sizes['burst'] - 1, str_mem))
+        burst0 = crop_burst(dt['measurement'].ds, dt['bursts'].ds, burst_number=b, valid=True,
+                            merge_burst_annotation=True).sel(pol='VV')
+        burst1 = crop_burst(dt['measurement'].ds, dt['bursts'].ds, burst_number=b + 1, valid=True,
+                            merge_burst_annotation=True).sel(pol='VV')
+
+        interburst_xspectra = tile_bursts_overlap_to_xspectra(burst0, burst1, tile_width, tile_overlap,
+                                                              azimuth_steering_rate, azimuth_time_interval, **kwargs)
+        xspectra.append(interburst_xspectra.drop(['tile_line', 'tile_sample']))
+
     xspectra = xr.concat(xspectra, dim='burst')
+    xspectra = xspectra.assign_coords({'k_rg': xspectra.k_rg, 'k_az': xspectra.k_az})  # move wavenumbers as coordinates
     return xspectra
 
 
-
 def tile_burst_to_xspectra(burst, tile_width, tile_overlap, radar_frequency,
-                           lowpass_width={'sample': 1000., 'line': 1000.}, **kwargs):
+                           lowpass_width={'sample': 1000., 'line': 1000.},
+                           periodo_width={'sample': 2000., 'line': 4000.},
+                           periodo_overlap={'sample': 1000., 'line': 2000.}, **kwargs):
     """
     Divide burst in tiles and compute intra-burst cross-spectra using compute_intraburst_xspectrum() function.
 
@@ -123,29 +134,31 @@ def tile_burst_to_xspectra(burst, tile_width, tile_overlap, radar_frequency,
         burst (xarray.Dataset): dataset with deramped digital number variable
         tile_width (dict): approximative sizes of tiles in meters. Dict of shape {dim_name (str): width of tile [m](float)}
         tile_overlap (dict): approximative sizes of tiles overlapping in meters. Dict of shape {dim_name (str): overlap [m](float)}
+        periodo_width (dict): approximative sizes of periodogram in meters. Dict of shape {dim_name (str): width of tile [m](float)}
+        periodo_overlap (dict): approximative sizes of periodogram overlapping in meters. Dict of shape {dim_name (str): overlap [m](float)}
         radar_frequency (float): radar frequency [Hz]
         lowpass_width (dict): width for low pass filtering [m]. Dict of form {dim_name (str): width (float)}
     
     Keyword Args:
         kwargs: keyword arguments passed to compute_intraburst_xspectrum()
     """
-    #from xsarsea.sar_slc.tools import get_corner_tile, get_middle_tile
+    # from xsarsea.sar_slc.tools import get_corner_tile, get_middle_tile
     from xsarsea import get_corner_tile, get_middle_tile
+
     burst.load()
+    mean_ground_spacing = float(burst['sampleSpacing'] / np.sin(np.radians(burst['incidence'].mean())))
+    azimuth_spacing = float(burst['lineSpacing'])
+    spacing = {'sample': mean_ground_spacing, 'line': azimuth_spacing}
 
-
-    mean_ground_spacing = float(burst['sampleSpacing']/np.sin(np.radians(burst['incidence'].mean())))
-    azimuth_spacing = float(burst['lineSpacing'])  
-    spacing = {'sample':mean_ground_spacing, 'line':azimuth_spacing}
-    
-    nperseg = {d:int(np.rint(tile_width[d]/spacing[d])) for d in tile_width.keys()}
+    nperseg_tile = {d: int(np.rint(tile_width[d] / spacing[d])) for d in tile_width.keys()}
 
     if tile_overlap in (0., None):
-        noverlap = {d: 0 for k in nperseg.keys()}
+        noverlap = {d: 0 for k in nperseg_tile.keys()}
     else:
-        noverlap = {d: int(tile_overlap[d] / spacing[d]) for d in tile_width.keys()}
+        noverlap = {d: int(np.rint(tile_overlap[d] / spacing[d])) for d in
+                    tile_width.keys()}  # np.rint is important for homogeneity of point numbers between bursts
 
-    tiles_index = xtiling(burst, nperseg=nperseg, noverlap=noverlap)
+    tiles_index = xtiling(burst, nperseg=nperseg_tile, noverlap=noverlap)
     tiled_burst = burst[tiles_index].drop(['sample', 'line']).swap_dims({'__' + d: d for d in tile_width.keys()})
     tiles_sizes = {d: k for d, k in tiled_burst.sizes.items() if 'tile_' in d}
 
@@ -161,12 +174,17 @@ def tile_burst_to_xspectra(burst, tile_width, tile_overlap, radar_frequency,
         mean_velocity = float(sub.velocity.mean())
         slant_spacing = float(sub['sampleSpacing'])
         ground_spacing = slant_spacing / np.sin(np.radians(mean_incidence))
+        periodo_spacing = {'sample': ground_spacing, 'line': azimuth_spacing}
+
+        nperseg_periodo = {d: int(np.rint(periodo_width[d] / periodo_spacing[d])) for d in tile_width.keys()}
+        noverlap_periodo = {d: int(np.rint(periodo_overlap[d] / periodo_spacing[d])) for d in tile_width.keys()}
+
         azimuth_spacing = float(sub['lineSpacing'])
         synthetic_duration = celerity * mean_slant_range / (2 * radar_frequency * mean_velocity * azimuth_spacing)
         mod = compute_modulation(sub['deramped_digital_number'], lowpass_width=lowpass_width,
                                  spacing={'sample': ground_spacing, 'line': azimuth_spacing})
         xspecs = compute_intraburst_xspectrum(mod, mean_incidence, slant_spacing, azimuth_spacing, synthetic_duration,
-                                              **kwargs)
+                                              nperseg=nperseg_periodo, noverlap=noverlap_periodo, **kwargs)
         xspecs_m = xspecs.mean(dim=['periodo_line', 'periodo_sample'],
                                keep_attrs=True)  # averaging all the periodograms in each tile
         xs[tuple(i.values())] = xspecs_m
@@ -181,6 +199,12 @@ def tile_burst_to_xspectra(burst, tile_width, tile_overlap, radar_frequency,
         xspecs_m = xspecs_m.assign_coords({'k_rg': k_rg, 'k_az': k_az}).swap_dims(
             {'freq_sample': 'k_rg', 'freq_line': 'k_az'})
         cutoff[i] = compute_azimuth_cutoff(xspecs_m)
+
+    # -------Returned xspecs have different shape in range (to keep same dk). Lines below only select common portions of xspectra-----
+    Nfreq_min = min([xs[i].sizes['freq_sample'] for i in np.ndindex(xs.shape)])
+    for i in np.ndindex(xs.shape):
+        xs[i] = xs[i][{'freq_sample': slice(None, Nfreq_min)}]
+    # ------------------------------------------------
 
     xs = [list(a) for a in list(xs)]  # must be generalized for larger number of dimensions
     xs = xr.combine_nested(xs, concat_dim=tiles_sizes.keys(), combine_attrs='drop_conflicts')
@@ -202,7 +226,7 @@ def tile_burst_to_xspectra(burst, tile_width, tile_overlap, radar_frequency,
     xs = xs.assign_coords({'longitude': middle_lon,
                            'latitude': middle_lat})  # This line also ensures adding line/sample coordinates too !! DO NOT REMOVE
     xs.attrs.update(burst.attrs)
-    xs.attrs.update({'tile_nperseg_' + d: k for d, k in nperseg.items()})
+    xs.attrs.update({'tile_nperseg_' + d: k for d, k in nperseg_tile.items()})
     xs.attrs.update({'tile_noverlap_' + d: k for d, k in noverlap.items()})
     return xs
 
@@ -384,9 +408,10 @@ def compute_intraburst_xspectrum(slc, mean_incidence, slant_spacing, azimuth_spa
 
     # dealing with wavenumbers
     ground_range_spacing = slant_spacing / np.sin(np.radians(out.mean_incidence))
-    k_rg = xr.DataArray(
-        np.fft.fftshift(np.fft.fftfreq(out.sizes['freq_' + range_dim], ground_range_spacing / (2 * np.pi))),
-        dims='freq_' + range_dim, name='k_rg', attrs={'long_name': 'wavenumber in range direction', 'units': 'rad/m'})
+    # k_rg = xr.DataArray(np.fft.fftshift(np.fft.fftfreq(out.sizes['freq_'+range_dim], ground_range_spacing/(2*np.pi))), dims='freq_'+range_dim, name = 'k_rg', attrs={'long_name':'wavenumber in range direction', 'units':'rad/m'})
+    k_rg = xr.DataArray(np.fft.rfftfreq(nperseg[range_dim], ground_range_spacing / (2 * np.pi)),
+                        dims='freq_' + range_dim, name='k_rg',
+                        attrs={'long_name': 'wavenumber in range direction', 'units': 'rad/m'})
     k_az = xr.DataArray(np.fft.fftshift(
         np.fft.fftfreq(out.sizes['freq_' + azimuth_dim], azimuth_spacing / (out.attrs.pop('look_width') * 2 * np.pi))),
                         dims='freq_' + azimuth_dim, name='k_az',
@@ -420,7 +445,6 @@ def compute_looks(slc, azimuth_dim, synthetic_duration, nlooks=3, look_width=0.2
     Return:
         (dict) : keys are '0tau', '1tau', ... and values are list of corresponding computed spectra
     """
-    # import matplotlib.pyplot as plt
     import xrft
 
     if nlooks < 1:
@@ -433,13 +457,13 @@ def compute_looks(slc, azimuth_dim, synthetic_duration, nlooks=3, look_width=0.2
     freq_rg_dim = 'freq_' + range_dim
 
     Np = slc.sizes[azimuth_dim]  # total number of point in azimuth direction
-    nperlook = int(look_width * Np)  # number of point perlook in azimuth direction
+    nperlook = int(np.rint(look_width * Np))  # number of point perlook in azimuth direction
     noverlap = int(np.rint(look_overlap * look_width * Np))  # number of overlap point
 
     mydop = xrft.fft(slc, dim=[azimuth_dim], detrend=None, window=None, shift=True, true_phase=True,
                      true_amplitude=True)
 
-    # Finding and removing Doppler centroid
+    # Finding an removing Doppler centroid
     weight = xr.DataArray(np.hanning(100), dims=['window'])  # window for smoothing
     weight /= weight.sum()
     smooth_dop = np.abs(mydop).mean(dim=range_dim).rolling(**{freq_azi_dim: len(weight), 'center': True}).construct(
@@ -471,7 +495,12 @@ def compute_looks(slc, azimuth_dim, synthetic_duration, nlooks=3, look_width=0.2
                          true_amplitude=True)
         look = np.abs(look) ** 2
         look = look / look.mean(dim=slc.dims)
-        looks_spec.append(xrft.fft(look, dim=slc.dims, detrend='constant', true_phase=True, true_amplitude=True))
+        look = xrft.fft(look, dim=slc.dims, detrend='constant', true_phase=True, true_amplitude=True,
+                        shift=False)  # shift=False is to keep zero at begnining for easier selection of half the spectrum
+        look.data = np.fft.fftshift(look.data,
+                                    axes=look.get_axis_num(freq_azi_dim))  # fftshifting azimuthal wavenumbers
+        looks_spec.append(
+            look[{freq_rg_dim: slice(None, look.sizes[freq_rg_dim] // 2 + 1)}])  # Only half of the spectrum is kept
         # looks_spec.append(xrft.fft(np.abs(look)**2, dim=slc.dims, detrend='linear'))
 
     looks_spec = xr.concat(looks_spec, dim='look')
@@ -510,6 +539,10 @@ def compute_azimuth_cutoff(spectrum, definition='drfab'):
     """
     import xrft
     from scipy.optimize import curve_fit
+
+    if not np.any(spectrum['k_rg'] < 0.).item():  # only half spectrum with positive wavenumber has been passed
+        spectrum = symmetrize_xspectrum(spectrum)
+
     coV = xrft.ifft(spectrum, dim=('k_rg', 'k_az'), shift=True, prefix='k_')
     coV = coV.assign_coords({'rg': 2 * np.pi * coV.rg, 'az': 2 * np.pi * coV.az})
     if definition == 'ipf':
@@ -529,7 +562,9 @@ def compute_azimuth_cutoff(spectrum, definition='drfab'):
 
 
 def tile_bursts_overlap_to_xspectra(burst0, burst1, tile_width, tile_overlap, azimuth_steering_rate,
-                                    azimuth_time_interval, lowpass_width={'sample': 1000., 'line': 1000.}, **kwargs):
+                                    azimuth_time_interval, lowpass_width={'sample': 1000., 'line': 1000.},
+                                    periodo_width={'sample': 2000., 'line': 1250.},
+                                    periodo_overlap={'sample': 1000., 'line': 700.}, **kwargs):
     """
     Divide bursts overlaps in tiles and compute inter-burst cross-spectra using compute_interburst_xspectrum() function.
 
@@ -545,9 +580,7 @@ def tile_bursts_overlap_to_xspectra(burst0, burst1, tile_width, tile_overlap, az
     Keyword Args:
         kwargs: keyword arguments passed to compute_interburst_xspectrum()
     """
-#    from xsarsea.sar_slc.tools import get_corner_tile, get_middle_tile
-    from xsarsea import get_corner_tile, get_middle_tile
-
+    from xsarsea.sar_slc.tools import get_corner_tile, get_middle_tile
     # find overlapping burst portion
     az0 = burst0[{'sample': 0}].azimuth_time.load()
     az1 = burst1.isel(sample=0).azimuth_time[{'line': 0}].load()
@@ -566,7 +599,7 @@ def tile_bursts_overlap_to_xspectra(burst0, burst1, tile_width, tile_overlap, az
         pass
 
     burst0 = burst0[{'line': slice(frl, None)}]
-    burst1 = burst1[{'line': slice(0, burst0.sizes['line'])}]
+    burst1 = burst1[{'line': slice(None, burst0.sizes['line'])}]
 
     # if overlap0.sizes!=overlap1.sizes:
     #     raise ValueError('Overlaps have different sizes: {} and {}'.format(overlap0.sizes, overlap1.sizes))
@@ -578,11 +611,11 @@ def tile_bursts_overlap_to_xspectra(burst0, burst1, tile_width, tile_overlap, az
     mean_ground_spacing = float(burst['sampleSpacing']) / np.sin(np.radians(burst['incidence'].mean()))
     azimuth_spacing = float(burst['lineSpacing'])
     spacing = {'sample': mean_ground_spacing, 'line': azimuth_spacing}
-    nperseg = {d: int(tile_width[d] / spacing[d]) for d in tile_width.keys()}
+    nperseg = {d: int(np.rint(tile_width[d] / spacing[d])) for d in tile_width.keys()}
     if tile_overlap in (0., None):
         noverlap = {d: 0 for k in nperseg.keys()}
     else:
-        noverlap = {d: int(tile_overlap[d] / spacing[d]) for d in tile_width.keys()}
+        noverlap = {d: int(np.rint(tile_overlap[d] / spacing[d])) for d in tile_width.keys()}
     tiles_index = xtiling(burst, nperseg=nperseg, noverlap=noverlap)
     tiled_burst0 = burst0[tiles_index]  # .drop(['sample','line']).swap_dims({'__'+d:d for d in tile_width.keys()})
     tiled_burst1 = burst1[tiles_index]  # .drop(['sample','line']).swap_dims({'__'+d:d for d in tile_width.keys()})
@@ -602,13 +635,22 @@ def tile_bursts_overlap_to_xspectra(burst0, burst1, tile_width, tile_overlap, az
         ground_spacing = slant_spacing / np.sin(np.radians(mean_incidence))
         azimuth_spacing = float(sub['lineSpacing'])
 
+        periodo_spacing = {'sample': ground_spacing, 'line': azimuth_spacing}
+        nperseg_periodo = {d: int(np.rint(periodo_width[d] / periodo_spacing[d])) for d in tile_width.keys()}
+        noverlap_periodo = {d: int(np.rint(periodo_overlap[d] / periodo_spacing[d])) for d in tile_width.keys()}
+
+        if np.any([sub0.sizes[d] < nperseg_periodo[d] for d in ['line', 'sample']]):
+            raise ValueError(
+                'periodo_width ({}) is too large compared to available data (line : {} m, sample : {} m).'.format(
+                    periodo_width, sub0.sizes['line'] * azimuth_spacing, sub0.sizes['sample'] * ground_spacing))
+
         mod0 = compute_modulation(np.abs(sub0['digital_number']), lowpass_width=lowpass_width,
                                   spacing={'sample': ground_spacing, 'line': azimuth_spacing})
         mod1 = compute_modulation(np.abs(sub1['digital_number']), lowpass_width=lowpass_width,
                                   spacing={'sample': ground_spacing, 'line': azimuth_spacing})
 
         xspecs = compute_interburst_xspectrum(mod0 ** 2, mod1 ** 2, mean_incidence, slant_spacing, azimuth_spacing,
-                                              **kwargs)
+                                              nperseg=nperseg_periodo, noverlap=noverlap_periodo, **kwargs)
         xspecs_m = xspecs.mean(dim=['periodo_line', 'periodo_sample'],
                                keep_attrs=True)  # averaging all the periodograms in each tile
         xs[tuple(i.values())] = xspecs_m
@@ -629,7 +671,14 @@ def tile_bursts_overlap_to_xspectra(burst0, burst1, tile_width, tile_overlap, az
         xspecs_m = xspecs_m['interburst_xspectra']
         xspecs_m = xspecs_m.assign_coords({'k_rg': k_rg, 'k_az': k_az}).swap_dims(
             {'freq_sample': 'k_rg', 'freq_line': 'k_az'})
+        # return xspecs
         cutoff[i] = compute_azimuth_cutoff(xspecs_m)
+
+    # -------Returned xspecs have different shape in range (to keep same dk). Lines below only select common portions of xspectra-----
+    Nfreq_min = min([xs[i].sizes['freq_sample'] for i in np.ndindex(xs.shape)])
+    for i in np.ndindex(xs.shape):
+        xs[i] = xs[i][{'freq_sample': slice(None, Nfreq_min)}]
+    # ------------------------------------------------
 
     xs = [list(a) for a in list(xs)]  # must be generalized for larger number of dimensions
     xs = xr.combine_nested(xs, concat_dim=tiles_sizes.keys(), combine_attrs='drop_conflicts')
@@ -676,6 +725,8 @@ def compute_interburst_xspectrum(mod0, mod1, mean_incidence, slant_spacing, azim
     """
 
     range_dim = list(set(mod0.dims) - set([azimuth_dim]))[0]  # name of range dimension
+    freq_rg_dim = 'freq_' + range_dim
+    freq_azi_dim = 'freq_' + azimuth_dim
 
     periodo_slices = xtiling(mod0, nperseg=nperseg, noverlap=noverlap, prefix='periodo_')
 
@@ -690,8 +741,13 @@ def compute_interburst_xspectrum(mod0, mod1, mean_incidence, slant_spacing, azim
         image1 = periodo1[i].swap_dims({'__' + d: d for d in [range_dim, azimuth_dim]})
         image0 = (image0 - image0.mean()) / image0.mean()
         image1 = (image1 - image1.mean()) / image1.mean()
-        xspecs = xr.DataArray(np.fft.fftshift(np.fft.fft2(image1) * np.conj(np.fft.fft2(image0))),
+        # xspecs = xr.DataArray(np.fft.fftshift(np.fft.fft2(image1)*np.conj(np.fft.fft2(image0))), dims=['freq_'+d for d in image0.dims])
+        xspecs = xr.DataArray(np.fft.fft2(image1) * np.conj(np.fft.fft2(image0)),
                               dims=['freq_' + d for d in image0.dims])
+        xspecs = xspecs[{freq_rg_dim: slice(None, xspecs.sizes[
+            freq_rg_dim] // 2 + 1)}]  # keeping only half of the wavespectrum (positive wavenumbers)
+        xspecs.data = np.fft.fftshift(xspecs.data,
+                                      axes=xspecs.get_axis_num(freq_azi_dim))  # fftshifting azimuthal wavenumbers
         out[tuple(i.values())] = xspecs
 
     out = [list(a) for a in list(out)]  # must be generalized for larger number of dimensions
@@ -704,13 +760,11 @@ def compute_interburst_xspectrum(mod0, mod1, mean_incidence, slant_spacing, azim
 
     # dealing with wavenumbers
     ground_range_spacing = slant_spacing / np.sin(np.radians(out.mean_incidence))
-    k_rg = xr.DataArray(
-        np.fft.fftshift(np.fft.fftfreq(out.sizes['freq_' + range_dim], ground_range_spacing / (2 * np.pi))),
-        dims='freq_' + range_dim, name='k_rg', attrs={'long_name': 'wavenumber in range direction', 'units': 'rad/m'})
-    k_az = xr.DataArray(
-        np.fft.fftshift(np.fft.fftfreq(out.sizes['freq_' + azimuth_dim], azimuth_spacing / (2 * np.pi))),
-        dims='freq_' + azimuth_dim, name='k_az',
-        attrs={'long_name': 'wavenumber in azimuth direction', 'units': 'rad/m'})
+    k_rg = xr.DataArray(np.fft.rfftfreq(nperseg[range_dim], ground_range_spacing / (2 * np.pi)), dims=freq_rg_dim,
+                        name='k_rg', attrs={'long_name': 'wavenumber in range direction', 'units': 'rad/m'})
+    k_az = xr.DataArray(np.fft.fftshift(np.fft.fftfreq(nperseg[azimuth_dim], azimuth_spacing / (2 * np.pi))),
+                        dims='freq_' + azimuth_dim, name='k_az',
+                        attrs={'long_name': 'wavenumber in azimuth direction', 'units': 'rad/m'})
     # out = out.assign_coords({'k_rg':k_rg, 'k_az':k_az}).swap_dims({'freq_'+range_dim:'k_rg', 'freq_'+azimuth_dim:'k_az'})
     out = xr.merge([out, k_rg.to_dataset(), k_az.to_dataset()],
                    combine_attrs='drop_conflicts')  # Adding .to_dataset() ensures promote_attrs=False
@@ -719,3 +773,26 @@ def compute_interburst_xspectrum(mod0, mod1, mean_incidence, slant_spacing, azim
                       'periodogram_noverlap_' + range_dim: noverlap[range_dim],
                       'periodogram_noverlap_' + azimuth_dim: noverlap[azimuth_dim]})
     return out
+
+
+def symmetrize_xspectrum(xs, dim_range='k_rg', dim_azimuth='k_az'):
+    """
+    Symmetrize half-xspectrum around origin point. xspectrum is assumed to contain only positive wavenumbers in range.
+    
+    Args:
+        xs (xarray.DataArray or xarray.Dataset): complex xspectra to be symmetrized
+    Return:
+        (xarray.DataArray or xarray.Dataset): symmetrized spectra (as they were generated in the first place using fft)
+    """
+    if (dim_range not in xs.coords) or (dim_azimuth not in xs.coords):
+        raise ValueError(
+            'Symmetry can not be applied because {} or {} do not have coordinates. Swap dimensions prior to symmetrization.'.format(
+                dim_range, dim_azimuth))
+
+    if not xs.sizes['k_az'] % 2:
+        xs = xr.concat([xs, xs[{'k_az': 0}].assign_coords({'k_az': -xs.k_az[0].data})], dim='k_az')
+
+    mirror = np.conj(xs[{dim_range: slice(None, 0, -1)}])
+    mirror = mirror.assign_coords({dim_range: -mirror[dim_range], dim_azimuth: -mirror[dim_azimuth]})
+    res = xr.concat([mirror, xs], dim=dim_range)[{dim_range: slice(None, -1), dim_azimuth: slice(None, -1)}]
+    return res
