@@ -36,6 +36,7 @@ from scipy import interpolate
 #POLARIZATION = 'VV'
 PRODUCT_VERSION = '0.1' # version from release 17nov2022 with wavenumbers not aligned
 PRODUCT_VERSION = '0.2' # version from release 5dec2022 with wavenumbers aligned
+PRODUCT_VERSION = '0.3' # add fix for freq_sample + subgroups with subswath
 #XSPEC_WL_LIMIT = 40 #m
 # ref_kx = np.array([-0.85173872, -0.84841162, -0.84508451, -0.84175741, -0.83843031,
 #        -0.8351032 , -0.8317761 , -0.82844899, -0.82512189, -0.82179478,

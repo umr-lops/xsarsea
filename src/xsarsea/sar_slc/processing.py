@@ -119,7 +119,9 @@ def compute_subswath_interburst_xspectra(dt, tile_width={'sample': 20.e3, 'line'
         interburst_xspectra = tile_bursts_overlap_to_xspectra(burst0, burst1, tile_width, tile_overlap,
                                                               azimuth_steering_rate, azimuth_time_interval, **kwargs)
         xspectra.append(interburst_xspectra.drop(['tile_line', 'tile_sample']))
-
+    # -------Returned xspecs have different shape in range (between burst). Lines below only select common portions of xspectra-----
+    Nfreq_min = min([xs.sizes['freq_sample'] for xs in xspectra])
+    xspectra = [xs[{'freq_sample': slice(None, Nfreq_min)}] for xs in xspectra]
     xspectra = xr.concat(xspectra, dim='burst')
     xspectra = xspectra.assign_coords({'k_rg': xspectra.k_rg, 'k_az': xspectra.k_az})  # move wavenumbers as coordinates
     return xspectra
