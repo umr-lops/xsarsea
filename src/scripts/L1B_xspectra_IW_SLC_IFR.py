@@ -196,7 +196,7 @@ def generate_IW_L1Bxspec_product(safe,subswath=None,dev=False):
         xsarobj.add_high_resolution_variables()
         # dt = xsar.open_datatree(slc_iw_path)
         dt = xsarobj.datatree
-        pbar.set_description('#### total:%s MeM:%s' % (len(lst_tiff),str_mem))
+        pbar.set_description('tiff processing %s #### total:%s' % (os.path.basename(slc_iw_path)[0:6],len(lst_tiff)))
         if dev:
             import pickle
             fid = open('/home1/scratch/agrouaze/l1b/assset_one_subswath_xspectrum_dt.pkl','rb')

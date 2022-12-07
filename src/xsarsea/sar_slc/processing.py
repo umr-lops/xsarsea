@@ -68,7 +68,7 @@ def compute_subswath_intraburst_xspectra(dt, tile_width={'sample': 20.e3, 'line'
     pbar = tqdm(range(dt['bursts'].sizes['burst']), desc='start intra burst processing', position=1, leave=False)
     for b in pbar:
         str_mem = 'peak memory usage: %s Mbytes', resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1000.
-        pbar.set_description('#### total:%s MeM:%s' % (dt['bursts'].sizes['burst'], str_mem))
+        pbar.set_description('intra burst # %s #### total:%s MeM:%s' % (b,dt['bursts'].sizes['burst'], str_mem))
         burst = crop_burst(dt['measurement'].ds, dt['bursts'].ds, burst_number=b, valid=True).sel(pol='VV')
         deramped_burst = deramp_burst(burst, dt)
         burst = xr.merge([burst, deramped_burst.drop('azimuthTime')], combine_attrs='drop_conflicts')
@@ -110,7 +110,7 @@ def compute_subswath_interburst_xspectra(dt, tile_width={'sample': 20.e3, 'line'
     pbar = tqdm(range(dt['bursts'].sizes['burst'] - 1), desc='start inter burst processing', position=1, leave=False)
     for b in pbar:
         str_mem = 'peak memory usage: %s Mbytes', resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1000.
-        pbar.set_description('#### total:%s MeM:%s' % (dt['bursts'].sizes['burst'] - 1, str_mem))
+        pbar.set_description('inter burst # %s #### total:%s MeM:%s' % (b,dt['bursts'].sizes['burst'] - 1, str_mem))
         burst0 = crop_burst(dt['measurement'].ds, dt['bursts'].ds, burst_number=b, valid=True,
                             merge_burst_annotation=True).sel(pol='VV')
         burst1 = crop_burst(dt['measurement'].ds, dt['bursts'].ds, burst_number=b + 1, valid=True,
