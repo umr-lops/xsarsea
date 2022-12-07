@@ -181,7 +181,7 @@ def generate_IW_L1Bxspec_product(safe,subswath=None,dev=False):
     lst_tiff = sorted(glob.glob(os.path.join(safe, 'measurement', pattern)))
     logging.info('Nb tiff found : %s',len(lst_tiff))
     pbar = tqdm(range(len(lst_tiff)), desc='start')
-    all_subwath_xspec = {}
+    all_subswath_xspec = {}
     for ii in pbar:
         str_mem = 'peak memory usage: %s Mbytes', resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1000.
         slc_iw_path = lst_tiff[ii]
@@ -206,7 +206,7 @@ def generate_IW_L1Bxspec_product(safe,subswath=None,dev=False):
         
             one_subswath_xspectrum_dt = proc.compute_subswath_xspectra(dt)
         logging.info('xspec intra and inter ready for %s',slc_iw_path)
-        #all_subwath_xspec['subswath_%s'%(ii+1)] =one_subswath_xspectrum_dt
+        #all_subswath_xspec['subswath_%s'%(ii+1)] =one_subswath_xspectrum_dt
         all_subswath_xspec['%s_%s'%(subswath_number,polarization)] = one_subswath_xspectrum_dt
         # if False:
         #     import pdb
@@ -263,9 +263,9 @@ def generate_IW_L1Bxspec_product(safe,subswath=None,dev=False):
     #final_ds['kys'] = xr.DataArray(np.vstack(all_ky),dims=['n_WV','kylen'],coords={'n_WV':final_ds.n_WV,'kylen':np.arange(len(all_ky[0]))})#xr.merge(all_ky)
 #    final_dt = datatree.DataTree.from_dict(all_subwath_xspec)
     final_dt = datatree.DataTree()
-    for yy in all_subwath_xspec:
+    for yy in all_subswath_xspec:
         logging.info('yy = %s',yy)
-        final_dt[yy] = all_subwath_xspec[yy]
+        final_dt[yy] = all_subswath_xspec[yy]
     final_dt.attrs['version_xsar'] = xsar.__version__
     final_dt.attrs['version_xsarsea'] = xsarsea.__version__
     final_dt.attrs['processor'] = __file__
