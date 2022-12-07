@@ -72,7 +72,7 @@ def compute_subswath_intraburst_xspectra(dt, tile_width={'sample': 20.e3, 'line'
         burst = crop_burst(dt['measurement'].ds, dt['bursts'].ds, burst_number=b, valid=True).sel(pol='VV')
         deramped_burst = deramp_burst(burst, dt)
         burst = xr.merge([burst, deramped_burst.drop('azimuthTime')], combine_attrs='drop_conflicts')
-        burst.load()
+        burst#.load()
         burst_xspectra = tile_burst_to_xspectra(burst, tile_width, tile_overlap, radar_frequency, **kwargs)
         xspectra.append(burst_xspectra.drop(['tile_line', 'tile_sample']))
     # -------Returned xspecs have different shape in range (between burst). Lines below only select common portions of xspectra-----
@@ -149,7 +149,7 @@ def tile_burst_to_xspectra(burst, tile_width, tile_overlap, radar_frequency,
     # from xsarsea.sar_slc.tools import get_corner_tile, get_middle_tile
     from xsarsea import get_corner_tile, get_middle_tile
 
-    burst.load()
+    #burst.load()
     mean_ground_spacing = float(burst['sampleSpacing'] / np.sin(np.radians(burst['incidence'].mean())))
     azimuth_spacing = float(burst['lineSpacing'])
     spacing = {'sample': mean_ground_spacing, 'line': azimuth_spacing}
@@ -586,8 +586,8 @@ def tile_bursts_overlap_to_xspectra(burst0, burst1, tile_width, tile_overlap, az
     """
     from xsarsea.sar_slc.tools import get_corner_tile, get_middle_tile
     # find overlapping burst portion
-    az0 = burst0[{'sample': 0}].azimuth_time.load()
-    az1 = burst1.isel(sample=0).azimuth_time[{'line': 0}].load()
+    az0 = burst0[{'sample': 0}].azimuth_time#.load()
+    az1 = burst1.isel(sample=0).azimuth_time[{'line': 0}]#.load()
 
     frl = np.argwhere(az0.data >= az1.data)[0].item()  # first overlapping line of first burst
     # Lines below ensures we choose the closest index since azimuth_time are not exactly the same
@@ -608,8 +608,8 @@ def tile_bursts_overlap_to_xspectra(burst0, burst1, tile_width, tile_overlap, az
     # if overlap0.sizes!=overlap1.sizes:
     #     raise ValueError('Overlaps have different sizes: {} and {}'.format(overlap0.sizes, overlap1.sizes))
 
-    burst0.load()  # loading ensures efficient tiling below
-    burst1.load()  # loading ensures efficient tiling below
+    burst0#.load()  # loading ensures efficient tiling below
+    burst1#.load()  # loading ensures efficient tiling below
 
     burst = burst0
     mean_ground_spacing = float(burst['sampleSpacing']) / np.sin(np.radians(burst['incidence'].mean()))

@@ -19,25 +19,25 @@ import numpy as np
 import datetime
 import datatree
 import logging
-import xarray as xr
 import glob
 import os
 import time
 import pdb
 
-from yaml import load, dump
-from yaml import CLoader as Loader, CDumper as Dumper
-from scipy import interpolate
+from yaml import load
+from yaml import CLoader as Loader
+#from scipy import interpolate
+
 # nperseg = {'range': 512, 'azimuth': 512}
 # noverlap = {'range': 256, 'azimuth': 256}
 # N_look = 3
 # look_width = 0.2
 # look_overlap = 0.1
-#POLARIZATION = 'VV'
-PRODUCT_VERSION = '0.1' # version from release 17nov2022 with wavenumbers not aligned
-PRODUCT_VERSION = '0.2' # version from release 5dec2022 with wavenumbers aligned
-PRODUCT_VERSION = '0.3' # add fix for freq_sample + subgroups with subswath
-#XSPEC_WL_LIMIT = 40 #m
+# POLARIZATION = 'VV'
+PRODUCT_VERSION = '0.1'  # version from release 17nov2022 with wavenumbers not aligned
+PRODUCT_VERSION = '0.2'  # version from release 5dec2022 with wavenumbers aligned
+PRODUCT_VERSION = '0.3'  # add fix for freq_sample + subgroups with subswath
+# XSPEC_WL_LIMIT = 40 #m
 # ref_kx = np.array([-0.85173872, -0.84841162, -0.84508451, -0.84175741, -0.83843031,
 #        -0.8351032 , -0.8317761 , -0.82844899, -0.82512189, -0.82179478,
 #        -0.81846768, -0.81514057, -0.81181347, -0.80848637, -0.80515926,
@@ -164,10 +164,11 @@ PRODUCT_VERSION = '0.3' # add fix for freq_sample + subgroups with subswath
 #         0.1465149,  0.149505])
 
 
-stream = open(os.path.join(os.path.dirname(__file__),'configuration_L1B_xspectra_IW_SLC_IFR_v1.yml'), 'r')
-conf = load(stream, Loader=Loader) #TODO : add argument to compute_subswath_xspectra(conf=conf)
+stream = open(os.path.join(os.path.dirname(__file__), 'configuration_L1B_xspectra_IW_SLC_IFR_v1.yml'), 'r')
+conf = load(stream, Loader=Loader)  # TODO : add argument to compute_subswath_xspectra(conf=conf)
 
-def generate_IW_L1Bxspec_product(safe,subswath=None,dev=False):
+
+def generate_IW_L1Bxspec_product(safe, subswath=None, dev=False):
     """
 
     :param safe: str
@@ -175,39 +176,40 @@ def generate_IW_L1Bxspec_product(safe,subswath=None,dev=False):
     :return:
     """
     if subswath is not None:
-        pattern = '*%s*tiff' %(subswath)
+        pattern = '*%s*tiff' % (subswath)
     else:
         pattern = '*tiff'
     lst_tiff = sorted(glob.glob(os.path.join(safe, 'measurement', pattern)))
-    logging.info('Nb tiff found : %s',len(lst_tiff))
+    logging.info('Nb tiff found : %s', len(lst_tiff))
     pbar = tqdm(range(len(lst_tiff)), desc='start')
     all_subswath_xspec = {}
     for ii in pbar:
         str_mem = 'peak memory usage: %s Mbytes', resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1000.
         slc_iw_path = lst_tiff[ii]
         subswath_number = os.path.basename(slc_iw_path).split('-')[1]
-        polarization =os.path.basename(slc_iw_path).split('-')[3]
+        polarization = os.path.basename(slc_iw_path).split('-')[3]
         tiff_number = os.path.basename(slc_iw_path).split('-')[1].replace('iw', '')
         fullpathsafeSLC = os.path.dirname(os.path.dirname(slc_iw_path))
         str_gdal = 'SENTINEL1_DS:%s:IW%s' % (fullpathsafeSLC, tiff_number)
         bu = xsar.Sentinel1Meta(str_gdal)._bursts
         chunksize = {'line': int(bu['linesPerBurst'].values), 'sample': int(bu['samplesPerBurst'].values)}
-        xsarobj = xsar.Sentinel1Dataset(str_gdal,chunks=chunksize)
+        xsarobj = xsar.Sentinel1Dataset(str_gdal, chunks=chunksize)
         xsarobj.add_high_resolution_variables()
         # dt = xsar.open_datatree(slc_iw_path)
         dt = xsarobj.datatree
-        pbar.set_description('tiff processing %s #### total:%s' % (os.path.basename(slc_iw_path)[0:6],len(lst_tiff)))
+        dt.load()
+        pbar.set_description('tiff processing %s #### total:%s' % (os.path.basename(slc_iw_path)[0:20], len(lst_tiff)))
         if dev:
             import pickle
-            fid = open('/home1/scratch/agrouaze/l1b/assset_one_subswath_xspectrum_dt.pkl','rb')
+            fid = open('/home1/scratch/agrouaze/l1b/assset_one_subswath_xspectrum_dt.pkl', 'rb')
             one_subswath_xspectrum_dt = pickle.load(fid)['xs']
             fid.close()
         else:
-        
+
             one_subswath_xspectrum_dt = proc.compute_subswath_xspectra(dt)
-        logging.info('xspec intra and inter ready for %s',slc_iw_path)
-        #all_subswath_xspec['subswath_%s'%(ii+1)] =one_subswath_xspectrum_dt
-        all_subswath_xspec['%s_%s'%(subswath_number,polarization)] = one_subswath_xspectrum_dt
+        logging.info('xspec intra and inter ready for %s', slc_iw_path)
+        # all_subswath_xspec['subswath_%s'%(ii+1)] =one_subswath_xspectrum_dt
+        all_subswath_xspec['%s_%s' % (subswath_number, polarization)] = one_subswath_xspectrum_dt
         # if False:
         #     import pdb
         #     import pickle
@@ -216,55 +218,56 @@ def generate_IW_L1Bxspec_product(safe,subswath=None,dev=False):
         #     pickle.dump({'xs':one_subswath_xspectrum_dt},fid)
         #     fid.close()
         #     print('outfff',outfff)
-        logging.info('one_subswath_xspectrum = %s', one_subswath_xspectrum_dt)
+        logging.debug('one_subswath_xspectrum = %s', one_subswath_xspectrum_dt)
         logging.info(
             'time to get all X-spectra on WV with N_look:%s look_width %s look_overlap %s nperseg %sx%s  noverlap %sx%s : %1.2f seconds',
-            conf['nlooks'], conf['look_width'], conf['look_overlap'], conf['intra']['nperseg']['range'], conf['intra']['nperseg']['azimuth'],
+            conf['nlooks'], conf['look_width'], conf['look_overlap'], conf['intra']['nperseg']['range'],
+            conf['intra']['nperseg']['azimuth'],
             conf['intra']['noverlap']['range'],
             conf['intra']['noverlap']['azimuth'], time.time() - t0)
-   #      ds = xr.Dataset()
-   #      ds['filename'] = xr.DataArray(data=[os.path.basename(tiff_full_path)], dims=['n_WV'])
-   #      # all_kx.append(allspecs['kx'].values.T)
-   #      # all_ky.append(allspecs['ky'].values.T)
-   #      for vv in ['cross-spectrum_2tau']:
-   #          tmp_xspec = allspecs[vv].mean(dim='2tau')
-   #          #resampling of the cartesian xspec
-   #          x = tmp_xspec.kx.values
-   #          y = tmp_xspec.ky.values
-   #          f = interpolate.interp2d(x, y, tmp_xspec.values, kind='linear')
-   #          newxspec = f(ref_kx,ref_ky).T
-   #          logging.info('newxspec : %s',newxspec.shape)
-   #          tmp_xspec_interp = xr.DataArray(data=newxspec,coords={'kx':ref_kx,'ky':ref_ky},dims=['kx','ky'])
-   #          tmp_xspec_interp = tmp_xspec_interp.where(np.logical_and(np.abs(tmp_xspec_interp.kx) <= 2*np.pi/XSPEC_WL_LIMIT,
-   #                                                                   np.abs(tmp_xspec_interp.ky) <= 2*np.pi/XSPEC_WL_LIMIT),
-   #                                         drop=True)
-   #          # if store different kx and ky for each WV (ie no interpolation on a common cartesian grid) -> no need to replace coords (below)
-   #          # newcoords_x = xr.DataArray(np.arange(tmp_xspec_interp.shape[0]),dims=['kx'])
-   #          # newcoords_y = xr.DataArray(np.arange(tmp_xspec_interp.shape[1]), dims=['ky'])
-   #          # tmp_xspec_interp = tmp_xspec_interp.assign_coords({'kxi':newcoords_x,
-   #          #                          'kyi': newcoords_y,
-   #          #                          })
-   #          # tmp_xspec_interp = tmp_xspec_interp.swap_dims({'kx':'kxi','ky':'kyi'})
-   #          # tmp_xspec_interp = tmp_xspec_interp.drop('ky')
-   #          # tmp_xspec_interp = tmp_xspec_interp.drop('kx')
-   #          tmp_xspec_interp.attrs['lower_wavelength_limit_m'] = XSPEC_WL_LIMIT
-   #          for tt in ['real', 'imag']:
-   #              if tt == 'real':
-   #                  ds[vv + '_' + tt] = tmp_xspec_interp.real
-   #              else:
-   #                  ds[vv + '_' + tt] = tmp_xspec_interp.imag
-   #
-   #      all_ds.append(ds)
-   # # final_ds = xr.merge(all_ds)
-   #  final_ds = xr.concat(all_ds,dim='n_WV')
-    #print('xr.merge(all_kx)',xr.merge(all_kx))
-    #print('mat',np.vstack(all_kx).shape)
-    #final_ds['kxs'] = xr.DataArray(np.vstack(all_kx),dims=['n_WV','kxlen'],coords={'n_WV':final_ds.n_WV,'kxlen':np.arange(len(all_kx[0]))})#xr.merge(all_kx).name('kxs')
-    #final_ds['kys'] = xr.DataArray(np.vstack(all_ky),dims=['n_WV','kylen'],coords={'n_WV':final_ds.n_WV,'kylen':np.arange(len(all_ky[0]))})#xr.merge(all_ky)
-#    final_dt = datatree.DataTree.from_dict(all_subwath_xspec)
+    #      ds = xr.Dataset()
+    #      ds['filename'] = xr.DataArray(data=[os.path.basename(tiff_full_path)], dims=['n_WV'])
+    #      # all_kx.append(allspecs['kx'].values.T)
+    #      # all_ky.append(allspecs['ky'].values.T)
+    #      for vv in ['cross-spectrum_2tau']:
+    #          tmp_xspec = allspecs[vv].mean(dim='2tau')
+    #          #resampling of the cartesian xspec
+    #          x = tmp_xspec.kx.values
+    #          y = tmp_xspec.ky.values
+    #          f = interpolate.interp2d(x, y, tmp_xspec.values, kind='linear')
+    #          newxspec = f(ref_kx,ref_ky).T
+    #          logging.info('newxspec : %s',newxspec.shape)
+    #          tmp_xspec_interp = xr.DataArray(data=newxspec,coords={'kx':ref_kx,'ky':ref_ky},dims=['kx','ky'])
+    #          tmp_xspec_interp = tmp_xspec_interp.where(np.logical_and(np.abs(tmp_xspec_interp.kx) <= 2*np.pi/XSPEC_WL_LIMIT,
+    #                                                                   np.abs(tmp_xspec_interp.ky) <= 2*np.pi/XSPEC_WL_LIMIT),
+    #                                         drop=True)
+    #          # if store different kx and ky for each WV (ie no interpolation on a common cartesian grid) -> no need to replace coords (below)
+    #          # newcoords_x = xr.DataArray(np.arange(tmp_xspec_interp.shape[0]),dims=['kx'])
+    #          # newcoords_y = xr.DataArray(np.arange(tmp_xspec_interp.shape[1]), dims=['ky'])
+    #          # tmp_xspec_interp = tmp_xspec_interp.assign_coords({'kxi':newcoords_x,
+    #          #                          'kyi': newcoords_y,
+    #          #                          })
+    #          # tmp_xspec_interp = tmp_xspec_interp.swap_dims({'kx':'kxi','ky':'kyi'})
+    #          # tmp_xspec_interp = tmp_xspec_interp.drop('ky')
+    #          # tmp_xspec_interp = tmp_xspec_interp.drop('kx')
+    #          tmp_xspec_interp.attrs['lower_wavelength_limit_m'] = XSPEC_WL_LIMIT
+    #          for tt in ['real', 'imag']:
+    #              if tt == 'real':
+    #                  ds[vv + '_' + tt] = tmp_xspec_interp.real
+    #              else:
+    #                  ds[vv + '_' + tt] = tmp_xspec_interp.imag
+    #
+    #      all_ds.append(ds)
+    # # final_ds = xr.merge(all_ds)
+    #  final_ds = xr.concat(all_ds,dim='n_WV')
+    # print('xr.merge(all_kx)',xr.merge(all_kx))
+    # print('mat',np.vstack(all_kx).shape)
+    # final_ds['kxs'] = xr.DataArray(np.vstack(all_kx),dims=['n_WV','kxlen'],coords={'n_WV':final_ds.n_WV,'kxlen':np.arange(len(all_kx[0]))})#xr.merge(all_kx).name('kxs')
+    # final_ds['kys'] = xr.DataArray(np.vstack(all_ky),dims=['n_WV','kylen'],coords={'n_WV':final_ds.n_WV,'kylen':np.arange(len(all_ky[0]))})#xr.merge(all_ky)
+    #    final_dt = datatree.DataTree.from_dict(all_subwath_xspec)
     final_dt = datatree.DataTree()
     for yy in all_subswath_xspec:
-        logging.info('yy = %s',yy)
+        logging.debug('yy = %s', yy)
         final_dt[yy] = all_subswath_xspec[yy]
     final_dt.attrs['version_xsar'] = xsar.__version__
     final_dt.attrs['version_xsarsea'] = xsarsea.__version__
@@ -280,6 +283,7 @@ def generate_IW_L1Bxspec_product(safe,subswath=None,dev=False):
     final_dt.to_netcdf(output_filename)
     logging.info('successfuly written %s', output_filename)
 
+
 if __name__ == '__main__':
     root = logging.getLogger()
     if root.handlers:
@@ -287,13 +291,14 @@ if __name__ == '__main__':
             root.removeHandler(handler)
     import argparse
     import resource
+
     time.sleep(np.random.rand(1, 1)[0][0])  # to avoid issue with mkdir
     parser = argparse.ArgumentParser(description='L1BwaveIFR_IW_SLC')
     parser.add_argument('--verbose', action='store_true', default=False)
     parser.add_argument('--overwrite', action='store_true', default=False,
                         help='overwrite the existing outputs [default=False]', required=False)
-    parser.add_argument('--safe',required=True, help='SAFE full path IW SLC')
-    parser.add_argument('--subswath',required=False,help='iw1 iw2... [None]',default=None)
+    parser.add_argument('--safe', required=True, help='SAFE full path IW SLC')
+    parser.add_argument('--subswath', required=False, help='iw1 iw2... [None]', default=None)
     parser.add_argument('--outputdir', required=True, help='directory where to store output netCDF files')
     args = parser.parse_args()
 
@@ -313,8 +318,8 @@ if __name__ == '__main__':
     output_filename = os.path.join(args.outputdir, os.path.basename(
         safepath) + '_L1B_xspec_IFR_' + PRODUCT_VERSION + '.nc')
     if os.path.exists(output_filename) and args.overwrite is False:
-        logging.info('%s already exists',output_filename)
+        logging.info('%s already exists', output_filename)
     else:
-        generate_IW_L1Bxspec_product(safe=safepath,subswath=args.subswath,dev=False)
+        generate_IW_L1Bxspec_product(safe=safepath, subswath=args.subswath, dev=False)
     logging.info('peak memory usage: %s Mbytes', resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1000.)
     logging.info('done in %1.3f min', (time.time() - t0) / 60.)
