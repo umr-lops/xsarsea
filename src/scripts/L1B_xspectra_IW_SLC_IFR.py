@@ -10,7 +10,8 @@ import xsarsea.sar_slc.processing as proc
 import warnings
 import xsar
 import xsarsea
-warnings.simplefilter(action='ignore', category=FutureWarning)
+#warnings.simplefilter(action='ignore', category=FutureWarning)
+warnings.simplefilter(action='ignore')
 import numpy as np
 import datetime
 import logging
@@ -59,7 +60,9 @@ def generate_IW_L1Bxspec_product(slc_iw_path,output_filename, polarization=None,
     dt = xsarobj.datatree
     dt.load() #took 4min to load and 35Go RAM
     logging.info('datatree loaded %s',get_memory_usage())
-    one_subswath_xspectrum_dt = proc.compute_subswath_xspectra(dt,pol=polarization.upper(),dev=dev)
+    one_subswath_xspectrum_dt = proc.compute_subswath_xspectra(dt,pol=polarization.upper(),
+                                                               dev=dev,compute_intra_xspec=True,
+                                                               compute_inter_xspec=True)
     logging.info('xspec intra and inter ready for %s', slc_iw_path)
     logging.debug('one_subswath_xspectrum = %s', one_subswath_xspectrum_dt)
     one_subswath_xspectrum_dt.attrs['version_xsar'] = xsar.__version__

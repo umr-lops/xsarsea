@@ -15,7 +15,7 @@ import resource
 import logging
 import time
 
-def compute_subswath_xspectra(dt,dev=False,pol=None):
+def compute_subswath_xspectra(dt,dev=False,pol=None,compute_intra_xspec=True,compute_inter_xspec=True):
     """
     Main function to compute inter and intra burst spectra. It has to be modified to be able to change Xspectra options
     Args:
@@ -27,27 +27,27 @@ def compute_subswath_xspectra(dt,dev=False,pol=None):
     import datatree
     # from xsarsea.slc_sar.tools import netcdf_compliant
     from xsarsea import netcdf_compliant
-
-    intra_xs = compute_subswath_intraburst_xspectra(dt,dev=dev,pol=pol)
-    if "spatial_ref" in intra_xs:
-        intra_xs = intra_xs.drop('spatial_ref')
-    logging.info('intra_xs: attrs: %s',intra_xs.attrs)
-    if 'start_date' in intra_xs.attrs:
-        intra_xs.attrs.update({'start_date': str(intra_xs.start_date)})
-        intra_xs.attrs.update({'stop_date': str(intra_xs.stop_date)})
-        intra_xs.attrs.update({'footprint': str(intra_xs.footprint)})
-    #if 'multidataset' in intra_xs.attrs
-        intra_xs.attrs.update({'multidataset': str(intra_xs.multidataset)})
-        intra_xs.attrs.update({'land_mask_computed_by_burst': str(intra_xs.land_mask_computed_by_burst)})
-    if "pixel_line_m" in intra_xs.attrs:
-        intra_xs.attrs.pop('pixel_line_m')
-        intra_xs.attrs.pop('pixel_sample_m')
-    if dev:
-        logging.info('skip inter burst for dev')
+    if compute_intra_xspec:
+        intra_xs = compute_subswath_intraburst_xspectra(dt,dev=dev,pol=pol)
+        if "spatial_ref" in intra_xs:
+            intra_xs = intra_xs.drop('spatial_ref')
+        logging.info('intra_xs: attrs: %s',intra_xs.attrs)
+        if 'start_date' in intra_xs.attrs:
+            intra_xs.attrs.update({'start_date': str(intra_xs.start_date)})
+            intra_xs.attrs.update({'stop_date': str(intra_xs.stop_date)})
+            intra_xs.attrs.update({'footprint': str(intra_xs.footprint)})
+            intra_xs.attrs.update({'multidataset': str(intra_xs.multidataset)})
+            intra_xs.attrs.update({'land_mask_computed_by_burst': str(intra_xs.land_mask_computed_by_burst)})
+        if "pixel_line_m" in intra_xs.attrs:
+            intra_xs.attrs.pop('pixel_line_m')
+            intra_xs.attrs.pop('pixel_sample_m')
+    else:
+        intra_xs = xr.Dataset()
+    if not compute_inter_xspec:
         inter_xs = xr.Dataset()
     else:
         inter_xs = compute_subswath_interburst_xspectra(dt,pol=pol)
-        if 'spatial_ref' in  inter_xs:
+        if 'spatial_ref' in inter_xs:
             inter_xs = inter_xs.drop('spatial_ref')
         if 'start_date' in inter_xs:
             inter_xs.attrs.update({'start_date': str(inter_xs.start_date)})
@@ -58,12 +58,17 @@ def compute_subswath_xspectra(dt,dev=False,pol=None):
         if "pixel_line_m" in inter_xs.attrs:
             inter_xs.attrs.pop('pixel_line_m')
             inter_xs.attrs.pop('pixel_sample_m')
-    if dev:
+    if compute_inter_xspec is False and compute_intra_xspec is True:
         dt = datatree.DataTree.from_dict(
         {'intraburst_xspectra': netcdf_compliant(intra_xs)})
-    else:
+    elif compute_inter_xspec is True and  compute_intra_xspec is False:
+        dt = datatree.DataTree.from_dict(
+            {'interburst_xspectra': netcdf_compliant(inter_xs)})
+    elif compute_inter_xspec and compute_intra_xspec:
         dt = datatree.DataTree.from_dict(
         {'interburst_xspectra': netcdf_compliant(inter_xs), 'intraburst_xspectra': netcdf_compliant(intra_xs)})
+    else:
+        dt = None
     return dt
 
 
@@ -99,13 +104,13 @@ def compute_subswath_intraburst_xspectra(dt, tile_width={'sample': 20.e3, 'line'
             burst = crop_burst(dt['measurement'].ds, dt['bursts'].ds, burst_number=b, valid=True)
         t_deramp = time.time()
         deramped_burst = deramp_burst(burst, dt)
-        logging.info('time to deramp : %1.2f sec',(time.time()-t_deramp))
+        logging.debug('time to deramp : %1.2f sec',(time.time()-t_deramp))
         burst = xr.merge([burst, deramped_burst.drop('azimuthTime')], combine_attrs='drop_conflicts')
-        burst#.load()
+        #burst#.load()
         t_tile_xspec = time.time()
         burst_xspectra = tile_burst_to_xspectra(dt=dt,burst=burst, tile_width=tile_width, tile_overlap=tile_overlap,
                                                 radar_frequency=radar_frequency, dev=dev, **kwargs)
-        logging.info('time to t_tile_xspec : %1.2f sec', (time.time() - t_tile_xspec))
+        logging.debug('time to t_tile_xspec : %1.2f sec', (time.time() - t_tile_xspec))
         xspectra.append(burst_xspectra.drop(['tile_line', 'tile_sample']))
     # -------Returned xspecs have different shape in range (between burst). Lines below only select common portions of xspectra-----
     Nfreq_min = min([xs.sizes['freq_sample'] for xs in xspectra])
@@ -298,7 +303,7 @@ def get_geoloc_variable_at_specific_image_location(dt,line_seek,sample_seek,varn
         z_values,
         kx=1, ky=1,
     )
-
+    logging.debug('line_seek : %s',line_seek)
     if isinstance(line_seek,np.ndarray):
         if len(line_seek.shape)>1:
             line_az_times_values = azitime.sel({'line': line_seek.ravel()})
@@ -366,50 +371,53 @@ def tile_burst_to_xspectra(dt,burst, tile_width, tile_overlap, radar_frequency,
         # sub = tiled_burst[i].swap_dims({'n_line':'line','n_sample':'sample'})
         sub = tiled_burst[i]
         #one_tile_index = tiles_index.isel({'tile_sample':tiles_sizes[i][0],'tile_line':tiles_sizes[i][1]}) # TODO: not sure about the order line,sample
-        line_middle_burst = tiles_index['sample'].isel({'tile_sample':i['tile_sample']})
-        sample_middle_burst = tiles_index['line'].isel({'tile_line':i['tile_line']})
-        mean_incidence = float(get_geoloc_variable_at_specific_image_location(dt, line_seek=line_middle_burst,
-                                                                          sample_seek=sample_middle_burst,
-                                                                          varname='incidence').mean())
-        #mean_incidence = float(sub.incidence.mean())
-        mean_slant_range = float(get_geoloc_variable_at_specific_image_location(dt, line_seek=line_middle_burst,
-                                                                          sample_seek=sample_middle_burst,
-                                                                          varname='slant_range_time').mean())* celerity / 2.
-        mean_velocity = float(get_velocity_at_image_coordinate(dt, line_seek=line_middle_burst).mean())
-        #mean_slant_range = float(sub.slant_range_time.mean()) * celerity / 2.
+        sample_middle_burst = tiles_index['sample'].isel({'tile_sample':i['tile_sample']})
+        line_middle_burst = tiles_index['line'].isel({'tile_line':i['tile_line']})
+        line_middle_burst = line_middle_burst[line_middle_burst<dt['measurement']['line'].max()]
+        sample_middle_burst = sample_middle_burst[sample_middle_burst < dt['measurement']['sample'].max()]
+        if line_middle_burst.size>0 and sample_middle_burst.size>0:
+            mean_incidence = float(get_geoloc_variable_at_specific_image_location(dt, line_seek=line_middle_burst,
+                                                                              sample_seek=sample_middle_burst,
+                                                                              varname='incidence').mean())
+            #mean_incidence = float(sub.incidence.mean())
+            mean_slant_range = float(get_geoloc_variable_at_specific_image_location(dt, line_seek=line_middle_burst,
+                                                                              sample_seek=sample_middle_burst,
+                                                                              varname='slant_range_time').mean())* celerity / 2.
+            mean_velocity = float(get_velocity_at_image_coordinate(dt, line_seek=line_middle_burst).mean())
+            #mean_slant_range = float(sub.slant_range_time.mean()) * celerity / 2.
 
-        #mean_velocity = float(sub.velocity.mean())
-        slant_spacing = float(sub['sampleSpacing'])
-        ground_spacing = slant_spacing / np.sin(np.radians(mean_incidence))
-        periodo_spacing = {'sample': ground_spacing, 'line': azimuth_spacing}
+            #mean_velocity = float(sub.velocity.mean())
+            slant_spacing = float(sub['sampleSpacing'])
+            ground_spacing = slant_spacing / np.sin(np.radians(mean_incidence))
+            periodo_spacing = {'sample': ground_spacing, 'line': azimuth_spacing}
 
-        nperseg_periodo = {d: int(np.rint(periodo_width[d] / periodo_spacing[d])) for d in tile_width.keys()}
-        noverlap_periodo = {d: int(np.rint(periodo_overlap[d] / periodo_spacing[d])) for d in tile_width.keys()}
+            nperseg_periodo = {d: int(np.rint(periodo_width[d] / periodo_spacing[d])) for d in tile_width.keys()}
+            noverlap_periodo = {d: int(np.rint(periodo_overlap[d] / periodo_spacing[d])) for d in tile_width.keys()}
 
-        azimuth_spacing = float(sub['lineSpacing'])
-        synthetic_duration = celerity * mean_slant_range / (2 * radar_frequency * mean_velocity * azimuth_spacing)
-        t_modu = time.time()
-        mod = compute_modulation(sub['deramped_digital_number'], lowpass_width=lowpass_width,
-                                 spacing={'sample': ground_spacing, 'line': azimuth_spacing})
-        logging.info('time to compute modulation on burst : %1.2f sec',(time.time()-t_modu))
-        t_xspec = time.time()
-        xspecs = compute_intraburst_xspectrum(mod, mean_incidence, slant_spacing, azimuth_spacing, synthetic_duration,
-                                              nperseg=nperseg_periodo, noverlap=noverlap_periodo, **kwargs)
-        logging.info('time to compute xspec in burst : %1.2f sec', (time.time() - t_xspec))
-        xspecs_m = xspecs.mean(dim=['periodo_line', 'periodo_sample'],
-                               keep_attrs=True)  # averaging all the periodograms in each tile
-        xs[tuple(i.values())] = xspecs_m
-        # ------------- tau ----------------
-        taus[i] = float(xspecs.attrs['tau'])
-        # ------------- cut-off ------------
-        cutoff_tau = [str(i) + 'tau' for i in [1, 2, 3, 0] if str(i) + 'tau' in xspecs_m.dims][
-            0]  # which tau is used to compute azimuthal cutoff
-        k_rg = xspecs_m.k_rg
-        k_az = xspecs_m.k_az
-        xspecs_m = xspecs_m['xspectra_' + cutoff_tau].mean(dim=cutoff_tau)
-        xspecs_m = xspecs_m.assign_coords({'k_rg': k_rg, 'k_az': k_az}).swap_dims(
-            {'freq_sample': 'k_rg', 'freq_line': 'k_az'})
-        cutoff[i] = compute_azimuth_cutoff(xspecs_m)
+            azimuth_spacing = float(sub['lineSpacing'])
+            synthetic_duration = celerity * mean_slant_range / (2 * radar_frequency * mean_velocity * azimuth_spacing)
+            t_modu = time.time()
+            mod = compute_modulation(sub['deramped_digital_number'], lowpass_width=lowpass_width,
+                                     spacing={'sample': ground_spacing, 'line': azimuth_spacing})
+            logging.debug('time to compute modulation on burst : %1.2f sec',(time.time()-t_modu))
+            t_xspec = time.time()
+            xspecs = compute_intraburst_xspectrum(mod, mean_incidence, slant_spacing, azimuth_spacing, synthetic_duration,
+                                                  nperseg=nperseg_periodo, noverlap=noverlap_periodo, **kwargs)
+            logging.debug('time to compute xspec in burst : %1.2f sec', (time.time() - t_xspec))
+            xspecs_m = xspecs.mean(dim=['periodo_line', 'periodo_sample'],
+                                   keep_attrs=True)  # averaging all the periodograms in each tile
+            xs[tuple(i.values())] = xspecs_m
+            # ------------- tau ----------------
+            taus[i] = float(xspecs.attrs['tau'])
+            # ------------- cut-off ------------
+            cutoff_tau = [str(i) + 'tau' for i in [1, 2, 3, 0] if str(i) + 'tau' in xspecs_m.dims][
+                0]  # which tau is used to compute azimuthal cutoff
+            k_rg = xspecs_m.k_rg
+            k_az = xspecs_m.k_az
+            xspecs_m = xspecs_m['xspectra_' + cutoff_tau].mean(dim=cutoff_tau)
+            xspecs_m = xspecs_m.assign_coords({'k_rg': k_rg, 'k_az': k_az}).swap_dims(
+                {'freq_sample': 'k_rg', 'freq_line': 'k_az'})
+            cutoff[i] = compute_azimuth_cutoff(xspecs_m)
 
     # -------Returned xspecs have different shape in range (to keep same dk). Lines below only select common portions of xspectra-----
     Nfreq_min = min([xs[i].sizes['freq_sample'] for i in np.ndindex(xs.shape)])
@@ -535,7 +543,7 @@ def crop_burst(ds, burst_annotation, burst_number, valid=True, merge_burst_annot
     myburst.attrs['highest_line'] = burst_number * lpb + ll
     myburst.attrs['lowest_sample'] = fs
     myburst.attrs['highest_sample'] = ls
-    logging.info('myburst.attrs %s',myburst.attrs)
+    logging.debug('myburst.attrs %s',myburst.attrs)
     return myburst.assign_coords({'burst': burst_number})  # This ensures keeping burst number in coordinates
 
 
@@ -639,7 +647,7 @@ def compute_intraburst_xspectrum(slc, mean_incidence, slant_spacing, azimuth_spa
     range_dim = list(set(slc.dims) - set([azimuth_dim]))[0]  # name of range dimension
     t_tiling_period = time.time()
     periodo_slices = xtiling(slc, nperseg=nperseg, noverlap=noverlap, prefix='periodo_')
-    logging.info('time to compute the tiling on periodo within a burst : %1.2f sec',(time.time()-t_tiling_period))
+    logging.debug('time to compute the tiling on periodo within a burst : %1.2f sec',(time.time()-t_tiling_period))
     periodo = slc[periodo_slices].swap_dims({'__' + d: d for d in [range_dim, azimuth_dim]})
     periodo_sizes = {d: k for d, k in periodo.sizes.items() if 'periodo_' in d}
 
@@ -650,7 +658,7 @@ def compute_intraburst_xspectrum(slc, mean_incidence, slant_spacing, azimuth_spa
         xspecs = compute_looks(image, azimuth_dim=azimuth_dim, synthetic_duration=synthetic_duration,
                                **kwargs)  # .assign_coords(i)
         out[tuple(i.values())] = xspecs
-    logging.info('time to compute looks in the periodograms : %1.2f sec (sies period: %s)', (time.time() - t_looks),periodo_sizes)
+    logging.debug('time to compute looks in the periodograms : %1.2f sec (sies period: %s)', (time.time() - t_looks),periodo_sizes)
     out = [list(a) for a in list(out)]  # must be generalized for larger number of dimensions
     out = xr.combine_nested(out, concat_dim=periodo_sizes.keys(), combine_attrs='drop_conflicts')
     # out = out.assign_coords(periodo_slices.coords)
@@ -838,18 +846,28 @@ def tile_bursts_overlap_to_xspectra(dt,burst0, burst1, tile_width, tile_overlap,
     """
     from xsarsea.sar_slc.tools import get_corner_tile, get_middle_tile
     # find overlapping burst portion
-    az0 = burst0[{'sample': 0}].azimuth_time#.load()
-    az1 = burst1.isel(sample=0).azimuth_time[{'line': 0}]#.load()
+    full_azimuth_time_vector = get_burst_azitime(dt)
+    burst0_azimuth_time_vector = full_azimuth_time_vector.isel({'line':slice(burst0.attrs['lowest_line'],burst0.attrs['highest_line'])})
+    burst1_azimuth_time_vector = full_azimuth_time_vector.isel(
+        {'line': slice(burst1.attrs['lowest_line'], burst1.attrs['highest_line'])})
+    az0 = burst0_azimuth_time_vector
+    az1 = burst1_azimuth_time_vector.isel(line=0)
+    #az0 = burst0[{'sample': 0}].azimuth_time#.load()
+    #az1 = burst1.isel(sample=0).azimuth_time[{'line': 0}]#.load()
 
     frl = np.argwhere(az0.data >= az1.data)[0].item()  # first overlapping line of first burst
     # Lines below ensures we choose the closest index since azimuth_time are not exactly the same
-    t0 = burst0[{'sample': 0, 'line': frl}].azimuth_time
-    t1 = burst1[{'sample': 0, 'line': 0}].azimuth_time
+    #t0 = burst0[{'sample': 0, 'line': frl}].azimuth_time
+    #t1 = burst1[{'sample': 0, 'line': 0}].azimuth_time
+    t0 = burst0_azimuth_time_vector[{'line': frl}]
+    t1 = burst1_azimuth_time_vector[{'line': 0}]
     aziTimeDiff = np.abs(t0 - t1)
 
-    if np.abs(burst0[{'sample': 0, 'line': frl - 1}].azimuth_time - t1) < aziTimeDiff:
+    #if np.abs(burst0[{'sample': 0, 'line': frl - 1}].azimuth_time - t1) < aziTimeDiff:
+    if np.abs(burst0_azimuth_time_vector[{'line':frl - 1}] - t1) < aziTimeDiff:
         frl -= 1
-    elif np.abs(burst0[{'sample': 0, 'line': frl + 1}].azimuth_time - t1) < aziTimeDiff:
+    #elif np.abs(burst0[{'sample': 0, 'line': frl + 1}].azimuth_time - t1) < aziTimeDiff:
+    elif np.abs(burst0_azimuth_time_vector[{'line': frl + 1}] - t1) < aziTimeDiff:
         frl += 1
     else:
         pass
@@ -892,8 +910,10 @@ def tile_bursts_overlap_to_xspectra(dt,burst0, burst1, tile_width, tile_overlap,
         sub1 = tiled_burst1[i].swap_dims({'__' + d: d for d in tile_width.keys()})
         sub = sub0
 
-        line_middle_burst = tiles_index['sample'].isel({'tile_sample':tiles_sizes[i]})
-        sample_middle_burst = tiles_index['line'].isel({'tile_line':tiles_sizes[i]})
+        sample_middle_burst = tiles_index['sample'].isel({'tile_sample': i['tile_sample']})
+        line_middle_burst = tiles_index['line'].isel({'tile_line':i['tile_line']})
+        #sample_middle_burst = tiles_index['sample'].isel({'tile_sample':tiles_sizes[i]})
+        #line_middle_burst = tiles_index['line'].isel({'tile_line':tiles_sizes[i]})
         mean_incidence = float(get_geoloc_variable_at_specific_image_location(dt, line_seek=line_middle_burst,
                                                                         sample_seek=sample_middle_burst,
                                                                         varname='incidence').mean())
@@ -970,9 +990,24 @@ def tile_bursts_overlap_to_xspectra(dt,burst0, burst1, tile_width, tile_overlap,
     corner_lon = get_geoloc_variable_at_specific_image_location(dt, line_seek=tiles_corners['line'],
                                                                 sample_seek=tiles_corners['sample'],
                                                                 varname='longitude')
+    new_shape = (tiles_corners['line']['tile_line'].size, tiles_corners['line']['corner_line'].size,
+                 tiles_corners['sample']['tile_sample'].size, tiles_corners['sample']['corner_sample'].size)
+    corner_lon = corner_lon.reshape(new_shape)
+
+    corner_lon = xr.DataArray(corner_lon, coords={'tile_line': tiles_corners['line']['tile_line'],
+                                                  'tile_sample': tiles_corners['sample']['tile_sample'],
+                                                  "corner_line": tiles_corners['line']['corner_line'],
+                                                  "corner_sample": tiles_corners['sample']['corner_sample'], },
+                              dims=['tile_line', 'corner_line', 'tile_sample', 'corner_sample'], name='corner_lon')
     corner_lat = get_geoloc_variable_at_specific_image_location(dt, line_seek=tiles_corners['line'],
                                                                 sample_seek=tiles_corners['sample'],
                                                                 varname='latitude')
+    corner_lat = corner_lat.reshape(new_shape)
+    corner_lat = xr.DataArray(corner_lon, coords={'tile_line': tiles_corners['line']['tile_line'],
+                                                  'tile_sample': tiles_corners['sample']['tile_sample'],
+                                                  "corner_line": tiles_corners['line']['corner_line'],
+                                                  "corner_sample": tiles_corners['sample']['corner_sample'], },
+                              dims=['tile_line', 'corner_line', 'tile_sample', 'corner_sample'], name='corner_lat')
 
     tiles_middle = get_middle_tile(tiles_index)
     # middle_lon = burst['longitude'][tiles_middle].rename('longitude')
@@ -980,9 +1015,18 @@ def tile_bursts_overlap_to_xspectra(dt,burst0, burst1, tile_width, tile_overlap,
     middle_lon = get_geoloc_variable_at_specific_image_location(dt, line_seek=tiles_middle['line'],
                                                                 sample_seek=tiles_middle['sample'],
                                                                 varname='longitude')
+    new_shape = (tiles_corners['line']['tile_line'].size, tiles_corners['sample']['tile_sample'].size)
+    middle_lon = middle_lon.reshape(new_shape)
+    middle_lon = xr.DataArray(middle_lon, coords={'tile_line': tiles_corners['line']['tile_line'],
+                                                  'tile_sample': tiles_corners['sample']['tile_sample'], },
+                              dims=['tile_line', 'tile_sample'])
     middle_lat = get_geoloc_variable_at_specific_image_location(dt, line_seek=tiles_middle['line'],
                                                                 sample_seek=tiles_middle['sample'],
                                                                 varname='latitude')
+    middle_lat = middle_lat.reshape(new_shape)
+    middle_lat = xr.DataArray(middle_lat, coords={'tile_line': tiles_corners['line']['tile_line'],
+                                                  'tile_sample': tiles_corners['sample']['tile_sample'], },
+                              dims=['tile_line', 'tile_sample'])
 
     xs = xr.merge([xs, taus.to_dataset(), cutoff.to_dataset(), corner_lon.to_dataset(), corner_lat.to_dataset()],
                   combine_attrs='drop_conflicts')
