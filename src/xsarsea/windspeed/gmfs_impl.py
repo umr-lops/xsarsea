@@ -258,7 +258,7 @@ def gmf_s1(incidence, speed, phi=None):
     return sig_Z1 * sigmoid_Z1 + sig_Z2 * sigmoid_Z2    
 
 
-@windspeed.gmfs.GmfModel.register(pol='VH', units='linear')
+@GmfModel.register(wspd_range=[3., 80.],pol='VH', units='linear')
 def gmf_rs2_v2(incidence, speed, phi=None):
 
     #constants params 
@@ -297,7 +297,7 @@ def gmf_rs2_v2(incidence, speed, phi=None):
     sig_Final = sig_Z1 * sigmoid_Z1 + sig_Z2 * sigmoid_Z2 
     return sig_Final
 
-@windspeed.gmfs.GmfModel.register(pol='VH', units='linear')
+@GmfModel.register(wspd_range=[3., 80.],pol='VH', units='linear')
 def gmf_s1_v2(incidence, speed, phi=None):
     #constants params 
     
