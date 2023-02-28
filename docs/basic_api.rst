@@ -35,23 +35,5 @@ windspeed.gmfs
 .. automodule:: xsarsea.windspeed.gmfs
     :members:
 
-xspectra computation
-====================
-
-WV SLC
-------
-
-.. automodule:: xsarsea.cross_spectra_core
-    :members: compute_SAR_cross_spectrum2
-
-IW/EW SLC
----------
-
-.. automodule:: xsarsea.sar_slc.processing
-    :members:
-    :imported-members:
-    :show-inheritance:
-    :undoc-members:
-
 
 
