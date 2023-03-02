@@ -76,7 +76,7 @@ def get_test_file(fname, iszip = True):
         import urllib
         file_url = '%s/%s' % (base_url, fname)
         warnings.warn("Downloading %s" % file_url)
-        urllib.request.urlretrieve(os.path.join(config['data_dir'],fname))
+        urllib.request.urlretrieve(file_url,os.path.join(config['data_dir'],fname))
 
     else : 
         if not os.path.exists(os.path.join(res_path, fname)):
