@@ -70,7 +70,7 @@ def get_test_file(fname, zipfile = True):
     base_url = 'https://cyclobs.ifremer.fr/static/sarwing_datarmor/xsardata'
     file_url = '%s/%s.zip' % (base_url, fname)
     if ~zipfile:
-        file_url = '%s/%s
+        file_url = '%s/%s'
     if not os.path.exists(os.path.join(res_path, fname)):
         warnings.warn("Downloading %s" % file_url)
         with fsspec.open(
