@@ -67,16 +67,19 @@ def get_test_file(fname, iszip = True):
         path to file, relative to `config['data_dir']`
 
     """
-    config = _load_config()
+    config = _load_config() 
     res_path = config['data_dir']
     base_url = 'https://cyclobs.ifremer.fr/static/sarwing_datarmor/xsardata'
     file_url = '%s/%s.zip' % (base_url, fname)
 
-    if iszip == False:
+    if not iszip:
+        import urllib
         file_url = '%s/%s' % (base_url, fname)
-    
+        warnings.warn("Downloading %s" % file_url)
+        urllib.request.urlretrieve(os.path.join(config['data_dir'],fname))
 
-    if not os.path.exists(os.path.join(res_path, fname)):
+    else : 
+        if not os.path.exists(os.path.join(res_path, fname)):
         warnings.warn("Downloading %s" % file_url)
         with fsspec.open(
                 'filecache::%s' % file_url,
@@ -84,7 +87,6 @@ def get_test_file(fname, iszip = True):
                 filecache={'cache_storage': os.path.join(os.path.join(config['data_dir'], 'fsspec_cache'))}
         ) as f:
 
-            if iszip:
                 warnings.warn("Unzipping %s" % os.path.join(res_path, fname))
                 with zipfile.ZipFile(f, 'r') as zip_ref:
                     zip_ref.extractall(res_path)
