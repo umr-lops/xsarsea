@@ -36,6 +36,8 @@ Those examples show how to:
 
 * :doc:`examples/windspeed_inversion`
 
+* :doc:`examples/windspeed_retrieval_L1`
+
 * :doc:`examples/gmfs_and_luts`
 
 Help & Reference
@@ -68,6 +70,7 @@ Last documentation build: |today|
 
    examples/xsarsea
    examples/streaks
+   examples/windspeed_retrieval_L1
    examples/windspeed_inversion
    examples/gmfs_and_luts
    examples/ATBD_xsarsea_crossspectra_WV
