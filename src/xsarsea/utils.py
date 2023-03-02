@@ -59,7 +59,7 @@ def get_test_file(fname, iszip = True):
     fname: str
         file name to get (without '.zip' extension)
     iszip: boolean
-        true if file have to be unzipped 
+        true if file have to be unzipped ;
 
     Returns
     -------
