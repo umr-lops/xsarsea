@@ -47,7 +47,7 @@ def _load_config():
     return config
 
 
-def get_test_file(fname, zipfile = True):
+def get_test_file(fname, iszip = True):
     """
     get test file from  https://cyclobs.ifremer.fr/static/sarwing_datarmor/xsardata/
     file is unzipped and extracted to `config['data_dir']`
@@ -67,17 +67,11 @@ def get_test_file(fname, zipfile = True):
     """
     config = _load_config()
     res_path = config['data_dir']
-    base_url = 'https://cyclobs.ifremer.fr/static/sarwing_datarmor/xsardata'
+    base_url = 'https://cyclobs.ifremer.fr/static/sarwing_datarmor/xsardata
     file_url = '%s/%s.zip' % (base_url, fname)
-    if ~zipfile:
+    if ~iszip:
         file_url = '%s/%s' % (base_url, fname)
-        with fsspec.open(
-        'filecache::%s' % file_url,
-        https={'client_kwargs': {'timeout': aiohttp.ClientTimeout(total=3600)}},
-        filecache={'cache_storage': os.path.join(os.path.join(config['data_dir'], 'fsspec_cache'))}
-        ) as f:
-            return os.path.join(res_path, fname)
-
+    
     if not os.path.exists(os.path.join(res_path, fname)):
         warnings.warn("Downloading %s" % file_url)
         with fsspec.open(
@@ -85,9 +79,12 @@ def get_test_file(fname, zipfile = True):
                 https={'client_kwargs': {'timeout': aiohttp.ClientTimeout(total=3600)}},
                 filecache={'cache_storage': os.path.join(os.path.join(config['data_dir'], 'fsspec_cache'))}
         ) as f:
+
+        if iszip:
             warnings.warn("Unzipping %s" % os.path.join(res_path, fname))
             with zipfile.ZipFile(f, 'r') as zip_ref:
                 zip_ref.extractall(res_path)
+        
     return os.path.join(res_path, fname)
 
 def timing(logger=logger.debug):
