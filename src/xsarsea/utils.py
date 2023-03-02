@@ -80,10 +80,10 @@ def get_test_file(fname, iszip = True):
                 filecache={'cache_storage': os.path.join(os.path.join(config['data_dir'], 'fsspec_cache'))}
         ) as f:
 
-        if iszip:
-            warnings.warn("Unzipping %s" % os.path.join(res_path, fname))
-            with zipfile.ZipFile(f, 'r') as zip_ref:
-                zip_ref.extractall(res_path)
+            if iszip:
+                warnings.warn("Unzipping %s" % os.path.join(res_path, fname))
+                with zipfile.ZipFile(f, 'r') as zip_ref:
+                    zip_ref.extractall(res_path)
         
     return os.path.join(res_path, fname)
 
