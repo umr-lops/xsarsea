@@ -47,7 +47,7 @@ def _load_config():
     return config
 
 
-def get_test_file(fname):
+def get_test_file(fname, zipfile = True):
     """
     get test file from  https://cyclobs.ifremer.fr/static/sarwing_datarmor/xsardata/
     file is unzipped and extracted to `config['data_dir']`
@@ -69,6 +69,8 @@ def get_test_file(fname):
     res_path = config['data_dir']
     base_url = 'https://cyclobs.ifremer.fr/static/sarwing_datarmor/xsardata'
     file_url = '%s/%s.zip' % (base_url, fname)
+    if ~zipfile:
+        file_url = '%s/%s
     if not os.path.exists(os.path.join(res_path, fname)):
         warnings.warn("Downloading %s" % file_url)
         with fsspec.open(

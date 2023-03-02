@@ -6,6 +6,42 @@ import logging
 logger = logging.getLogger('xsarsea.windspeed')
 logger.addHandler(logging.NullHandler())
 
+
+def get_dsig(name,inc,sigma0_cr,nesz_cr):
+    """
+    get dsig_cr value(s) by name
+
+    Parameters
+    ----------
+    name: str
+        dsig_cr name
+    inc: xarray.DataArray
+        incidence angle
+    sigma0_cr : xarray.DataArray
+        sigma0 in cross pol for dualpol invertion
+    nesz_cr: xarray.DataArray
+        nesz in cross pol
+
+    Returns
+    -------
+    float | xarray.DataArray
+    """
+    if name == "gmf_s1_v2":                     
+        b=1
+        def sigmoid(x,c0,c1,d0,d1):
+            sig = d0 + d1 / (1 + np.exp(-c0*(x-c1)))
+            return sig
+        poptsig = np.array([ 1.57952257, 25.61843791,  1.46852088,  1.4058646 ])
+        c=sigmoid(inc,*poptsig)
+        return (1 / np.sqrt(b*(sigma0_cr / nesz_cr)**c))
+
+    elif name == "gmf_rs2_v2":
+        b = 1
+        c = 8
+        return (1 / np.sqrt(b*(sigma0_cr / nesz_cr)**c))
+    else : 
+        raise ValueError("dsig names different than 'gmf_s1_v2' or 'gmf_rs2_v2' are not handled. You can compute your own dsig_cr.")
+
 def nesz_flattening(noise, inc):
     """
     Noise flatten by polynomial fit (order 1)
