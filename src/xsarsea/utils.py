@@ -67,7 +67,7 @@ def get_test_file(fname, iszip = True):
     """
     config = _load_config()
     res_path = config['data_dir']
-    base_url = 'https://cyclobs.ifremer.fr/static/sarwing_datarmor/xsardata
+    base_url = 'https://cyclobs.ifremer.fr/static/sarwing_datarmor/xsardata'
     file_url = '%s/%s.zip' % (base_url, fname)
     if ~iszip:
         file_url = '%s/%s' % (base_url, fname)
