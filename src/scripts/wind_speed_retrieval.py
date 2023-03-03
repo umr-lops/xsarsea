@@ -169,7 +169,7 @@ def make_L2(safe_path):
 
 if __name__ == "__main__":
     # to treat a listing 
-    listing_file = open('/home1/datahome/vlheureu/IFREMER/M4_validation/listin.txt', 'r')
+    listing_file = open('/home1/datahome/vlheureu/IFREMER/M4_validation/listing_safe_cyclobs_S1_to_18022023.txt', 'r')
     listing_safe = [line.strip() for line in listing_file.readlines()]
     
     for safe_path in listing_safe:
