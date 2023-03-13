@@ -263,49 +263,7 @@ def gmf_s1_v2(incidence, speed, phi=None):
     sigma0: xarray.DataArray 
         
     """
-    Invert sigma0 to retrieve windspeed from model (lut or gmf).
-
-    Parameters
-    ----------
-    inc: xarray.DataArray
-        incidence angle
-    sigma0: xarray.DataArray
-        sigma0 to be inverted.
-    sigma0_dual: xarray.DataArray (optional)
-        sigma0 in cross pol for dualpol invertion
-    ancillary_wind=: xarray.DataArray (numpy.complex28)
-        ancillary wind
-
-            | (for example ecmwf winds), in **model convention**
-    model=: str or tuple
-        model to use.
-
-            | If mono pol invertion, it could be a single str
-            | If dualpol, it should be ordered (model_co, model_cr)
-
-    Other Parameters
-    ----------------
-    dsig_co=: float
-        parameter used for
-
-            | `Jsig_co=((sigma0_gmf - sigma0) / dsig_co) ** 2`
-    dsig_cr=: float or xarray.DataArray
-        parameters used for
-
-            | `Jsig_cr=((sigma0_gmf - sigma0) / dsig_cr) ** 2`
-
-    Returns
-    -------
-    xarray.DataArray or tuple
-        inverted windspeed in m/s.
-        If available (copol or dualpol), the returned array is `np.complex64`, with the angle of the returned array is
-        inverted direction in **gmf convention** (use `-np.conj(result))` to get it in standard convention)
-
-    See Also
-    --------
-    xsarsea.windspeed.available_models
-
-
+    
     #constants params 
     
     Z1_p = np.array([ 2.13755392e-06,  2.47395267e+00, -2.85775085e-03])
