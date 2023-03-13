@@ -1,2 +1,7 @@
 # default data dir for tests and examples
 data_dir: /tmp
+out_folder: "/home1/datawork/vlheureu/IFREMER/M2_L1_retreat/first_try/"
+path_ecmwf_0100_1h: "/home/datawork-cersat-public/provider/ecmwf/forecast/hourly/0100deg/netcdf_light/%Y/%j/ECMWF_FORECAST_0100_%Y%m%d%H%M_10U_10V.nc"
+path_ecmwf_0125_1h: "/home/datawork-cersat-intranet/project/ecmwf/0.125deg/1h/forecasts/%Y/%j/ecmwf_%Y%m%d%H%M.nc"
+land_mask: "/home/datawork-cersat-public/cache/public/ftp/project/sarwing/xsardata/land-polygons-split-4326/land_polygons.shp"
+safe_example: "/home/datawork-cersat-public/cache/project/mpc-sentinel1/data/esa/sentinel-1a/L1/EW/S1A_EW_GRDM_1S/2023/048S1A_EW_GRDM_1SDV_20230217T002232_20230217T002336_047268_05AC30_9CC7.SAFE"

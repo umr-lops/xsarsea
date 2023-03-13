@@ -8,11 +8,13 @@ import numpy as np
 import os,re
 import cv2
 
+from xsarsea.utils import _load_config
+config = _load_config()
+
 # output folder to store L2 products                 
-out_folder = "/home1/datawork/vlheureu/IFREMER/M2_L1_retreat/first_try/"
 
 def make_L2(safe_path):
-    out_file = out_folder + safe_path.split("/")[-1] + "/output.nc"
+    out_file = config['out_folder'] + safe_path.split("/")[-1] + "/output.nc"
     if os.path.exists(out_file):
         print("OK--", safe_path.split('/')[-1], "already treated")
         return
@@ -21,12 +23,12 @@ def make_L2(safe_path):
     s1meta = xsar.Sentinel1Meta(safe_path)
     
     ## Land mask 
-    s1meta.set_mask_feature('land', '/home/datawork-cersat-public/cache/public/ftp/project/sarwing/xsardata/land-polygons-split-4326/land_polygons.shp')
+    s1meta.set_mask_feature('land', config["land_mask"])
 
     ## Loading ancillary
     # set ecmwf path for ancillary wind
-    s1meta.set_raster('ecmwf_0100_1h','/home/datawork-cersat-public/provider/ecmwf/forecast/hourly/0100deg/netcdf_light/%Y/%j/ECMWF_FORECAST_0100_%Y%m%d%H%M_10U_10V.nc')
-    s1meta.set_raster('ecmwf_0125_1h','/home/datawork-cersat-intranet/project/ecmwf/0.125deg/1h/forecasts/%Y/%j/ecmwf_%Y%m%d%H%M.nc')
+    s1meta.set_raster('ecmwf_0100_1h',config["path_ecmwf_0100_1h"])
+    s1meta.set_raster('ecmwf_0125_1h',config["path_ecmwf_0125_1h"])
 
     # only keep best ecmwf  (FIXME: it's hacky, and xsar should provide a better method to handle this)
     for ecmwf_name in [ 'ecmwf_0125_1h', 'ecmwf_0100_1h' ]:
@@ -75,10 +77,10 @@ def make_L2(safe_path):
 
     nesz_cr = xsar_obj_1000m.dataset.nesz.isel(pol=1) #(no_flattening)
     if apply_flattening : 
-        xsar_obj_1000m.dataset=xsar_obj_1000m.dataset.assign(nesz_VH_final=(['atrack','xtrack'],windspeed.nesz_flattening(nesz_cr, xsar_obj_1000m.dataset.incidence)))
+        xsar_obj_1000m.dataset=xsar_obj_1000m.dataset.assign(nesz_VH_final=(['line','sample'],windspeed.nesz_flattening(nesz_cr, xsar_obj_1000m.dataset.incidence)))
         xsar_obj_1000m.dataset['nesz_VH_final'].attrs["comment"] = 'nesz has been flattened using windspeed.nesz_flattening'
     else :
-        xsar_obj_1000m.dataset=xsar_obj_1000m.dataset.assign(nesz_VH_final=(['atrack','xtrack'],nesz_cr.values))
+        xsar_obj_1000m.dataset=xsar_obj_1000m.dataset.assign(nesz_VH_final=(['line','sample'],nesz_cr.values))
         xsar_obj_1000m.dataset['nesz_VH_final'].attrs["comment"] = 'nesz has not been flattened'
    
     ## dsig
@@ -113,7 +115,7 @@ def make_L2(safe_path):
         model=GMF_VH_NAME)
 
     windspeed_cr = np.abs(windspeed_cr)
-    xsar_obj_1000m.dataset=xsar_obj_1000m.dataset.assign(windspeed_cr=(['atrack','xtrack'],windspeed_cr))
+    xsar_obj_1000m.dataset=xsar_obj_1000m.dataset.assign(windspeed_cr=(['line','sample'],windspeed_cr))
     xsar_obj_1000m.dataset.windspeed_cr.attrs['comment'] = "wind speed inverted from model %s (%s)" % (GMF_VH_NAME, "VH")
     xsar_obj_1000m.dataset.windspeed_cr.attrs['model'] = GMF_VH_NAME
     xsar_obj_1000m.dataset.windspeed_cr.attrs['units'] = 'm/s'
@@ -153,9 +155,9 @@ def make_L2(safe_path):
             if isinstance(obj, np.integer):
                 return int(obj)
 
-    json_gcps = json.dumps(json.loads(json.dumps(ds_1000.atrack.spatial_ref.gcps,cls=JSONEncoder)))
-    ds_1000['atrack']['spatial_ref'].attrs['gcps'] = json_gcps
-    ds_1000['xtrack']['spatial_ref'].attrs['gcps'] = json_gcps
+    json_gcps = json.dumps(json.loads(json.dumps(ds_1000.line.spatial_ref.gcps,cls=JSONEncoder)))
+    ds_1000['line']['spatial_ref'].attrs['gcps'] = json_gcps
+    ds_1000['sample']['spatial_ref'].attrs['gcps'] = json_gcps
     
     # remove possible incorect values on swath border
     for name in ['windspeed_co','windspeed_cr','windspeed_dual']:
@@ -168,12 +170,13 @@ def make_L2(safe_path):
 
 
 if __name__ == "__main__":
-    # to treat a listing 
-    listing_file = open('/home1/datahome/vlheureu/IFREMER/M4_validation/listing_safe_cyclobs_S1_to_18022023.txt', 'r')
-    listing_safe = [line.strip() for line in listing_file.readlines()]
+    ####  to treat a listing 
+    # listing_file = open('/home1/datahome/vlheureu/IFREMER/M4_validation/listing_safe_cyclobs_S1_to_18022023.txt', 'r')
+    #listing_safe = [line.strip() for line in listing_file.readlines()]
     
-    for safe_path in listing_safe:
-          make_L2(safe_path)     
+    #for safe_path in listing_safe:
+    #      make_L2(safe_path)     
           
-    #to treat one file 
-    #make_L2(safe_path) 
+    #### to treat one file 
+    safe_path = config["safe_example"]
+    make_L2(safe_path) 
