@@ -201,13 +201,14 @@ def gmf_rs2_v2(incidence, speed, phi=None):
     Parameters
     ----------
     incidence: xarray.DataArray
-        incidence angle
+        incidence angle [deg]
     speed: xarray.DataArray
-        wind speed.
+        wind speed [m/s]
 
     Returns
     -------
     sigma0: xarray.DataArray 
+        linear sigma0 
         
     """
     #constants params 
@@ -254,14 +255,14 @@ def gmf_s1_v2(incidence, speed, phi=None):
     Parameters
     ----------
     incidence: xarray.DataArray
-        incidence angle
+        incidence angle [deg]
     speed: xarray.DataArray
-        wind speed.
+        wind speed [m/s]
 
     Returns
     -------
     sigma0: xarray.DataArray 
-        
+        linear sigma0 
     """
     
     #constants params 

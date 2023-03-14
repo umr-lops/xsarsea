@@ -8,6 +8,8 @@ import numpy as np
 import os,re
 import cv2
 
+import logging
+
 from xsarsea.utils import _load_config
 config = _load_config()
 
@@ -16,9 +18,9 @@ config = _load_config()
 def make_L2(safe_path):
     out_file = config['out_folder'] + safe_path.split("/")[-1] + "/output.nc"
     if os.path.exists(out_file):
-        print("OK--", safe_path.split('/')[-1], "already treated")
+        logging.info("OK--", safe_path.split('/')[-1], "already treated")
         return
-    print("....treating", safe_path.split("/")[-1])
+    logging.info("....treating", safe_path.split("/")[-1])
     #loading metatada
     s1meta = xsar.Sentinel1Meta(safe_path)
     
@@ -43,7 +45,7 @@ def make_L2(safe_path):
     try :
         xsar_obj_1000m = xsar.Sentinel1Dataset(s1meta, resolution='1000m')
     except Exception as e :
-        print(e)
+        logging.warn(e)
         return 
     
     xsar_obj_1000m.dataset = xsar_obj_1000m.dataset.rename(map_model)
@@ -66,11 +68,11 @@ def make_L2(safe_path):
     
     ## flattening and gmf to use
     if mission_name == "SENTINEL-1":
-        print("mission_name : {}, ipf_version : {}, aux_cal_stop : {}".format(mission_name,ipf_version,aux_cal_stop))
+        logging.info("mission_name : {}, ipf_version : {}, aux_cal_stop : {}".format(mission_name,ipf_version,aux_cal_stop))
         apply_flattening = True
         GMF_VH_NAME = "gmf_s1_v2"
     else : 
-        print("mission_name should be SENTINEL-1 since we only know to use S1")
+        logging.info("mission_name should be SENTINEL-1 since we only know to use S1")
         apply_flattening = False
         GMF_VH_NAME = "gmf_rs2_v2"
         return 
@@ -87,7 +89,7 @@ def make_L2(safe_path):
     try : 
         dsig_cr = windspeed.get_dsig("gmf_s1_v2", dataset_1000m.incidence,dataset_1000m.sigma0_ocean.sel(pol='VH'),dataset_1000m.nesz_VH_final)
     except Exception as e :
-        print(e)
+        logging.warn(e)
         return
 
     ## co & dual inversion
@@ -170,6 +172,10 @@ def make_L2(safe_path):
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.DEBUG,
+                    datefmt='%d/%m/%Y %H:%M:%S')
+
+
     ####  to treat a listing 
     # listing_file = open('/home1/datahome/vlheureu/IFREMER/M4_validation/listing_safe_cyclobs_S1_to_18022023.txt', 'r')
     #listing_safe = [line.strip() for line in listing_file.readlines()]
