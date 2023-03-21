@@ -23,16 +23,11 @@ Examples
 Those examples show how to:
     * `Detrend sigma0`_ (also called *roughness* or *nice display*)
     * `Wind streaks direction`_
-    * `Compute cross-spectrum from WV SLC acquisition`_
 
 
 * :doc:`examples/xsarsea`
 
 * :doc:`examples/streaks`
-
-* :doc:`examples/ATBD_xsarsea_crossspectra_WV`
-
-* :doc:`examples/xspec_IW_intra_and_inter_burst`
 
 * :doc:`examples/windspeed_inversion`
 
@@ -73,8 +68,6 @@ Last documentation build: |today|
    examples/windspeed_retrieval_L1
    examples/windspeed_inversion
    examples/gmfs_and_luts
-   examples/ATBD_xsarsea_crossspectra_WV
-   examples/xspec_IW_intra_and_inter_burst
 
 .. toctree::
    :maxdepth: 1
@@ -88,5 +81,4 @@ Last documentation build: |today|
 .. _xsar: https://cyclobs.ifremer.fr/static/sarwing_datarmor/xsar
 .. _Detrend sigma0: examples/xsarsea.ipynb#Sigma0-detrending
 .. _Wind streaks direction: examples/streaks.ipynb#Streaks-analysis
-.. _Compute cross-spectrum from WV SLC acquisition: examples/ATBD_xsarsea_crossspectra_WV#cross-spectrum-computation
 
