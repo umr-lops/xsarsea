@@ -124,6 +124,8 @@ def make_L2(safe_path):
     
     
     ## saving 
+    xsar_obj_1000m.dataset['sigma0_ocean_VV'] = xsar_obj_1000m.dataset['sigma0_ocean'].sel(pol='VV')
+    xsar_obj_1000m.dataset['sigma0_ocean_VH'] = xsar_obj_1000m.dataset['sigma0_ocean'].sel(pol='VH')
     
     # prepare dataset for netcdf export
     black_list = ['model_U10', 'model_V10', 'digital_number', 'gamma0_raw', 'negz',
