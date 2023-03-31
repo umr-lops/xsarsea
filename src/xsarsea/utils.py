@@ -47,10 +47,10 @@ def _load_config():
     return config
 
 
-def get_test_file(fname):
+def get_test_file(fname, iszip = True):
     """
     get test file from  https://cyclobs.ifremer.fr/static/sarwing_datarmor/xsardata/
-    file is unzipped and extracted to `config['data_dir']`
+    file is unzipped if needed and extracted to `config['data_dir']`
 
     This function is for examples only, it should not be not used in production environments.
 
@@ -58,6 +58,8 @@ def get_test_file(fname):
     ----------
     fname: str
         file name to get (without '.zip' extension)
+    iszip: boolean
+        true if file have to be unzipped ;
 
     Returns
     -------
@@ -65,20 +67,30 @@ def get_test_file(fname):
         path to file, relative to `config['data_dir']`
 
     """
-    config = _load_config()
+    config = _load_config() 
     res_path = config['data_dir']
     base_url = 'https://cyclobs.ifremer.fr/static/sarwing_datarmor/xsardata'
     file_url = '%s/%s.zip' % (base_url, fname)
-    if not os.path.exists(os.path.join(res_path, fname)):
+
+    if not iszip:
+        import urllib
+        file_url = '%s/%s' % (base_url, fname)
         warnings.warn("Downloading %s" % file_url)
-        with fsspec.open(
-                'filecache::%s' % file_url,
-                https={'client_kwargs': {'timeout': aiohttp.ClientTimeout(total=3600)}},
-                filecache={'cache_storage': os.path.join(os.path.join(config['data_dir'], 'fsspec_cache'))}
-        ) as f:
-            warnings.warn("Unzipping %s" % os.path.join(res_path, fname))
-            with zipfile.ZipFile(f, 'r') as zip_ref:
-                zip_ref.extractall(res_path)
+        urllib.request.urlretrieve(file_url,os.path.join(config['data_dir'],fname))
+
+    else : 
+        if not os.path.exists(os.path.join(res_path, fname)):
+            warnings.warn("Downloading %s" % file_url)
+            with fsspec.open(
+                    'filecache::%s' % file_url,
+                    https={'client_kwargs': {'timeout': aiohttp.ClientTimeout(total=3600)}},
+                    filecache={'cache_storage': os.path.join(os.path.join(config['data_dir'], 'fsspec_cache'))}
+            ) as f:
+
+                    warnings.warn("Unzipping %s" % os.path.join(res_path, fname))
+                    with zipfile.ZipFile(f, 'r') as zip_ref:
+                        zip_ref.extractall(res_path)
+        
     return os.path.join(res_path, fname)
 
 def timing(logger=logger.debug):
