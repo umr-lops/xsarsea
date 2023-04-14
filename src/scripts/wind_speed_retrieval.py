@@ -1,6 +1,7 @@
 import xsarsea
 from xsarsea import windspeed
 import xsar
+import datetime 
 
 import xarray as xr
 import numpy as np
@@ -35,7 +36,7 @@ def make_L2(safe_path):
     # only keep best ecmwf  (FIXME: it's hacky, and xsar should provide a better method to handle this)
     for ecmwf_name in [ 'ecmwf_0125_1h', 'ecmwf_0100_1h' ]:
         ecmwf_infos = s1meta.rasters.loc[ecmwf_name]
-        ecmwf_file = ecmwf_infos['get_function'](ecmwf_infos['resource'], date=s1meta.start_date)
+        ecmwf_file = ecmwf_infos['get_function'](ecmwf_infos['resource'], date=datetime.datetime.strptime(s1meta.start_date, '%Y-%m-%d %H:%M:%S.%f'))[1]
         if not os.path.isfile(ecmwf_file):
                 s1meta.rasters = s1meta.rasters.drop([ecmwf_name])
         else:
@@ -47,18 +48,20 @@ def make_L2(safe_path):
     except Exception as e :
         logging.warn(e)
         return 
-    
-    xsar_obj_1000m.dataset = xsar_obj_1000m.dataset.rename(map_model)
+        
+    dataset_1000m = xsar_obj_1000m.datatree['measurement'].to_dataset()
+    dataset_1000m = dataset_1000m.rename(map_model)
+
 
     ### Variables of interest 
-    xsar_obj_1000m.dataset['land_mask'].values = cv2.dilate(xsar_obj_1000m.dataset['land_mask'].values.astype('uint8'),np.ones((3,3),np.uint8),iterations = 3)
-    xsar_obj_1000m.dataset['sigma0_ocean'] = xr.where(xsar_obj_1000m.dataset['land_mask'], np.nan, xsar_obj_1000m.dataset['sigma0'].compute()).transpose(*xsar_obj_1000m.dataset['sigma0'].dims)
-    xsar_obj_1000m.dataset['sigma0_ocean'] = xr.where(xsar_obj_1000m.dataset['sigma0_ocean'] <= 0, 1e-15, xsar_obj_1000m.dataset['sigma0_ocean'])
-    xsar_obj_1000m.dataset['ancillary_wind'] = (xsar_obj_1000m.dataset.model_U10 + 1j * xsar_obj_1000m.dataset.model_V10) * np.exp(1j * np.deg2rad(xsar_obj_1000m.dataset.ground_heading))
-    xsar_obj_1000m.dataset['ancillary_wind'] = xr.where(xsar_obj_1000m.dataset['land_mask'], np.nan, xsar_obj_1000m.dataset['ancillary_wind'].compute()).transpose(*xsar_obj_1000m.dataset['ancillary_wind'].dims)
+    dataset_1000m['land_mask'].values = cv2.dilate(dataset_1000m['land_mask'].values.astype('uint8'),np.ones((3,3),np.uint8),iterations = 3)
+    dataset_1000m['sigma0_ocean'] = xr.where(dataset_1000m['land_mask'], np.nan, dataset_1000m['sigma0'].compute()).transpose(*dataset_1000m['sigma0'].dims)
+    dataset_1000m['sigma0_ocean'] = xr.where(dataset_1000m['sigma0_ocean'] <= 0, 1e-15, dataset_1000m['sigma0_ocean'])
+    dataset_1000m['ancillary_wind'] = (dataset_1000m.model_U10 + 1j * dataset_1000m.model_V10) * np.exp(1j * np.deg2rad(dataset_1000m.ground_heading))
+    dataset_1000m['ancillary_wind'] = xr.where(dataset_1000m['land_mask'], np.nan, dataset_1000m['ancillary_wind'].compute()).transpose(*dataset_1000m['ancillary_wind'].dims)
     
     ##ecmwf source
-    xsar_obj_1000m.dataset.attrs['ancillary_source'] = xsar_obj_1000m.dataset['model_U10'].attrs['history'].split('decoded: ')[1].strip()
+    dataset_1000m.attrs['ancillary_source'] = dataset_1000m['model_U10'].attrs['history'].split('decoded: ')[1].strip()
     
     aux_cal_start = re.search('_V(\d+)T', os.path.basename(xsar_obj_1000m.s1meta.manifest_attrs['aux_cal'])).group(1)
     aux_cal_stop = re.search('_G(\d+)T', os.path.basename(xsar_obj_1000m.s1meta.manifest_attrs['aux_cal'])).group(1)
@@ -77,13 +80,15 @@ def make_L2(safe_path):
         GMF_VH_NAME = "gmf_rs2_v2"
         return 
 
-    nesz_cr = xsar_obj_1000m.dataset.nesz.isel(pol=1) #(no_flattening)
+    nesz_cr = dataset_1000m.nesz.isel(pol=1) #(no_flattening)
     if apply_flattening : 
-        xsar_obj_1000m.dataset=xsar_obj_1000m.dataset.assign(nesz_VH_final=(['line','sample'],windspeed.nesz_flattening(nesz_cr, xsar_obj_1000m.dataset.incidence)))
-        xsar_obj_1000m.dataset['nesz_VH_final'].attrs["comment"] = 'nesz has been flattened using windspeed.nesz_flattening'
+        dataset_1000m=dataset_1000m.assign(nesz_VH_final=(['line','sample'],windspeed.nesz_flattening(nesz_cr, dataset_1000m.incidence)))
+        dataset_1000m['nesz_VH_final'].attrs["comment"] = 'nesz has been flattened using windspeed.nesz_flattening'
     else :
-        xsar_obj_1000m.dataset=xsar_obj_1000m.dataset.assign(nesz_VH_final=(['line','sample'],nesz_cr.values))
-        xsar_obj_1000m.dataset['nesz_VH_final'].attrs["comment"] = 'nesz has not been flattened'
+        dataset_1000m=dataset_1000m.assign(nesz_VH_final=(['line','sample'],nesz_cr.values))
+        dataset_1000m['nesz_VH_final'].attrs["comment"] = 'nesz has not been flattened'
+   
+
    
     ## dsig
     try : 
@@ -94,56 +99,56 @@ def make_L2(safe_path):
 
     ## co & dual inversion
     windspeed_co, windspeed_dual = windspeed.invert_from_model(
-        xsar_obj_1000m.dataset.incidence,
-        xsar_obj_1000m.dataset.sigma0_ocean.isel(pol=0),
-        xsar_obj_1000m.dataset.sigma0_ocean.isel(pol=1),
-        #ancillary_wind=-np.conj(xsar_obj_1000m.dataset['ancillary_wind']),
-        ancillary_wind=-xsar_obj_1000m.dataset['ancillary_wind'],
+        dataset_1000m.incidence,
+        dataset_1000m.sigma0_ocean.isel(pol=0),
+        dataset_1000m.sigma0_ocean.isel(pol=1),
+        #ancillary_wind=-np.conj(dataset_1000m['ancillary_wind']),
+        ancillary_wind=-dataset_1000m['ancillary_wind'],
         dsig_cr = dsig_cr,
         model=('cmod5n',GMF_VH_NAME))
         
-    xsar_obj_1000m.dataset["windspeed_co"] = np.abs(windspeed_co)
-    xsar_obj_1000m.dataset["windspeed_co"].attrs["comment"] = xsar_obj_1000m.dataset["windspeed_co"].attrs["comment"].replace("wind speed and direction","wind speed")
+    dataset_1000m["windspeed_co"] = np.abs(windspeed_co)
+    dataset_1000m["windspeed_co"].attrs["comment"] = dataset_1000m["windspeed_co"].attrs["comment"].replace("wind speed and direction","wind speed")
 
-    xsar_obj_1000m.dataset["windspeed_dual"] = np.abs(windspeed_dual)
-    xsar_obj_1000m.dataset["windspeed_dual"].attrs["comment"] = xsar_obj_1000m.dataset["windspeed_dual"].attrs["comment"].replace("wind speed and direction","wind speed")
+    dataset_1000m["windspeed_dual"] = np.abs(windspeed_dual)
+    dataset_1000m["windspeed_dual"].attrs["comment"] = dataset_1000m["windspeed_dual"].attrs["comment"].replace("wind speed and direction","wind speed")
     
     ## cr inversion ##TODO
     windspeed_cr = windspeed.invert_from_model(
-        xsar_obj_1000m.dataset.incidence.values,
-        xsar_obj_1000m.dataset.sigma0_ocean.isel(pol=1).values,
-        #ancillary_wind=-np.conj(xsar_obj_1000m.dataset['ancillary_wind']),
+        dataset_1000m.incidence.values,
+        dataset_1000m.sigma0_ocean.isel(pol=1).values,
+        #ancillary_wind=-np.conj(dataset_1000m['ancillary_wind']),
         dsig_cr = dsig_cr.values,
         model=GMF_VH_NAME)
 
     windspeed_cr = np.abs(windspeed_cr)
-    xsar_obj_1000m.dataset=xsar_obj_1000m.dataset.assign(windspeed_cr=(['line','sample'],windspeed_cr))
-    xsar_obj_1000m.dataset.windspeed_cr.attrs['comment'] = "wind speed inverted from model %s (%s)" % (GMF_VH_NAME, "VH")
-    xsar_obj_1000m.dataset.windspeed_cr.attrs['model'] = GMF_VH_NAME
-    xsar_obj_1000m.dataset.windspeed_cr.attrs['units'] = 'm/s'
+    dataset_1000m=dataset_1000m.assign(windspeed_cr=(['line','sample'],windspeed_cr))
+    dataset_1000m.windspeed_cr.attrs['comment'] = "wind speed inverted from model %s (%s)" % (GMF_VH_NAME, "VH")
+    dataset_1000m.windspeed_cr.attrs['model'] = GMF_VH_NAME
+    dataset_1000m.windspeed_cr.attrs['units'] = 'm/s'
     
     
     ## saving 
-    xsar_obj_1000m.dataset['sigma0_ocean_VV'] = xsar_obj_1000m.dataset['sigma0_ocean'].sel(pol='VV')
-    xsar_obj_1000m.dataset['sigma0_ocean_VH'] = xsar_obj_1000m.dataset['sigma0_ocean'].sel(pol='VH')
+    dataset_1000m['sigma0_ocean_VV'] = dataset_1000m['sigma0_ocean'].sel(pol='VV')
+    dataset_1000m['sigma0_ocean_VH'] = dataset_1000m['sigma0_ocean'].sel(pol='VH')
     
     # prepare dataset for netcdf export
     black_list = ['model_U10', 'model_V10', 'digital_number', 'gamma0_raw', 'negz',
                   'azimuth_time', 'slant_range_time', 'velocity', 'range_ground_spacing',
                   'gamma0', 'time', 'sigma0', 'nesz', 'sigma0_raw', 'sigma0_ocean', 'altitude', 'elevation',
                   'nd_co', 'nd_cr']
-    variables = list(set(xsar_obj_1000m.dataset) - set(black_list))
+    variables = list(set(dataset_1000m) - set(black_list))
 
     # complex not allowed in netcdf
-    xsar_obj_1000m.dataset = xsar_obj_1000m.dataset[variables]
+    dataset_1000m = dataset_1000m[variables]
     
-    xsar_obj_1000m.dataset['ancillary_wind_spd'] = np.abs(xsar_obj_1000m.dataset['ancillary_wind'])
-    xsar_obj_1000m.dataset['ancillary_wind_dir'] = xr.ufuncs.angle(xsar_obj_1000m.dataset['ancillary_wind'])
-    xsar_obj_1000m.dataset['ancillary_wind_dir'].attrs['comment'] = 'angle in radians, anticlockwise, 0=xtrack'
-    del xsar_obj_1000m.dataset['ancillary_wind']
+    dataset_1000m['ancillary_wind_spd'] = np.abs(dataset_1000m['ancillary_wind'])
+    #dataset_1000m['ancillary_wind_dir'] = xr.ufuncs.angle(dataset_1000m['ancillary_wind'])
+    #dataset_1000m['ancillary_wind_dir'].attrs['comment'] = 'angle in radians, anticlockwise, 0=xtrack'
+    del dataset_1000m['ancillary_wind']
     
     xsar_obj_1000m.recompute_attrs()
-    ds_1000 = xsar_obj_1000m.dataset.compute()
+    ds_1000 = dataset_1000m.compute()
     # some type like date or json must be converted to string
     ds_1000.attrs['start_date'] = str(ds_1000.attrs['start_date'])
     ds_1000.attrs['stop_date'] = str(ds_1000.attrs['stop_date'])
