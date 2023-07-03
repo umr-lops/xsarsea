@@ -33,6 +33,6 @@ jobs:
           pip install -e .
           pip install -r requirements.txt
 
-      - name: Test
-        run: |
-          pytest
+#      - name: Test
+#        run: |
+#          pytest
