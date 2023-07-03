@@ -28,5 +28,7 @@ setup(
     license='MIT',
     author='Olivier Archer',
     author_email='Olivier.Archer@ifremer.fr',
-    description='cmod, detrend, and others sar processing tools over ocean'
+    description='cmod, detrend, and others sar processing tools over ocean',
+    long_description_content_type='text/x-rst',
+    long_description ='xsarsea aims at computing geophysical parameters (such as wind, waves or currents) from radar quantities'
 )
