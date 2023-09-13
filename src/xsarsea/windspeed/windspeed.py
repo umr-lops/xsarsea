@@ -174,7 +174,7 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
                 if np.isnan(one_inc):
                     out_co[i] = np.nan
                     out_cr[i] = np.nan
-                    return None
+                    continue
 
                 if not np.isnan(one_sigma0_co_db):
                     # copol inversion available
@@ -243,7 +243,7 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
 
         # build a vectorized function from __invert_from_gmf_scalar
         debug = sys.gettrace()
-        # debug = True  # force pure python
+        # debug = True  # force pure python
         # debug = False # force numba.guvectorize
         if debug:
             logger.debug('using __invert_from_model_1d in pure python mode (debug)')
