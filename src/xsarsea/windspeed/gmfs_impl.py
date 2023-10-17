@@ -304,6 +304,7 @@ def gmf_s1_v2(incidence, speed, phi=None):
     return sig_Final
 
 
+@GmfModel.register(wspd_range=[3., 80.], pol='VH', units='linear')
 def gmf_rcm_noaa(incidence, speed, phi=None):
     """
     Radarsat Consteallation Mission VH GMF : relation between sigma0, incidence and windspeed. 
