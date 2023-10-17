@@ -7,7 +7,8 @@ from ..utils import timing
 from .utils import logger
 from .models import get_model
 
-@timing(logger.info)
+
+@timing(logger.debug)
 def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsig_co=0.1, dsig_cr=0.1, model=None, **kwargs):
     """
     Invert sigma0 to retrieve windspeed from model (lut or gmf).
@@ -68,15 +69,17 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
     if sigma0_dual is None:
         # mono-pol inversion
         try:
-            pol = sigma0.pol.values.item()  
+            pol = sigma0.pol.values.item()
         except AttributeError:
             pol = None
         model_pol = models[0].pol
         if pol is None:
-            warnings.warn('Unable to check sigma0 pol. Assuming  %s' % model_pol)
+            warnings.warn(
+                'Unable to check sigma0 pol. Assuming  %s' % model_pol)
         else:
             if pol not in model_pol:
-                raise ValueError("sigma0 pol is %s, and model %s can only handle %s" % (pol, models[0].name, model_pol))
+                raise ValueError("sigma0 pol is %s, and model %s can only handle %s" % (
+                    pol, models[0].name, model_pol))
 
         if models[0].iscopol:
             sigma0_co = sigma0
@@ -88,7 +91,8 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
             sigma0_cr = sigma0
             # cross pol only is better with no ancillary wind
             if not np.all(np.isnan(ancillary_wind)):
-                warnings.warn('crosspol inversion is best without ancillary wind, but using it as requested.')
+                warnings.warn(
+                    'crosspol inversion is best without ancillary wind, but using it as requested.')
             models = (None, models[0])
     else:
         # dualpol inversion
@@ -97,7 +101,6 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
 
     if np.isscalar(dsig_cr):
         dsig_cr = sigma0_cr * 0 + dsig_cr
-
 
     # to dB
     sigma0_co_db = 10 * np.log10(sigma0_co + 1e-15)
@@ -111,18 +114,18 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
         # local variables defined here will be available on the worker, and they will be used
         # in _invert_copol_numba
 
-
         d_antenna = 2
         d_azi = 2
         dwspd_fg = 2
 
         try:
-            sigma0_co_lut_db = models[0].to_lut(units='dB', **kwargs)  # shape (inc, wspd, phi)
-            np_sigma0_co_lut_db = np.ascontiguousarray(np.asarray(sigma0_co_lut_db.transpose('wspd', 'phi', 'incidence')))
+            sigma0_co_lut_db = models[0].to_lut(
+                units='dB', **kwargs)  # shape (inc, wspd, phi)
+            np_sigma0_co_lut_db = np.ascontiguousarray(np.asarray(
+                sigma0_co_lut_db.transpose('wspd', 'phi', 'incidence')))
             np_wspd_dim = np.asarray(sigma0_co_lut_db.wspd)
             np_phi_dim = np.asarray(sigma0_co_lut_db.phi)
             np_inc_dim = np.asarray(sigma0_co_lut_db.incidence)
-
 
             if (180 - (np_phi_dim[-1] - np_phi_dim[0])) < 2:
                 # phi is in range [ 0, 180 ] (symetrical lut)
@@ -138,14 +141,17 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
             np_inc_dim = np.array([], dtype=np.float64)
             phi_180 = False
 
-        np_phi_lut, np_wspd_lut = np.meshgrid(np_phi_dim, np_wspd_dim)  # shape (wspd,phi)
-        np_wspd_lut_co_antenna = np_wspd_lut * np.cos(np.radians(np_phi_lut))  # antenna (sample)
-        np_wspd_lut_co_azi = np_wspd_lut * np.sin(np.radians(np_phi_lut))  # azi (line)
-
+        np_phi_lut, np_wspd_lut = np.meshgrid(
+            np_phi_dim, np_wspd_dim)  # shape (wspd,phi)
+        np_wspd_lut_co_antenna = np_wspd_lut * \
+            np.cos(np.radians(np_phi_lut))  # antenna (sample)
+        np_wspd_lut_co_azi = np_wspd_lut * \
+            np.sin(np.radians(np_phi_lut))  # azi (line)
 
         if not np.all(np.isnan(np_sigma0_cr_db)):
             sigma0_cr_lut_db = models[1].to_lut(units='dB', **kwargs)
-            np_sigma0_cr_lut_db = np.ascontiguousarray(np.asarray(sigma0_cr_lut_db.transpose('wspd', 'incidence')))
+            np_sigma0_cr_lut_db = np.ascontiguousarray(
+                np.asarray(sigma0_cr_lut_db.transpose('wspd', 'incidence')))
             np_wspd_lut_cr = np.asarray(sigma0_cr_lut_db.wspd)
             np_inc_cr_dim = np.asarray(sigma0_cr_lut_db.incidence)
         else:
@@ -163,7 +169,7 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
             # for xsarsea, positive sample means in the sample increasing direction
             # for gmf and lut, positive means in the sample decreasing direction
             # we switch ancillary wind to the gmf convention
-            #ancillary_wind_1d = -np.conj(ancillary_wind_1d)
+            # ancillary_wind_1d = -np.conj(ancillary_wind_1d)
 
             for i in range(len(inc_1d)):
                 one_inc = inc_1d[i]
@@ -187,10 +193,13 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
                     if phi_180:
                         m_azi = np.abs(m_azi)  # symetrical lut
                     Jwind_co = ((np_wspd_lut_co_antenna - m_antenna) / d_antenna) ** 2 + \
-                               ((np_wspd_lut_co_azi - m_azi) / d_azi) ** 2  # shape (phi, wspd)
-                    Jsig_co = ((np_sigma0_co_lut_db_inc - one_sigma0_co_db) / dsig_co) ** 2  # shape (wspd, phi)
+                               ((np_wspd_lut_co_azi - m_azi) /
+                                d_azi) ** 2  # shape (phi, wspd)
+                    # shape (wspd, phi)
+                    Jsig_co = ((np_sigma0_co_lut_db_inc -
+                               one_sigma0_co_db) / dsig_co) ** 2
                     J_co = Jwind_co + Jsig_co
-                    ## cost function
+                    # cost function
                     iJ_co = np.argmin(J_co)
                     lut_idx = (iJ_co // J_co.shape[-1], iJ_co % J_co.shape[-1])
                     wspd_co = np_wspd_lut[lut_idx]
@@ -198,12 +207,13 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
 
                     if phi_180:
                         # two phi solution. choose closest from ancillary wind
-                        diff_angle = np.angle(one_ancillary_wind / (wspd_co + np.exp(1j * np.deg2rad(wphi_co))) )
-                        wphi_co_rad = np.arctan2(np.sin(diff_angle), np.cos(diff_angle))
+                        diff_angle = np.angle(
+                            one_ancillary_wind / (wspd_co + np.exp(1j * np.deg2rad(wphi_co))))
+                        wphi_co_rad = np.arctan2(
+                            np.sin(diff_angle), np.cos(diff_angle))
                     else:
                         wphi_co_rad = np.deg2rad(wphi_co)
                     wind_co = wspd_co * np.exp(1j * wphi_co_rad)
-
 
                 else:
                     # no copol. use ancillary wind as wspd_co (if available)
@@ -214,8 +224,10 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
                     i_inc = np.argmin(np.abs(np_inc_cr_dim - one_inc))
                     np_sigma0_cr_lut_db_inc = np_sigma0_cr_lut_db[:, i_inc]
 
-                    Jwind_cr = ((np_wspd_lut_cr - np.abs(wind_co)) / dwspd_fg) ** 2.
-                    Jsig_cr = ((np_sigma0_cr_lut_db_inc - one_sigma0_cr_db) / one_dsig_cr) ** 2.
+                    Jwind_cr = (
+                        (np_wspd_lut_cr - np.abs(wind_co)) / dwspd_fg) ** 2.
+                    Jsig_cr = ((np_sigma0_cr_lut_db_inc -
+                               one_sigma0_cr_db) / one_dsig_cr) ** 2.
                     if not np.isnan(np.abs(wind_co)):
                         # dualpol inversion, or crosspol with ancillary wind
                         J_cr = Jsig_cr + Jwind_cr
@@ -243,10 +255,12 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
 
         # build a vectorized function from __invert_from_gmf_scalar
         debug = sys.gettrace()
-        # debug = True  # force pure python
+        #  debug = True  # force pure python
         # debug = False # force numba.guvectorize
         if debug:
-            logger.debug('using __invert_from_model_1d in pure python mode (debug)')
+            logger.debug(
+                'using __invert_from_model_1d in pure python mode (debug)')
+
             @timing(logger=logger.debug)
             def __invert_from_model_vect(*args):
                 ori_shape = args[0].shape
@@ -254,23 +268,24 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
 
                 out_co = np.empty_like(args_flat[0])
                 out_cr = np.empty_like(args_flat[1])
-                __invert_from_model_1d(*args_flat, out_co, out_cr )
+                __invert_from_model_1d(*args_flat, out_co, out_cr)
                 return out_co.reshape(ori_shape), out_cr.reshape(ori_shape)
         else:
             # fastmath can be used, but we will need nan handling
             __invert_from_model_vect = timing(logger=logger.debug)(
                 guvectorize(
-                    [void(float64[:], float64[:], float64[:], float64[:], complex128[:], complex128[:], complex128[:])],
+                    [void(float64[:], float64[:], float64[:], float64[:],
+                          complex128[:], complex128[:], complex128[:])],
                     '(n),(n),(n),(n),(n)->(n),(n)',
                     fastmath={'nnan': False}, target='parallel')
                 (__invert_from_model_1d)
             )
 
         with warnings.catch_warnings():
-            warnings.filterwarnings('ignore', message='.*invalid value encountered.*', category=RuntimeWarning)
+            warnings.filterwarnings(
+                'ignore', message='.*invalid value encountered.*', category=RuntimeWarning)
             return __invert_from_model_vect(np_inc, np_sigma0_co_db,
                                             np_sigma0_cr_db, np_dsig_cr, np_ancillary_wind)
-
 
     def _invert_from_model_any(inc, sigma0_co_db, sigma0_cr_db, dsig_cr, ancillary_wind):
         # wrapper to allow computation on any type (xarray, numpy)
@@ -327,23 +342,25 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
         return da_ws_co, da_ws_cr
 
     # main
-    ws_co, ws_cr_or_dual = _invert_from_model_any(inc, sigma0_co_db, sigma0_cr_db, dsig_cr, ancillary_wind)
+    ws_co, ws_cr_or_dual = _invert_from_model_any(
+        inc, sigma0_co_db, sigma0_cr_db, dsig_cr, ancillary_wind)
 
     if models[0] and models[0].iscopol:
         try:
-            ws_co.attrs['comment'] = "wind speed and direction inverted from model %s (%s)" % ( models[0].name, models[0].pol)
+            ws_co.attrs['comment'] = "wind speed and direction inverted from model %s (%s)" % (
+                models[0].name, models[0].pol)
             ws_co.attrs['model'] = models[0].name
             ws_co.attrs['units'] = 'm/s'
         except AttributeError:
             # numpy only
             pass
 
-
     if models[1]:
         if sigma0_dual is None and models[1].iscrosspol:
             # crosspol only
             try:
-                ws_cr_or_dual.attrs['comment'] = "wind speed inverted from model %s (%s)" % (models[1].name, models[1].pol)
+                ws_cr_or_dual.attrs['comment'] = "wind speed inverted from model %s (%s)" % (
+                    models[1].name, models[1].pol)
                 ws_cr_or_dual.attrs['model'] = models[1].name
                 ws_cr_or_dual.attrs['units'] = 'm/s'
             except AttributeError:
@@ -361,11 +378,14 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
             return ws_cr
     else:
         # dualpol inversion
-        wspd_dual = xr.where((np.abs(ws_co) < 5) | (np.abs(ws_cr_or_dual) < 5), ws_co, ws_cr_or_dual)
-        #wspd_dual = ws_cr_or_dual
+        wspd_dual = xr.where((np.abs(ws_co) < 5) | (
+            np.abs(ws_cr_or_dual) < 5), ws_co, ws_cr_or_dual)
+        # wspd_dual = ws_cr_or_dual
         try:
-            wspd_dual.attrs['comment'] = "wind speed and direction inverted from model %s (%s) and %s (%s)" % (models[0].name, models[0].pol, models[1].name, models[1].pol)
-            wspd_dual.attrs['model'] = "%s %s" % (models[0].name, models[1].name)
+            wspd_dual.attrs['comment'] = "wind speed and direction inverted from model %s (%s) and %s (%s)" % (
+                models[0].name, models[0].pol, models[1].name, models[1].pol)
+            wspd_dual.attrs['model'] = "%s %s" % (
+                models[0].name, models[1].name)
             wspd_dual.attrs['units'] = 'm/s'
         except AttributeError:
             # numpy only
