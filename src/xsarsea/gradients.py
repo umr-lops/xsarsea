@@ -660,12 +660,12 @@ def Mean(image):
 
     Parameters
     ----------
-    image: xarray.DataArray avec des dimensions ['line', 'sample']
+    image: xarray.DataArray with dims ['line', 'sample']
 
     Returns
     -------
     xarray.DataArray
-        L'image lissée
+        smoothed
     """
     B2 = np.mat('[1,2,1; 2,4,2; 1,2,1]', float) * 1 / 16
     B2 = np.array(B2)
@@ -684,6 +684,16 @@ def Mean(image):
     image = _image/num
 
     return image
+
+
+def compute_mask(image):
+    r2 = R2(image)
+    J = Mean(r2)
+    J1 = Mean(r2**2)
+    J2 = np.sqrt(J1 - J**2)
+    # standart deviation / mean
+    P1 = J2/(J+0.00001)
+    return P1
 
 
 def gradient_histogram(g2, c, angles_bins):
