@@ -9,7 +9,8 @@ https://www.climate-service-center.de/imperia/md/content/gkss/institut_fuer_kues
 
 """
 
-__all__ = ['Gradients', 'Gradients2D', 'circ_smooth', 'PlotGradients', 'circ_hist']
+__all__ = ['Gradients', 'Gradients2D',
+           'circ_smooth', 'PlotGradients', 'circ_hist']
 
 import numpy as np
 from scipy import signal
@@ -60,7 +61,8 @@ class Gradients2D:
         windows_at: dict
         """
         if window_step is not None and windows_at is not None:
-            raise ValueError('window_step and window_at are mutually exclusive')
+            raise ValueError(
+                'window_step and window_at are mutually exclusive')
         if window_step is None and windows_at is None:
             window_step = 1
         self.sigma0 = sigma0
@@ -84,25 +86,30 @@ class Gradients2D:
         direction histogram as a xarray.Dataset, for all windows from `self.stepping_gradients`.
         This is the main attribute needed by user.
         """
-        angles_bins = np.linspace(-np.pi / 2, np.pi / 2, self.n_angles + 1)  # one extra bin
-        angles_bins = (angles_bins[1:] + angles_bins[:-1]) / 2  # suppress extra bin (middle)
+        angles_bins = np.linspace(-np.pi / 2, np.pi / 2,
+                                  self.n_angles + 1)  # one extra bin
+        # suppress extra bin (middle)
+        angles_bins = (angles_bins[1:] + angles_bins[:-1]) / 2
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", RuntimeWarning)
             stepping_gradients = self.stepping_gradients
             grad_hist, ratio = xr.apply_ufunc(
                 gradient_histogram,
                 stepping_gradients['G2'], stepping_gradients['c'], angles_bins,
-                input_core_dims=[self._window_dims.values(), self._window_dims.values(), ["angles"]],
+                input_core_dims=[self._window_dims.values(
+                ), self._window_dims.values(), ["angles"]],
                 exclude_dims=set(self._window_dims.values()),
                 output_core_dims=[['angles'], []],
                 vectorize=True,
                 output_dtypes=[np.float, np.float]
             )
-            grad_hist = grad_hist.rename('weight').assign_coords(angles=angles_bins)
+            grad_hist = grad_hist.rename(
+                'weight').assign_coords(angles=angles_bins)
             ratio = ratio.rename('used_ratio').fillna(0)
         _histogram = xr.merge((grad_hist, ratio))
         # normalize histogram so values are independents from window size
-        window_pixels = mul(*(stepping_gradients[k].size for k in self._window_dims.values()))
+        window_pixels = mul(
+            *(stepping_gradients[k].size for k in self._window_dims.values()))
         _histogram['weight'] = _histogram['weight'] / window_pixels
         return _histogram
 
@@ -135,7 +142,8 @@ class Gradients2D:
         lg = self.local_gradients
         # self.window_size is in asample coordinate, and we want it in pixels of lg
         window_size = np.mean(
-            tuple(self.window_size / np.unique(np.diff(ax))[0] for ax in [lg.line, lg.sample])
+            tuple(self.window_size / np.unique(np.diff(ax))
+                  [0] for ax in [lg.line, lg.sample])
         )
         window = {k: int(window_size) for k in self._spatial_dims}
         return lg.rolling(window, center=True).construct(self._window_dims)
@@ -157,10 +165,12 @@ class Gradients2D:
             # self.window_size is in asample coordinate, and we want it in pixels of self.sigma0
             window_size = int(
                 np.mean(
-                    tuple(self.window_size / np.unique(np.diff(ax))[0] for ax in [self.sigma0.line, self.sigma0.sample])
+                    tuple(self.window_size / np.unique(np.diff(ax))
+                          [0] for ax in [self.sigma0.line, self.sigma0.sample])
                 )
             )
-            ds = self.sigma0.isel(line=slice(0, None, int(window_size)), sample=slice(0, None, int(window_size)))
+            ds = self.sigma0.isel(line=slice(0, None, int(
+                window_size)), sample=slice(0, None, int(window_size)))
             self._windows_at = {
                 'line': ds.line,
                 'sample': ds.sample
@@ -317,8 +327,10 @@ class Gradients:
     def _sigma0_resample(sigma0, factor):
         if factor == 1:
             return sigma0
-        __sigma0 = sigma0.isel(line=slice(0, None, factor), sample=slice(0, None, factor)).copy(True)
-        __sigma0.values[::] = cv2.resize(sigma0.values, __sigma0.shape[::-1], cv2.INTER_AREA)
+        __sigma0 = sigma0.isel(line=slice(0, None, factor),
+                               sample=slice(0, None, factor)).copy(True)
+        __sigma0.values[::] = cv2.resize(
+            sigma0.values, __sigma0.shape[::-1], cv2.INTER_AREA)
         return __sigma0
 
 
@@ -338,13 +350,15 @@ class PlotGradients:
         self.gradients_hist = gradients_hist
         self._spatial_dims = ['sample', 'line']
         # non spatial dims, probably like  ['pol' 'window_dims' 'downscale_factor']
-        self._non_spatial_dims = list(set(gradients_hist.dims) - set(self._spatial_dims) - set(['angles']))
+        self._non_spatial_dims = list(
+            set(gradients_hist.dims) - set(self._spatial_dims) - set(['angles']))
 
         # list of dicts, where keys are from self._non_spatial_dims, and values are all possible values for key
         # so by looping this list, all gradients for all non-spatial dims can be accessed
         self.combine_all = [
             dict(zip(self._non_spatial_dims, comb)) for comb in list(
-                product(*[self.gradients_hist[k].values for k in self._non_spatial_dims])
+                product(
+                    *[self.gradients_hist[k].values for k in self._non_spatial_dims])
             )
         ]
 
@@ -362,12 +376,12 @@ class PlotGradients:
         for dim, style_dict in self.dim_styles.items():
             for style_name, style_values in style_dict.items():
                 try:
-                    self.gradients_hist[style_name] = (dim, style_values[:self.gradients_hist[dim].size])
+                    self.gradients_hist[style_name] = (
+                        dim, style_values[:self.gradients_hist[dim].size])
                     self.styles_names.append(style_name)
                 except (KeyError, ValueError):
                     # dim is not in self.gradients_hist: ignore
                     pass
-
 
         # get maximum histogram
         hist = self.gradients_hist
@@ -381,7 +395,6 @@ class PlotGradients:
             self.peak[style_name] = self.gradients_hist[style_name]
 
         self._vectorfield = None
-
 
     def _get_style(self, ds):
         # return style for ds, using variables from self.styles_names
@@ -409,7 +422,8 @@ class PlotGradients:
             for st in self.styles_names:
                 label = self.peak[st].dims[0]
                 for item in self.peak[st]:
-                    style = {'line_dash': 'solid', 'line_width': 1, 'line_color': 'k'}
+                    style = {'line_dash': 'solid',
+                             'line_width': 1, 'line_color': 'k'}
                     style.update({st: item.item()})
                     legends.append(
                         hv.Curve(
@@ -417,12 +431,14 @@ class PlotGradients:
                             label="%s %s" % (label, item[label].item())
                         ).redim.label(x='sample', y='line').opts(**style)
                     )
-            self._vectorfield = hv.Overlay(vf_list + legends).opts(active_tools=['wheel_zoom', 'pan'])
+            self._vectorfield = hv.Overlay(
+                vf_list + legends).opts(active_tools=['wheel_zoom', 'pan'])
 
         if tap:
             line = self.peak.line.values[self.peak.line.size // 2]
             sample = self.peak.sample.values[self.peak.sample.size // 2]
-            self._mouse_stream = hv.streams.Tap(x=sample, y=line, source=self._vectorfield)
+            self._mouse_stream = hv.streams.Tap(
+                x=sample, y=line, source=self._vectorfield)
             return self._vectorfield * hv.DynamicMap(self._get_windows, streams=[self._mouse_stream])
 
         return self._vectorfield
@@ -439,7 +455,8 @@ class PlotGradients:
             # called by hv streams (like a mouse tap)
             sample = data[0]
             line = data[1]
-        nearest_center = self.peak.sel(line=line, sample=sample, method='nearest', tolerance=1e6)
+        nearest_center = self.peak.sel(
+            line=line, sample=sample, method='nearest', tolerance=1e6)
         line = nearest_center.line.values.item()
         sample = nearest_center.sample.values.item()
         return sample, line
@@ -456,13 +473,14 @@ class PlotGradients:
 
         windows_list = []
         try:
-            ws_list = self.gradients_hist['window_size' ]
+            ws_list = self.gradients_hist['window_size']
         except KeyError:
             # no 'window_size'. compute it from asample neighbors
             ws_list = [
                 np.diff(
                     np.array(
-                        [[self.gradients_hist[ax].isel({ax: i}).item() for i in [0, 1]] for ax in ['line', 'sample']]
+                        [[self.gradients_hist[ax].isel({ax: i}).item() for i in [0, 1]] for ax in [
+                            'line', 'sample']]
                     )
                 ).mean()
             ]
@@ -473,15 +491,16 @@ class PlotGradients:
                 line - ws / 2, line + ws / 2, sample - ws / 2, sample + ws / 2
             )
             try:
-                style = self._get_style(self.gradients_hist.sel(window_size=ws))
+                style = self._get_style(
+                    self.gradients_hist.sel(window_size=ws))
             except (IndexError, KeyError):
                 style = {}
             windows_list.append(
-                hv.Path([[(xmin, amin), (xmin, amax), (xmax, amax), (xmax, amin), (xmin, amin)]]).opts(**style)
+                hv.Path([[(xmin, amin), (xmin, amax), (xmax, amax),
+                        (xmax, amin), (xmin, amin)]]).opts(**style)
             )
 
         return hv.Overlay(windows_list)
-
 
     def histogram_plot(self, sample=None, line=None, x=None, y=None):
         """plot histogram at sample, line"""
@@ -495,7 +514,8 @@ class PlotGradients:
         sample, line = self._get_xline(sample=sample, line=line)
 
         # get histogram
-        hist_at = self.gradients_hist.sel(line=line, sample=sample, method='nearest', tolerance=500)
+        hist_at = self.gradients_hist.sel(
+            line=line, sample=sample, method='nearest', tolerance=500)
 
         hp_list = []
         for sel_one2D in self.combine_all:
@@ -591,9 +611,11 @@ def convolve2d(in1, in2, boundary='symm', fillvalue=0, dask=True):
             raise IndexError("""Some chunks are too small (%s).
             all chunks must be >= %s.
             """ % (str(in1.chunks), str(in2.shape)))
-        res.data = in1.data.map_overlap(_conv2d, depth=in2.shape, boundary=boundary_map[boundary])
+        res.data = in1.data.map_overlap(
+            _conv2d, depth=in2.shape, boundary=boundary_map[boundary])
     else:
-        res.data = signal.convolve2d(in1.data, in2, mode='same', boundary=boundary)
+        res.data = signal.convolve2d(
+            in1.data, in2, mode='same', boundary=boundary)
 
     return res
 
@@ -628,6 +650,38 @@ def R2(image):
     _image = convolve2d(image, B2, boundary='symm')
     num = convolve2d(xr.ones_like(_image), B2, boundary='symm')
     image = _image / num
+
+    return image
+
+
+def Mean(image):
+    """
+    Local Mean Operator
+
+    Parameters
+    ----------
+    image: xarray.DataArray avec des dimensions ['line', 'sample']
+
+    Returns
+    -------
+    xarray.DataArray
+        L'image lissée
+    """
+    B2 = np.mat('[1,2,1; 2,4,2; 1,2,1]', float) * 1 / 16
+    B2 = np.array(B2)
+    B4 = signal.convolve(B2, B2)
+
+    B22 = np.mat(
+        '[1,0,2,0,1;0,0,0,0,0;2,0,4,0,2;0,0,0,0,0;1,0,2,0,1]', float) * 1/16
+    B42 = signal.convolve(B22, B22)
+
+    _image = convolve2d(image, B4, boundary='symm')
+    num = convolve2d(np.ones_like(_image), B4, boundary='symm')
+    image = _image/num
+
+    _image = convolve2d(image, B42, boundary='symm')
+    num = convolve2d(np.ones_like(_image), B4, boundary='symm')
+    image = _image/num
 
     return image
 
@@ -704,7 +758,8 @@ def circ_smooth(hist):
     Bx = np.array([1, 2, 1], float) * 1 / 4
     Bx2 = np.array([1, 0, 2, 0, 1], float) * 1 / 4
     Bx4 = np.array([1, 0, 0, 0, 2, 0, 0, 0, 1], float) * 1 / 4
-    Bx8 = np.array([1, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 1], float) * 1 / 4
+    Bx8 = np.array([1, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0,
+                   0, 0, 0, 0, 0, 1], float) * 1 / 4
     Bs = [Bx, Bx2, Bx4, Bx8]
 
     # circular wrap
@@ -745,7 +800,8 @@ def circ_hist(hist_at):
     hist_at = hist_at * np.exp(1j * hist_at.angles)
 
     # central symmetry, to get 360°
-    hist_at = xr.concat([hist_at, -hist_at], 'angles').drop_vars(['line', 'sample'])
+    hist_at = xr.concat([hist_at, -hist_at],
+                        'angles').drop_vars(['line', 'sample'])
     hist_at['angles'] = np.angle(hist_at)
     hist_at['sample_g'] = np.real(hist_at)
     hist_at['line_g'] = np.imag(hist_at)
@@ -754,6 +810,7 @@ def circ_hist(hist_at):
     circ_hist_pts = hist_at.to_dataframe('tmp')[['line_g', 'sample_g']]
 
     # close path
-    circ_hist_pts = pd.concat([circ_hist_pts, pd.DataFrame(circ_hist_pts.iloc[0]).T])
+    circ_hist_pts = pd.concat(
+        [circ_hist_pts, pd.DataFrame(circ_hist_pts.iloc[0]).T])
 
     return circ_hist_pts
