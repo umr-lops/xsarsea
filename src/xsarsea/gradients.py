@@ -13,7 +13,7 @@ __all__ = ['Gradients', 'Gradients2D',
            'circ_smooth', 'PlotGradients', 'circ_hist']
 
 import numpy as np
-from scipy import signal
+from scipy import signal, ndimage
 import xarray as xr
 import warnings
 import cv2
@@ -572,12 +572,13 @@ def local_gradients(I):
 
     # grad quality
     grad3 = R2(abs(grad12))
+    grad3.name = 'G3'
     c = abs(grad2) / (grad3 + 0.00001)
     c = c.where(c <= 1).fillna(0)
     c.name = 'c'
 
     # return np.sqrt(grad2) ( so angles are in range [-pi/2, pi/2]
-    return xr.merge([np.sqrt(grad2), c])
+    return xr.merge([np.sqrt(grad2), grad3, c])
 
 
 def convolve2d(in1, in2, boundary='symm', fillvalue=0, dask=True):
@@ -618,6 +619,19 @@ def convolve2d(in1, in2, boundary='symm', fillvalue=0, dask=True):
             in1.data, in2, mode='same', boundary=boundary)
 
     return res
+
+
+def smoothing(image):
+    # filtre gaussien
+
+    B2 = np.mat('[1,2,1; 2,4,2; 1,2,1]', float) * 1 / 16
+    B2 = np.array(B2)
+
+    _image = convolve2d(image, B2, boundary='symm')
+    num = convolve2d(xr.ones_like(_image), B2, boundary='symm')
+    image = _image / num
+
+    return image
 
 
 def R2(image):
@@ -686,14 +700,69 @@ def Mean(image):
     return image
 
 
-def compute_mask(image):
+def filtering_parameters(image):
+    """
+    Mask filter parameters definition
+    Zhao, Y.; Longépé, N.; Mouche, A.; Husson, R. Automated Rain Detection by Dual-Polarization Sentinel-1 Data.
+    Remote Sens. 2021, 13, 3155. https://doi.org/10.3390/rs13163155
+
+    Parameters
+    ----------
+    image: xarray.DataArray with dims ['line', 'sample']
+
+    Returns
+    -------
+    list of xarray.DataArray
+        f1, f2, f3, f4, F (all between 0 and 1)
+    """
+    # useful parameters
     r2 = R2(image)
+    lg = local_gradients(image)
+    G3 = lg.G3
+    c = lg.c
     J = Mean(r2)
+
+    # P1
     J1 = Mean(r2**2)
     J2 = np.sqrt(J1 - J**2)
     # standart deviation / mean
     P1 = J2/(J+0.00001)
-    return P1
+    a1 = -50
+    b1 = 2.75
+
+    # P2
+    resampl = r2.coarsen({'line': 2, 'sample': 2}, boundary='trim').mean()
+    # we compute the exact factor so that the two terms match dimensions in case of odd original dimensions
+    K = r2 - ndimage.zoom(smoothing(resampl),
+                          (r2.shape[0] / resampl.shape[0], r2.shape[1] / resampl.shape[1]), order=1)
+    P2 = K**2 / ((J**2)+0.00001)
+    a2 = -5000
+    b2 = 3
+
+    # P3
+    G4 = Mean(G3)
+    P3 = G3/(G4+0.00001)
+    a3 = -2.5
+    b3 = 4
+
+    # P4
+    P4 = np.sqrt(c)
+    a4 = -10
+    b4 = 6.3
+
+    # set values between 0 & 1
+    f1 = np.clip(a1*P1+b1, 0, 1)
+    f2 = np.clip(a2*P2+b2, 0, 1)
+    f3 = np.clip(a3*P3+b3, 0, 1)
+    f4 = np.clip(a4*P4+b4, 0, 1)
+
+    F = np.sqrt(1/4. * (f1**2 + f2**2 + f3**2 + f4**2))
+
+    #  TO CHECK
+    if F.shape == image.shape:
+        F[F < 0.0015] = 0  # suppress black band # to check
+
+    return f1, f2, f3, f4, F
 
 
 def gradient_histogram(g2, c, angles_bins):
