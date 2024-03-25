@@ -700,7 +700,7 @@ def Mean(image):
     return image
 
 
-def filtering_parameters(image):
+def filtering_parameters(image_ori):
     """
     Mask filter parameters definition
     Zhao, Y.; Longépé, N.; Mouche, A.; Husson, R. Automated Rain Detection by Dual-Polarization Sentinel-1 Data.
@@ -708,13 +708,15 @@ def filtering_parameters(image):
 
     Parameters
     ----------
-    image: xarray.DataArray with dims ['line', 'sample']
+    image_ori: xarray.DataArray with dims ['line', 'sample']
 
     Returns
     -------
     list of xarray.DataArray
         f1, f2, f3, f4, F (all between 0 and 1)
     """
+    image = np.sqrt(image_ori)  # sqrt de NRCS=amplitude
+
     # useful parameters
     r2 = R2(image)
     lg = local_gradients(image)
@@ -759,7 +761,7 @@ def filtering_parameters(image):
     F = np.sqrt(1/4. * (f1**2 + f2**2 + f3**2 + f4**2))
 
     #  TO CHECK
-    if F.shape == image.shape:
+    if F.shape == image_ori.shape:
         F[F < 0.0015] = 0  # suppress black band # to check
 
     return f1, f2, f3, f4, F
