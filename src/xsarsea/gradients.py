@@ -60,7 +60,6 @@ class Gradients2D:
 
         windows_at: dict
         """
-        print(window_step, windows_at)
         if window_step is not None and windows_at is not None:
             raise ValueError(
                 'window_step and window_at are mutually exclusive')
