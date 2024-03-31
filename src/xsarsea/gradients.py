@@ -60,6 +60,7 @@ class Gradients2D:
 
         windows_at: dict
         """
+        print(window_step, windows_at)
         if window_step is not None and windows_at is not None:
             raise ValueError(
                 'window_step and window_at are mutually exclusive')
@@ -169,8 +170,14 @@ class Gradients2D:
                           [0] for ax in [self.sigma0.line, self.sigma0.sample])
                 )
             )
-            ds = self.sigma0.isel(line=slice(0, None, int(
-                window_size)), sample=slice(0, None, int(window_size)))
+
+            step_size = int(window_size * self.window_step)
+
+            ds = self.sigma0.isel(
+                line=slice(0, None, step_size),
+                sample=slice(0, None, step_size)
+            )
+
             self._windows_at = {
                 'line': ds.line,
                 'sample': ds.sample
@@ -284,18 +291,21 @@ class Gradients:
                     self.gradients_list.append(
                         Gradients2D(
                             sigma0_resampled.assign_coords(window_size=ws),
-                            window_size=ws,
+                            window_size=ws
                         )
                     )
 
         # 1st gradient define windows_at from window_step for all others gradients
         self.gradients_list[0].window_step = window_step
-
         self.stacked_gradients = StackedGradients(self.gradients_list)
 
     @property
     @timing(logger=logger.info)
     def histogram(self):
+        # The code snippet provided is written in Python and it seems to be defining a list
+        # variable named `output_dtypes` with two elements. Each element in the list is a
+        # NumPy data type - `np.float` and `np.float`. This list may be used to specify the
+        # data types of output values in a program or function.
         """
         xarray.Dataset
 
