@@ -301,10 +301,6 @@ class Gradients:
     @property
     @timing(logger=logger.info)
     def histogram(self):
-        # The code snippet provided is written in Python and it seems to be defining a list
-        # variable named `output_dtypes` with two elements. Each element in the list is a
-        # NumPy data type - `np.float` and `np.float`. This list may be used to specify the
-        # data types of output values in a program or function.
         """
         xarray.Dataset
 
