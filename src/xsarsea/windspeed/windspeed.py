@@ -57,8 +57,8 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
     nan = sigma0 * np.nan
 
     #  put nan values where sigma0 is nan or 0
-    #  sigma0 = np.where(sigma0 == 0, np.nan, sigma0)
-    #  if sigma0_dual is not None:
+    # sigma0 = np.where(sigma0 == 0, np.nan, sigma0)
+    # if sigma0_dual is not None:
     #    sigma0_dual = np.where(sigma0_dual == 0, np.nan, sigma0_dual)
 
     if not isinstance(model, tuple):
@@ -185,8 +185,7 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
                 if np.isnan(one_inc):
                     out_co[i] = np.nan
                     out_cr[i] = np.nan
-                    continue                  
-                    
+                    continue
 
                 if not np.isnan(one_sigma0_co_db):
                     # copol inversion available
@@ -223,7 +222,8 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
 
                 else:
                     # no copol. use ancillary wind as wspd_co (if available)
-                    wind_co = one_ancillary_wind
+                    # wind_co = one_ancillary_wind
+                    wind_co = np.nan * 1j
 
                 if not np.isnan(one_sigma0_cr_db) and not np.isnan(one_dsig_cr):
                     # crosspol available, do dualpol inversion
@@ -257,6 +257,7 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
 
                 out_co[i] = wind_co
                 out_cr[i] = wind_dual
+
             return None
 
         # build a vectorized function from __invert_from_gmf_scalar
