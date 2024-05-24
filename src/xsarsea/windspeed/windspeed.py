@@ -218,10 +218,10 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
                             np.exp(1j * (np.deg2rad(-wphi_co)))
 
                         diff_angle = np.angle(one_ancillary_wind / sol)
-                        diff_angle_pi = np.angle(one_ancillary_wind / sol_2)
+                        diff_angle_2 = np.angle(one_ancillary_wind / sol_2)
 
                         wind_co = sol if np.abs(
-                            diff_angle) <= np.abs(diff_angle_pi) else sol_2
+                            diff_angle) <= np.abs(diff_angle_2) else sol_2
 
                         # xr.where(np.abs(diff_angle) > np.pi/2, -sol, sol)
 
