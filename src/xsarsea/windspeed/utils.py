@@ -7,7 +7,7 @@ logger = logging.getLogger('xsarsea.windspeed')
 logger.addHandler(logging.NullHandler())
 
 
-def get_dsig(name,inc,sigma0_cr,nesz_cr):
+def get_dsig(name, inc, sigma0_cr, nesz_cr):
     """
     get dsig_cr value(s) by name
 
@@ -26,21 +26,28 @@ def get_dsig(name,inc,sigma0_cr,nesz_cr):
     -------
     float | xarray.DataArray
     """
-    if name == "gmf_s1_v2":                     
-        b=1
-        def sigmoid(x,c0,c1,d0,d1):
+    if name == "gmf_s1_v2":
+        b = 1
+
+        def sigmoid(x, c0, c1, d0, d1):
             sig = d0 + d1 / (1 + np.exp(-c0*(x-c1)))
             return sig
-        poptsig = np.array([ 1.57952257, 25.61843791,  1.46852088,  1.4058646 ])
-        c=sigmoid(inc,*poptsig)
+        poptsig = np.array([1.57952257, 25.61843791,  1.46852088,  1.4058646])
+        c = sigmoid(inc, *poptsig)
         return (1 / np.sqrt(b*(sigma0_cr / nesz_cr)**c))
 
     elif name == "gmf_rs2_v2":
         b = 1
         c = 8
         return (1 / np.sqrt(b*(sigma0_cr / nesz_cr)**c))
-    else : 
-        raise ValueError("dsig names different than 'gmf_s1_v2' or 'gmf_rs2_v2' are not handled. You can compute your own dsig_cr.")
+
+    elif name == "sarwing_lut_cmodms1ahw":
+        return 1.25 / (sigma0_cr / nesz_cr) ** 4.
+
+    else:
+        raise ValueError(
+            "dsig names different than 'gmf_s1_v2' or 'gmf_rs2_v2' or 'gmf_cmodms1ahw' are not handled. You can compute your own dsig_cr.")
+
 
 def nesz_flattening(noise, inc):
     """
@@ -75,7 +82,8 @@ def nesz_flattening(noise, inc):
         raise IndexError('Only 2D noise allowed')
 
     with warnings.catch_warnings():
-        warnings.filterwarnings('ignore', message='.*empty.*', category=RuntimeWarning)
+        warnings.filterwarnings(
+            'ignore', message='.*empty.*', category=RuntimeWarning)
         noise_mean = np.nanmean(noise, axis=0)
 
     try:
