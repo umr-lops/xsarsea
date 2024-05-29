@@ -83,14 +83,14 @@ def register_cmod7(topdir):
     Parameters
     ----------
     topdir: str
-        top dir path to cmod7 luts.
+        top dir path to cmod7 lut.
 
     Examples
     --------
 
-
     Notes
     _____
+    Source : https://scatterometer.knmi.nl/cmod7
 
     See Also
     --------
