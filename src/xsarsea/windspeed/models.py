@@ -12,8 +12,6 @@ import pandas as pd
 logger = logging.getLogger('xsarsea.windspeed')
 
 
-
-
 class Model:
     """
     Model class is an abstact class, for handling GMF or LUT.
@@ -70,16 +68,19 @@ class Model:
 
         allowed_units = ['linear', 'dB']
         if units not in allowed_units:
-            raise ValueError("Unknown lut units '%s'. Allowed are '%s'" % (units, allowed_units))
+            raise ValueError(
+                "Unknown lut units '%s'. Allowed are '%s'" % (units, allowed_units))
 
         if lut.ndim == 2:
             good_dims = ('incidence', 'wspd')
             if not (lut.dims == good_dims):
-                raise IndexError("Bad dims '%s'. Should be '%s'" % (lut.dims, good_dims))
+                raise IndexError("Bad dims '%s'. Should be '%s'" %
+                                 (lut.dims, good_dims))
         elif lut.ndim == 3:
             good_dims = ('incidence', 'wspd', 'phi')
             if not (lut.dims == good_dims):
-                raise IndexError("Bad dims '%s'. Should be '%s'" % (lut.dims, good_dims))
+                raise IndexError("Bad dims '%s'. Should be '%s'" %
+                                 (lut.dims, good_dims))
         else:
             raise IndexError("Bad dims '%s'" % lut.dims)
 
@@ -92,7 +93,6 @@ class Model:
             resolution = 'high'
 
         lut_resolution = lut.attrs['resolution']
-
         if resolution is not None and resolution != lut_resolution:
             if resolution == 'high':
                 # high resolution steps
@@ -106,14 +106,16 @@ class Model:
                 phi_step = kwargs.pop('phi_step_lr', self.phi_step_lr)
 
             inc, wspd, phi = [
-                r and np.linspace(r[0], r[1], num=int(np.round((r[1] - r[0]) / step) + 1))
+                r and np.linspace(r[0], r[1], num=int(
+                    np.round((r[1] - r[0]) / step) + 1))
                 for r, step in zip(
                     [self.inc_range, self.wspd_range, self.phi_range],
                     [inc_step, wspd_step, phi_step]
                 )
             ]
             logger.debug('interp lut %s to high res' % self.name)
-            interp_kwargs = {k: v for k, v in zip(['incidence', 'wspd', 'phi'], [inc, wspd, phi]) if v is not None}
+            interp_kwargs = {k: v for k, v in zip(['incidence', 'wspd', 'phi'], [
+                                                  inc, wspd, phi]) if v is not None}
             lut = lut.interp(**interp_kwargs, kwargs=dict(bounds_error=True))
             lut.attrs['resolution'] = resolution
 
@@ -157,7 +159,8 @@ class Model:
             if lut.attrs['units'] == 'dB':
                 final_lut = lut
             elif lut.attrs['units'] == 'linear':
-                final_lut = 10 * np.log10(lut + 1e-15)  # clip with epsilon to avoid nans
+                # clip with epsilon to avoid nans
+                final_lut = 10 * np.log10(lut + 1e-15)
                 final_lut.attrs['units'] = 'dB'
         elif units == 'linear':
             if lut.attrs['units'] == 'linear':
@@ -166,7 +169,8 @@ class Model:
                 final_lut = 10. ** (lut / 10.)
                 final_lut.attrs['units'] = 'linear'
         else:
-            raise ValueError("Unit not known: %s. Known are 'dB' or 'linear' " % units)
+            raise ValueError(
+                "Unit not known: %s. Known are 'dB' or 'linear' " % units)
 
         final_lut.attrs['model'] = self.name
         final_lut.attrs['pol'] = self.pol
@@ -198,13 +202,15 @@ class Model:
         if 'phi' in lut.dims:
             ds_lut.attrs['phi_range'] = self.phi_range
 
-        ds_lut.attrs['wspd_step'] = np.round(np.unique(np.diff(lut.wspd)), decimals=2)[0]
-        ds_lut.attrs['inc_step'] = np.round(np.unique(np.diff(lut.incidence)), decimals=2)[0]
+        ds_lut.attrs['wspd_step'] = np.round(
+            np.unique(np.diff(lut.wspd)), decimals=2)[0]
+        ds_lut.attrs['inc_step'] = np.round(
+            np.unique(np.diff(lut.incidence)), decimals=2)[0]
         if 'phi' in lut.dims:
-            ds_lut.attrs['phi_step'] = np.round(np.unique(np.diff(lut.phi)), decimals=2)[0]
+            ds_lut.attrs['phi_step'] = np.round(
+                np.unique(np.diff(lut.phi)), decimals=2)[0]
 
         ds_lut.to_netcdf(file)
-
 
     @abstractmethod
     def __call__(self, inc, wspd, phi=None, broadcast=False):
@@ -262,16 +268,19 @@ class LutModel(Model):
 
     def __call__(self, inc, wspd, phi=None, units=None, **kwargs):
 
-        all_scalar = all(np.isscalar(v) for v in [inc, wspd, phi] if v is not None)
+        all_scalar = all(np.isscalar(v)
+                         for v in [inc, wspd, phi] if v is not None)
 
         all_1d = False
         try:
-            all_1d = all(v.ndim == 1 for v in [inc, wspd, phi] if v is not None)
+            all_1d = all(v.ndim == 1 for v in [
+                         inc, wspd, phi] if v is not None)
         except AttributeError:
             all_1d = False
 
         if not (all_scalar or all_1d):
-            raise NotImplementedError('Only scalar or 1D array are implemented for LutModel')
+            raise NotImplementedError(
+                'Only scalar or 1D array are implemented for LutModel')
 
         lut = self.to_lut(units=units, **kwargs)
         if 'phi' in lut.dims:
@@ -309,12 +318,13 @@ class NcLutModel(LutModel):
         with netCDF4.Dataset(path) as ncfile:
             for attr in ['units', 'pol', 'model', 'resolution', 'inc_range', 'wspd_range', 'phi_range', 'inc_step', 'wspd_step', 'phi_step']:
                 try:
-                    kwargs[attr]=ncfile.getncattr(attr)
+                    kwargs[attr] = ncfile.getncattr(attr)
                     if isinstance(kwargs[attr], np.ndarray):
                         kwargs[attr] = list(kwargs[attr])
                 except AttributeError as e:
                     if 'phi' not in attr:
-                        raise AttributeError('Attr %s not found in %s' % (attr, path))
+                        raise AttributeError(
+                            'Attr %s not found in %s' % (attr, path))
         self._short_name = kwargs.pop('model')
         if kwargs['resolution'] == 'low':
             kwargs['inc_step_lr'] = kwargs.pop('inc_step')
@@ -334,8 +344,8 @@ class NcLutModel(LutModel):
         lut.attrs['model'] = ds_lut.attrs['model']
         lut.attrs['resolution'] = ds_lut.attrs['resolution']
 
-
         return lut
+
 
 def register_all_nc_luts(topdir):
     """
@@ -390,7 +400,8 @@ def available_models(pol=None):
 
     """
 
-    avail_models = pd.DataFrame(columns=['short_name', 'priority', 'pol', 'model'], index=[])
+    avail_models = pd.DataFrame(
+        columns=['short_name', 'priority', 'pol', 'model'], index=[])
 
     for name, model in Model._available_models.items():
         # print('%s: %s' % (name, model))
@@ -402,7 +413,8 @@ def available_models(pol=None):
     aliased = avail_models.sort_values('priority', ascending=False).drop_duplicates('short_name').rename(
         columns=dict(short_name='alias')).drop(columns='priority')
 
-    non_aliased = avail_models.drop(aliased.index).drop(columns='priority').rename(columns=dict(short_name='alias'))
+    non_aliased = avail_models.drop(aliased.index).drop(
+        columns='priority').rename(columns=dict(short_name='alias'))
     non_aliased['alias'] = None
     # aliased.merge(non_aliased)
     # aliased
@@ -413,7 +425,6 @@ def available_models(pol=None):
         avail_models = avail_models[avail_models.pol == pol]
 
     return avail_models
-
 
     if pol is None:
         return Model._available_models

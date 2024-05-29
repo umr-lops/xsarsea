@@ -185,8 +185,7 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
                 if np.isnan(one_inc):
                     out_co[i] = np.nan
                     out_cr[i] = np.nan
-                    continue                  
-                    
+                    continue
 
                 if not np.isnan(one_sigma0_co_db):
                     # copol inversion available
@@ -210,20 +209,26 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
                     lut_idx = (iJ_co // J_co.shape[-1], iJ_co % J_co.shape[-1])
                     wspd_co = np_wspd_lut[lut_idx]
                     wphi_co = np_phi_lut[lut_idx]
-
                     if phi_180:
-                        # two phi solution. choose closest from ancillary wind
-                        diff_angle = np.angle(
-                            one_ancillary_wind / (wspd_co + np.exp(1j * np.deg2rad(wphi_co))))
-                        wphi_co_rad = np.arctan2(
-                            np.sin(diff_angle), np.cos(diff_angle))
+                        # two phi solution (phi & -phi). choose closest from ancillary wind
+
+                        sol = wspd_co * np.exp(1j * np.deg2rad(wphi_co))
+                        sol_2 = wspd_co * \
+                            np.exp(1j * (np.deg2rad(-wphi_co)))
+
+                        diff_angle = np.angle(one_ancillary_wind / sol)
+                        diff_angle_2 = np.angle(one_ancillary_wind / sol_2)
+
+                        wind_co = sol if np.abs(
+                            diff_angle) <= np.abs(diff_angle_2) else sol_2
+
+                        # xr.where(np.abs(diff_angle) > np.pi/2, -sol, sol)
+
                     else:
-                        wphi_co_rad = np.deg2rad(wphi_co)
-                    wind_co = wspd_co * np.exp(1j * wphi_co_rad)
+                        wind_co = wspd_co * np.exp(1j * np.deg2rad(wphi_co))
 
                 else:
-                    # no copol. use ancillary wind as wspd_co (if available)
-                    wind_co = one_ancillary_wind
+                    wind_co = np.nan * 1j
 
                 if not np.isnan(one_sigma0_cr_db) and not np.isnan(one_dsig_cr):
                     # crosspol available, do dualpol inversion
@@ -233,7 +238,7 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
                     Jwind_cr = (
                         (np_wspd_lut_cr - np.abs(wind_co)) / dwspd_fg) ** 2.
                     Jsig_cr = ((np_sigma0_cr_lut_db_inc -
-                               one_sigma0_cr_db) / one_dsig_cr) ** 2.
+                                one_sigma0_cr_db) / one_dsig_cr) ** 2.
                     if not np.isnan(np.abs(wind_co)):
                         # dualpol inversion, or crosspol with ancillary wind
                         J_cr = Jsig_cr + Jwind_cr
@@ -267,7 +272,7 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
             logger.debug(
                 'using __invert_from_model_1d in pure python mode (debug)')
 
-            @timing(logger=logger.debug)
+            @ timing(logger=logger.debug)
             def __invert_from_model_vect(*args):
                 ori_shape = args[0].shape
                 args_flat = tuple((arg.flatten() for arg in args))
@@ -368,7 +373,7 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
                 ws_cr_or_dual.attrs['comment'] = "wind speed inverted from model %s (%s)" % (
                     models[1].name, models[1].pol)
                 ws_cr_or_dual.attrs['model'] = models[1].name
-                #  ws_cr_or_dual.attrs['units'] = 'm/s'
+                ws_cr_or_dual.attrs['units'] = 'm/s'
             except AttributeError:
                 # numpy only
                 pass

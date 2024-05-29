@@ -37,7 +37,8 @@ def sigma0_detrend(sigma0, inc_angle, wind_speed_gmf=10., wind_dir_gmf=45., mode
     except AttributeError:
         # this should be the standard way
         # see https://github.com/dask/distributed/issues/3450#issuecomment-585255484
-        sigma0_gmf_sample = model(inc_angle.isel(line=0), wind_speed_gmf, wind_dir_gmf, broadcast=True)
+        sigma0_gmf_sample = model(inc_angle.isel(
+            line=0), wind_speed_gmf, wind_dir_gmf, broadcast=True)
 
     gmf_ratio_sample = sigma0_gmf_sample / np.nanmean(sigma0_gmf_sample)
     detrended = sigma0 / gmf_ratio_sample.broadcast_like(sigma0)
@@ -62,8 +63,10 @@ def read_sarwing_owi(owi_file):
     """
 
     sarwing_ds = xr.open_dataset(owi_file)
-    sarwing_ds = xr.merge([sarwing_ds, xr.open_dataset(owi_file, group='owiInversionTables_UV')])
-    sarwing_ds = sarwing_ds.rename_dims({'owiAzSize': 'line', 'owiRaSize': 'sample'})
+    sarwing_ds = xr.merge([sarwing_ds, xr.open_dataset(
+        owi_file, group='owiInversionTables_UV')])
+    sarwing_ds = sarwing_ds.rename_dims(
+        {'owiAzSize': 'line', 'owiRaSize': 'sample'})
     sarwing_ds = sarwing_ds.drop_vars(['owiCalConstObsi', 'owiCalConstInci'])
     sarwing_ds = sarwing_ds.assign_coords(
         {'line': np.arange(len(sarwing_ds.line)), 'sample': np.arange(len(sarwing_ds.sample))})
@@ -101,7 +104,7 @@ def dir_sample_to_geo(sample_dir, ground_heading):
     Returns
     -------
     np.float64
-        same shape as input. angle in radian, relative to sample, anticlockwise
+        same shape as input. angle in degrees, relative to sample, anticlockwise
     """
 
-    return 90 - np.rad2deg(sample_dir) + ground_heading
+    return 90 - sample_dir + ground_heading
