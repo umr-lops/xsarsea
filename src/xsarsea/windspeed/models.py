@@ -93,7 +93,6 @@ class Model:
             resolution = 'high'
 
         lut_resolution = lut.attrs['resolution']
-
         if resolution is not None and resolution != lut_resolution:
             if resolution == 'high':
                 # high resolution steps

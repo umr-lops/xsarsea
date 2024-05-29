@@ -209,7 +209,6 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
                     lut_idx = (iJ_co // J_co.shape[-1], iJ_co % J_co.shape[-1])
                     wspd_co = np_wspd_lut[lut_idx]
                     wphi_co = np_phi_lut[lut_idx]
-
                     if phi_180:
                         # two phi solution (phi & -phi). choose closest from ancillary wind
 
@@ -228,11 +227,7 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
                     else:
                         wind_co = wspd_co * np.exp(1j * np.deg2rad(wphi_co))
 
-                    # wind_co = one_ancillary_wind
-
                 else:
-                    # no copol. use ancillary wind as wspd_co (if available)
-                    # wind_co = one_ancillary_wind
                     wind_co = np.nan * 1j
 
                 if not np.isnan(one_sigma0_cr_db) and not np.isnan(one_dsig_cr):
