@@ -23,19 +23,22 @@ class SarwingLutModel(LutModel):
 
         sigma0_db_path = os.path.join(self.path, 'sigma.npy')
         sigma0_db = np.ascontiguousarray(np.transpose(np.load(sigma0_db_path)))
-        inc = pkl.load(open(os.path.join(self.path, 'incidence_angle.pkl'), 'rb'), encoding='iso-8859-1')
+        inc = pkl.load(open(os.path.join(
+            self.path, 'incidence_angle.pkl'), 'rb'), encoding='iso-8859-1')
         try:
             phi, wspd = pkl.load(open(os.path.join(self.path, 'wind_speed_and_direction.pkl'), 'rb'),
                                  encoding='iso-8859-1')
         except FileNotFoundError:
             phi = None
-            wspd = pkl.load(open(os.path.join(self.path, 'wind_speed.pkl'), 'rb'), encoding='iso-8859-1')
+            wspd = pkl.load(
+                open(os.path.join(self.path, 'wind_speed.pkl'), 'rb'), encoding='iso-8859-1')
 
         self.wspd_step = np.round(np.unique(np.diff(wspd)), decimals=2)[0]
         self.inc_step = np.round(np.unique(np.diff(inc)), decimals=2)[0]
-        self.inc_range = [ np.round(np.min(inc), decimals=2), np.round(np.max(inc), decimals=2) ]
-        self.wspd_range = [np.round(np.min(wspd), decimals=2), np.round(np.max(wspd), decimals=2)]
-
+        self.inc_range = [np.round(np.min(inc), decimals=2), np.round(
+            np.max(inc), decimals=2)]
+        self.wspd_range = [np.round(np.min(wspd), decimals=2), np.round(
+            np.max(wspd), decimals=2)]
 
         if phi is not None:
             dims = ['wspd', 'phi', 'incidence']
@@ -46,7 +49,8 @@ class SarwingLutModel(LutModel):
             self.inc_step_lr = 1.
             self.wspd_step_lr = 0.4
             self.phi_step_lr = 2.5
-            self.phi_range = [np.round(np.min(phi), decimals=2), np.round(np.max(phi), decimals=2)]
+            self.phi_range = [np.round(np.min(phi), decimals=2), np.round(
+                np.max(phi), decimals=2)]
         else:
             dims = ['wspd', 'incidence']
             final_dims = ['incidence', 'wspd']
@@ -115,3 +119,44 @@ def register_all_sarwing_luts(topdir):
 
         sarwing_model = SarwingLutModel(name, path, pol=pol)
 
+
+def register_one_sarwing_lut(path):
+    """
+    Register a single sarwing lut.
+
+    This function return nothing. See `xsarsea.windspeed.available_models` to see registered models.
+
+    Parameters
+    ----------
+    path: str
+        path to sarwing lut.
+
+    Examples
+    --------
+    register a single sarwing lut
+
+    >>> xsarsea.windspeed.register_one_sarwing_lut(xsarsea.get_test_file('sarwing_luts_subset/GMF_cmodms1ahw'))
+
+    Notes
+    _____
+    Sarwing lut can be downloaded from https://cyclobs.ifremer.fr/static/sarwing_datarmor/xsardata/sarwing_luts
+
+    See Also
+    --------
+    xsarsea.windspeed.available_models
+    xsarsea.windspeed.gmfs.GmfModel.register
+
+    """
+    sarwing_name = os.path.basename(path)
+    name = sarwing_name.replace('GMF_', SarwingLutModel._name_prefix)
+
+    # guess available pols from filenames
+    if os.path.exists(os.path.join(path, 'wind_speed_and_direction.pkl')):
+        pol = 'VV'
+    elif os.path.exists(os.path.join(path, 'wind_speed.pkl')):
+        pol = 'VH'
+    else:
+        pol = None
+
+    sarwing_model = SarwingLutModel(name, path, pol=pol)
+    return sarwing_model
