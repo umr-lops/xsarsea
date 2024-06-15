@@ -56,9 +56,6 @@ class Cmod7Model(LutModel):
         final_dims = ['incidence', 'wspd', 'phi']
         coords = {'incidence': inc, 'phi': phi, 'wspd': wspd}
 
-        self.wspd_step = 0.2
-        self.inc_step = 0.2
-        self.phi_step = 1
         self.wspd_range = self.wspd_range_lr
         self.inc_range = self.inc_range_lr
         self.phi_range = self.phi_range_lr
