@@ -40,9 +40,9 @@ class Model:
         self.wspd_step_lr = kwargs.pop('wspd_step_lr', 0.4)
         self.phi_step_lr = kwargs.pop('phi_step_lr', 2.5)
 
-        self.inc_step = kwargs.pop('inc_step', 0.2)
-        self.wspd_step = kwargs.pop('wspd_step', 0.2)
-        self.phi_step = kwargs.pop('phi_step', 2)
+        self.inc_step = kwargs.pop('inc_step', 0.1)
+        self.wspd_step = kwargs.pop('wspd_step', 0.1)
+        self.phi_step = kwargs.pop('phi_step', 1)
 
         self.__class__._available_models[name] = self
 
