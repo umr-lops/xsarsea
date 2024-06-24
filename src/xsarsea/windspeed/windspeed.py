@@ -182,13 +182,22 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
                 one_sigma0_cr_db = sigma0_cr_db_1d[i]
                 one_dsig_cr = dsig_cr_1d[i]
                 one_ancillary_wind = ancillary_wind_1d[i]
+
+                #  if incidence is NaN ; all output is NaN
                 if np.isnan(one_inc):
+                    out_co[i] = np.nan
+                    out_cr[i] = np.nan
+                    continue
+
+                #  if ancillary is NaN, copol & dualpol are NaN
+                if (not np.isnan(np.abs(one_sigma0_co_db)) and np.isnan(np.abs(one_ancillary_wind))):
                     out_co[i] = np.nan
                     out_cr[i] = np.nan
                     continue
 
                 if not np.isnan(one_sigma0_co_db):
                     # copol inversion available
+
                     i_inc = np.argmin(np.abs(np_inc_dim-one_inc))
                     np_sigma0_co_lut_db_inc = np_sigma0_co_lut_db[:, :, i_inc]
 
