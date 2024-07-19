@@ -9,6 +9,7 @@ import dask.array as da
 from .models import Model
 import time
 
+
 class GmfModel(Model):
     """
     GmfModel class for handling model from analitycal functions. See :func:`~Model`
@@ -72,12 +73,12 @@ class GmfModel(Model):
 
 
         """
-
         def inner(func):
             gmf_name = name or func.__name__
 
             if not gmf_name.startswith(cls._name_prefix):
-                raise ValueError("gmf function must start with '%s'. Got %s" % ( cls._name_prefix, gmf_name ))
+                raise ValueError("gmf function must start with '%s'. Got %s" % (
+                    cls._name_prefix, gmf_name))
 
             wspd_range = kwargs.pop('wspd_range', None)
             if wspd_range is None:
@@ -99,12 +100,13 @@ class GmfModel(Model):
         # register gmf_pyfunc_scalar as model name
 
         # check the gmf with scalar inputs
-        sigma0_gmf = gmf_pyfunc_scalar(35, 0.2, 90.)  # No try/expect. let TypeError raise if gmf use numpy arrays
+        # No try/expect. let TypeError raise if gmf use numpy arrays
+        sigma0_gmf = gmf_pyfunc_scalar(35., 0.2, 90.)
         sigma0_gmf = [sigma0_gmf]
 
         # check if the gmf accepts phi
         try:
-            gmf_pyfunc_scalar(35, 0.2, None)
+            gmf_pyfunc_scalar(35., 0.2, None)
             phi_range = None
             logger.debug("%s doesn't needs phi" % name)
         except TypeError:
@@ -112,9 +114,10 @@ class GmfModel(Model):
             # guess the range [0., 180.] or [0., 360.]
             # if phi is [0, 180], opposite dir will give the same sigma0
             phi_list = [0, 90, 180, 270]
-            sigma0_gmf = [np.abs(gmf_pyfunc_scalar(35, 0.2, phi) - gmf_pyfunc_scalar(35, 0.2, -phi)) for phi in phi_list]
+            sigma0_gmf = [np.abs(gmf_pyfunc_scalar(
+                35., 0.2, phi) - gmf_pyfunc_scalar(35., 0.2, -phi)) for phi in phi_list]
 
-            if min(sigma0_gmf) < 1e-15 :
+            if min(sigma0_gmf) < 1e-15:
                 # modulo 180
                 logger.debug("%s needs phi %% 180" % name)
                 phi_range = [0., 180.]
@@ -126,8 +129,13 @@ class GmfModel(Model):
         if (units == 'dB' and min(sigma0_gmf) > 0) or (units == 'linear' and min(sigma0_gmf) < 0):
             logger.info("Possible bad units '%s'  for gmf %s" % (units, name))
 
-        super().__init__(name, units=units, pol=pol, wspd_range=wspd_range, phi_range=phi_range, **kwargs)
+        super().__init__(name, units=units, pol=pol,
+                         wspd_range=wspd_range, phi_range=phi_range, **kwargs)
         self._gmf_pyfunc_scalar = gmf_pyfunc_scalar
+
+    @classmethod
+    def get_function(cls, name):
+        return cls.registry[name].func
 
     @timing(logger.debug)
     @lru_cache
@@ -158,7 +166,6 @@ class GmfModel(Model):
         """
 
         gmf_function = None
-
         if ftype is None:
             gmf_function = self._gmf_pyfunc_scalar
         elif ftype == 'numba_njit':
@@ -182,7 +189,8 @@ class GmfModel(Model):
                 for i_phi, one_phi in enumerate(phi):
                     for i_wspd, one_wspd in enumerate(wspd):
                         for i_inc, one_inc in enumerate(inc):
-                            sigma0_out[i_inc, i_wspd, i_phi] = func_njit(one_inc, one_wspd, one_phi)
+                            sigma0_out[i_inc, i_wspd, i_phi] = func_njit(
+                                one_inc, one_wspd, one_phi)
 
             gmf_function = func
         else:
@@ -221,14 +229,18 @@ class GmfModel(Model):
     @timing()
     def __call__(self, inc, wspd, phi=None, broadcast=False, numba=True):
         # if all scalar, will return scalar
-        all_scalar = all(np.isscalar(v) for v in [inc, wspd, phi] if v is not None)
+        all_scalar = all(np.isscalar(v)
+                         for v in [inc, wspd, phi] if v is not None)
+        logger.debug("Initial input shapes, inc: %s, wspd: %s, phi: %s",
+                     inc.shape, wspd.shape, phi.shape if phi is not None else "None")
 
         # if all 1d, will return 2d or 3d shape('incidence', 'wspd', 'phi'), unless broadcast is True
-        all_1d = all(hasattr(v, 'ndim') and v.ndim == 1 for v in [inc, wspd, phi] if v is not None)
+        all_1d = all(hasattr(v, 'ndim') and v.ndim == 1 for v in [
+                     inc, wspd, phi] if v is not None)
 
         # if dask, will use da.map_blocks
-        dask_used = any(hasattr(v, 'data') and isinstance(v.data, da.Array) for v in [inc, wspd, phi])
-
+        dask_used = any(hasattr(v, 'data') and isinstance(
+            v.data, da.Array) for v in [inc, wspd, phi])
         # template, if available
         sigma0_gmf = None
 
@@ -250,7 +262,8 @@ class GmfModel(Model):
 
             inc_b, wspd_b, phi_b = broadcast_arrays(inc, wspd, phi)
 
-            gmf_func = self._gmf_function(ftype='numba_vectorize' if numba else 'vectorize')
+            gmf_func = self._gmf_function(
+                ftype='numba_vectorize' if numba else 'vectorize')
 
             # find datarray in inputs that looks like th result
             for v in (inc, wspd, phi):
@@ -259,14 +272,16 @@ class GmfModel(Model):
                     sigma0_gmf = v.copy().astype(np.float64)
                     sigma0_gmf.attrs.clear()
                     break
-            sigma0_gmf_data = gmf_func(inc_b, wspd_b, phi_b)  # numpy or dask.array if some input are da
+            # numpy or dask.array if some input are da
+            sigma0_gmf_data = gmf_func(inc_b, wspd_b, phi_b)
             if sigma0_gmf is not None:
                 sigma0_gmf.data = sigma0_gmf_data
             else:
                 # fallback to pure numpy for the result
                 sigma0_gmf = sigma0_gmf_data
         elif all_1d or all_scalar:
-            gmf_func = self._get_function_for_args(inc, wspd, phi=phi, numba=numba)
+            gmf_func = self._get_function_for_args(
+                inc, wspd, phi=phi, numba=numba)
             if all_scalar:
                 sigma0_gmf = gmf_func(inc, wspd, phi)
             elif all_1d:
@@ -275,9 +290,12 @@ class GmfModel(Model):
                     'wspd': wspd,
                     'phi': phi
                 }
-                dims = [v.dims[0] if hasattr(v, 'dims') else default for default, v in default_dims.items()]
-                coords = {dim: default_dims[v] for dim,v in zip(dims, default_dims.keys())}
-                sigma0_gmf = xr.DataArray(np.empty(tuple(len(v) for v in coords.values())), dims=dims, coords=coords)
+                dims = [v.dims[0] if hasattr(
+                    v, 'dims') else default for default, v in default_dims.items()]
+                coords = {dim: default_dims[v]
+                          for dim, v in zip(dims, default_dims.keys())}
+                sigma0_gmf = xr.DataArray(
+                    np.empty(tuple(len(v) for v in coords.values())), dims=dims, coords=coords)
                 sigma0_gmf.data = gmf_func(inc, wspd, phi)
 
         else:
@@ -295,12 +313,10 @@ class GmfModel(Model):
         except AttributeError:
             pass
 
-
         return sigma0_gmf
 
     @timing(logger=logger.debug)
     def _raw_lut(self, **kwargs):
-
 
         resolution = kwargs.pop('resolution', 'low')  # low res by default
         if resolution is None:
@@ -310,12 +326,12 @@ class GmfModel(Model):
             else:
                 resolution = 'high'
 
-        logger.debug('_raw_lut gmf at res %s' % resolution)
+        logger.debug('_raw_lut gmf at res %s, inc_step_lr = %s , wspd_step_lr = %s, phi_step_lr = %s' % (
+            resolution, self.inc_step_lr, self.wspd_step_lr, self.phi_step_lr))
 
         if resolution == 'low':
             # the lut is generated at low res, for improved performance
             # self.to_lut() will interp it to high res
-
             inc_step = kwargs.pop('inc_step_lr', self.inc_step_lr)
             wspd_step = kwargs.pop('wspd_step_lr', self.wspd_step_lr)
             phi_step = kwargs.pop('phi_step_lr', self.phi_step_lr)
@@ -325,7 +341,8 @@ class GmfModel(Model):
             phi_step = kwargs.pop('phi_step', self.phi_step)
 
         inc, wspd, phi = [
-            r and np.linspace(r[0], r[1], num=int(np.round((r[1] - r[0]) / step) + 1))
+            r and np.linspace(r[0], r[1], num=int(
+                np.round((r[1] - r[0]) / step) + 1))
             for r, step in zip(
                 [self.inc_range, self.wspd_range, self.phi_range],
                 [inc_step, wspd_step, phi_step]

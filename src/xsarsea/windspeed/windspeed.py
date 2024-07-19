@@ -45,7 +45,6 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
     Returns
     -------
     xarray.DataArray or tuple
-        inverted windspeed in m/s.
         If available (copol or dualpol), the returned array is `np.complex64`, with the angle of the returned array is
         inverted direction in **gmf convention** (use `-np.conj(result))` to get it in standard convention)
 
@@ -213,14 +212,16 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
                     Jsig_co = ((np_sigma0_co_lut_db_inc -
                                one_sigma0_co_db) / dsig_co) ** 2
                     J_co = Jwind_co + Jsig_co
+
                     # cost function
                     iJ_co = np.argmin(J_co)
                     lut_idx = (iJ_co // J_co.shape[-1], iJ_co % J_co.shape[-1])
+
                     wspd_co = np_wspd_lut[lut_idx]
                     wphi_co = np_phi_lut[lut_idx]
+
                     if phi_180:
                         # two phi solution (phi & -phi). choose closest from ancillary wind
-
                         sol = wspd_co * np.exp(1j * np.deg2rad(wphi_co))
                         sol_2 = wspd_co * \
                             np.exp(1j * (np.deg2rad(-wphi_co)))

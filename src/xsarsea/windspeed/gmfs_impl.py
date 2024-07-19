@@ -359,3 +359,38 @@ def gmf_rcm_noaa(incidence, speed, phi=None):
     sigmoid_Z2 = 1 / (1 + np.exp(-c2*(speed-c3)))
     sig_Final = sig_Z1 * sigmoid_Z1 + sig_Z2 * sigmoid_Z2
     return sig_Final
+
+
+def get_PR_Mouche1(inc_angle, wind_dir, wind_speed=None):
+    """
+    Get the polarization ratio VV over HH using the Mouche model.
+    Alexis Mouche, D. Hauser, V. Kudryavtsev and JF. Daloze, "Multi polarization ocean radar cross-section 
+    from ENVISAT ASAR observations, airborne polarimetric radar measurements and empirical or semi-empirical models", 
+    ESA ERS/ENVISAT Symposium, Salzburg, September 2004
+    """
+    # getRatioVVoverHH
+    theta = inc_angle
+    phi = wind_dir
+
+    A0 = 0.00650704
+    B0 = 0.128983
+    C0 = 0.992839
+    Api2 = 0.00782194
+    Bpi2 = 0.121405
+    Cpi2 = 0.992839
+    Api = 0.00598416
+    Bpi = 0.140952
+    Cpi = 0.992885
+
+    P0_theta = A0*np.exp(B0*theta)+C0
+    Ppi2_theta = Api2*np.exp(Bpi2*theta)+Cpi2
+    Ppi_theta = Api*np.exp(Bpi*theta)+Cpi
+
+    C0_theta = (P0_theta+Ppi_theta+2*Ppi2_theta)/4
+    C1_theta = (P0_theta-Ppi_theta)/2
+    C2_theta = (P0_theta+Ppi_theta-2*Ppi2_theta)/4
+
+    pr = C0_theta + C1_theta * \
+        np.cos(np.deg2rad(phi)) + C2_theta*np.cos(2*np.deg2rad(phi))
+
+    return pr

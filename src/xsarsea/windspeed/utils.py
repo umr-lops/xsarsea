@@ -4,7 +4,9 @@ import numpy as np
 
 import logging
 logger = logging.getLogger('xsarsea.windspeed')
-logger.addHandler(logging.NullHandler())
+# logger.addHandler(logging.NullHandler())
+# logger must print
+logger.setLevel(logging.DEBUG)
 
 
 def get_dsig(name, inc, sigma0_cr, nesz_cr):

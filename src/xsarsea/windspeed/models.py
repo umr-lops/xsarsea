@@ -36,9 +36,9 @@ class Model:
             self.inc_range = [17., 50.]
 
         # steps for generated luts
-        self.inc_step_lr = kwargs.pop('inc_step_lr', 1.)
-        self.wspd_step_lr = kwargs.pop('wspd_step_lr', 0.4)
-        self.phi_step_lr = kwargs.pop('phi_step_lr', 2.5)
+        self.inc_step_lr = kwargs.pop('inc_step_lr', 0.1)
+        self.wspd_step_lr = kwargs.pop('wspd_step_lr', 0.1)
+        self.phi_step_lr = kwargs.pop('phi_step_lr', 1)
 
         self.inc_step = kwargs.pop('inc_step', 0.1)
         self.wspd_step = kwargs.pop('wspd_step', 0.1)
@@ -404,7 +404,6 @@ def available_models(pol=None):
         columns=['short_name', 'priority', 'pol', 'model'], index=[])
 
     for name, model in Model._available_models.items():
-        # print('%s: %s' % (name, model))
         avail_models.loc[name, 'model'] = model
         avail_models.loc[name, 'pol'] = model.pol
         avail_models.loc[name, 'priority'] = model._priority
