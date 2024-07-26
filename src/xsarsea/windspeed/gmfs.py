@@ -17,9 +17,11 @@ class GmfModel(Model):
 
     _name_prefix = 'gmf_'
     _priority = 3
+    _registry = {}
+    _deferred_registrations = []
 
     @classmethod
-    def register(cls, name=None, pol=None, units='linear', **kwargs):
+    def register(cls, name=None, pol=None, units='linear', defer=True, **kwargs):
         """
         | provide a decorator for registering a gmf function.
         | The decorated function should be able to handle float as input.
@@ -89,12 +91,38 @@ class GmfModel(Model):
                     # crosspol
                     wspd_range = [3.0, 80.]
 
-            gmf_model = cls(gmf_name, func,
-                            wspd_range=wspd_range, pol=pol, units=units, **kwargs)
+                    # Store configuration in a deferred list instead of immediate registration
+            if defer:
+                cls._deferred_registrations.append(
+                    (func, gmf_name, wspd_range, pol, units, kwargs))
+            else:
+                cls._register_function(
+                    func, gmf_name, wspd_range, pol, units, **kwargs)
 
-            return gmf_model
+            return func
 
         return inner
+
+    @classmethod
+    def _register_function(cls, func, name, wspd_range, pol, units, **kwargs):
+        gmf = cls(name, func, wspd_range, pol, units, **kwargs)
+        cls._registry[name] = gmf
+
+    @classmethod
+    def activate_gmfs_impl(cls, gmfs_names=None, **kwargs):
+        """
+        Process all deferred registrations based on the provided config and optional name filter.
+
+        Parameters
+            gmfs_names (list, optional): List of names to filter the registrated gmfs. 
+                If None, all registrated gmfs are processed.
+        """
+
+        for func, name, wspd_range, pol, units, reg_kwargs in cls._deferred_registrations:
+            if gmfs_names is None or name in gmfs_names:
+                combined_kwargs = {**reg_kwargs, **kwargs}
+                cls._register_function(
+                    func, name, wspd_range, pol, units, **combined_kwargs)
 
     def __init__(self, name, gmf_pyfunc_scalar, wspd_range=[0.2, 50.], pol=None, units=None, **kwargs):
         # register gmf_pyfunc_scalar as model name
@@ -131,6 +159,7 @@ class GmfModel(Model):
 
         super().__init__(name, units=units, pol=pol,
                          wspd_range=wspd_range, phi_range=phi_range, **kwargs)
+
         self._gmf_pyfunc_scalar = gmf_pyfunc_scalar
 
     @classmethod
@@ -319,6 +348,10 @@ class GmfModel(Model):
     def _raw_lut(self, **kwargs):
 
         resolution = kwargs.pop('resolution', 'low')  # low res by default
+        if resolution not in ['low', 'high', None]:
+            raise ValueError(
+                'kwargs resolution must be "low" or "high" or None, or not provided')
+
         if resolution is None:
             if self.iscopol:
                 # low resolution by default if phi (copol)
@@ -326,19 +359,25 @@ class GmfModel(Model):
             else:
                 resolution = 'high'
 
-        logger.debug('_raw_lut gmf at res %s, inc_step_lr = %s , wspd_step_lr = %s, phi_step_lr = %s' % (
-            resolution, self.inc_step_lr, self.wspd_step_lr, self.phi_step_lr))
-
         if resolution == 'low':
             # the lut is generated at low res, for improved performance
             # self.to_lut() will interp it to high res
             inc_step = kwargs.pop('inc_step_lr', self.inc_step_lr)
             wspd_step = kwargs.pop('wspd_step_lr', self.wspd_step_lr)
             phi_step = kwargs.pop('phi_step_lr', self.phi_step_lr)
+            self.inc_step_lr = inc_step
+            self.wspd_step_lr = wspd_step
+            self.phi_step_lr = phi_step
         elif resolution == 'high':
             inc_step = kwargs.pop('inc_step', self.inc_step)
             wspd_step = kwargs.pop('wspd_step', self.wspd_step)
             phi_step = kwargs.pop('phi_step', self.phi_step)
+            self.inc_step = inc_step
+            self.wspd_step = wspd_step
+            self.phi_step = phi_step
+
+        logger.debug('_raw_lut gmf at res %s, inc_step = %s , wspd_step = %s, phi_step = %s' % (
+            resolution, inc_step, wspd_step, phi_step))
 
         inc, wspd, phi = [
             r and np.linspace(r[0], r[1], num=int(

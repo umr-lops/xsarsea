@@ -52,6 +52,7 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
     --------
     xsarsea.windspeed.available_models
     """
+
     # default array values if no dualpol
     nan = sigma0 * np.nan
 

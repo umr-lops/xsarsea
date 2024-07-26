@@ -35,7 +35,7 @@ except ImportError:
 
 def _load_config():
     """
-    load config from default xsar/config.yml file or user ~/.xsar/config.yml
+    load config from default xsarsea/config.yml file or user ~/.xsarsea/config.yml
     Returns
     -------
     dict

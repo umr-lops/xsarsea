@@ -8,7 +8,7 @@ import glob
 import netCDF4
 import logging
 import pandas as pd
-
+from .utils import _load_config_luts
 logger = logging.getLogger('xsarsea.windspeed')
 
 
@@ -32,29 +32,43 @@ class Model:
         self.phi_range = kwargs.pop('phi_range', None)
         self.wspd_range = kwargs.pop('wspd_range', None)
         self.__dict__.update(kwargs)
+
         if not hasattr(self, 'inc_range'):
             self.inc_range = [17., 50.]
 
         # steps for generated luts
-        self.inc_step_lr = kwargs.pop('inc_step_lr', 0.1)
-        self.wspd_step_lr = kwargs.pop('wspd_step_lr', 0.1)
-        self.phi_step_lr = kwargs.pop('phi_step_lr', 1)
+        self.inc_step_lr = kwargs.pop(
+            'inc_step_lr', 1.0)
+        self.wspd_step_lr = kwargs.pop(
+            'wspd_step_lr', 0.2)
+        self.phi_step_lr = kwargs.pop(
+            'phi_step_lr', 2.5)
 
-        self.inc_step = kwargs.pop('inc_step', 0.1)
-        self.wspd_step = kwargs.pop('wspd_step', 0.1)
-        self.phi_step = kwargs.pop('phi_step', 1)
+        self.inc_step = kwargs.pop(
+            'inc_step', 0.1)
+        self.wspd_step = kwargs.pop(
+            'wspd_step',  0.1)
+        self.phi_step = kwargs.pop(
+            'phi_step', 1.0)
 
         self.__class__._available_models[name] = self
 
-    @property
-    @abstractmethod
+        logger.debug('register model %s' % name + ' pol=%s' % self.pol + ' units=%s' % self.units + '\n'
+                     + ' inc_range=%s' % self.inc_range + ' wspd_range=%s' % self.wspd_range
+                     + ' phi_range=%s' % self.phi_range + '\n'
+                     + ' inc_step=%s' % self.inc_step +
+                     ' wspd_step=%s' % self.wspd_step + ' phi_step=%s' % self.phi_step + '\n'
+                     + ' inc_step_lr=%s' % self.inc_step_lr + ' wspd_step_lr=%s' % self.wspd_step_lr + ' phi_step_lr=%s' % self.phi_step_lr)
+
+    @ property
+    @ abstractmethod
     def short_name(self):
         if self.__class__._name_prefix and self.name.startswith(self.__class__._name_prefix):
             return self.name.replace(self.__class__._name_prefix, '', 1)
         else:
             return None
 
-    @abstractmethod
+    @ abstractmethod
     def _raw_lut(self):
         pass
 
@@ -88,12 +102,43 @@ class Model:
 
         # we check if the lut needs interpolation
         resolution = kwargs.pop('resolution', 'high')
+
         if resolution is None:
             # high res by default
             resolution = 'high'
 
         lut_resolution = lut.attrs['resolution']
-        if resolution is not None and resolution != lut_resolution:
+        logger.debug(
+            f"lut_resolution {self.name} from _raw_lut : {lut_resolution}")
+        logger.debug(f"desired {self.name} resolution : {resolution}")
+
+        #  forcing resolution to be the one of
+        if resolution == "high" and lut_resolution == "high":
+            do_interp = (
+                self.inc_step != kwargs.get("inc_step", self.inc_step) or
+                self.wspd_step != kwargs.get("wspd_step", self.wspd_step)
+            )
+            if self.iscopol:
+                do_interp = do_interp or self.phi_step != kwargs.get(
+                    "phi_step", self.phi_step)
+
+        elif resolution == "low" and lut_resolution == "low":
+            do_interp = (
+                self.inc_step_lr != kwargs.get("inc_step_lr", self.inc_step_lr) or
+                self.wspd_step_lr != kwargs.get(
+                    "wspd_step_lr", self.wspd_step_lr)  
+            )
+            if self.iscopol:
+                do_interp = do_interp or self.phi_step_lr != kwargs.get(
+                    "phi_step_lr", self.phi_step_lr)
+        else:
+            do_interp = False
+
+        if do_interp:
+            logger.debug(
+                f"Even if lut_resolution is already set to {lut_resolution}, lut {self.name} needs interpolation to match your desired resolution")
+
+        if (resolution is not None and resolution != lut_resolution) or do_interp:
             if resolution == 'high':
                 # high resolution steps
                 inc_step = kwargs.pop('inc_step', self.inc_step)
@@ -115,18 +160,21 @@ class Model:
             ]
             logger.debug('interp lut %s to high res' % self.name)
             interp_kwargs = {k: v for k, v in zip(['incidence', 'wspd', 'phi'], [
-                                                  inc, wspd, phi]) if v is not None}
+                inc, wspd, phi]) if v is not None}
             lut = lut.interp(**interp_kwargs, kwargs=dict(bounds_error=True))
             lut.attrs['resolution'] = resolution
+        else:
+            logger.debug(
+                f"lut {self.name} already at desired resolution {resolution} with exact same params : no interpolation needed")
 
         return lut
 
-    @property
+    @ property
     def iscopol(self):
         """True if model is copol"""
         return len(set(self.pol)) == 1
 
-    @property
+    @ property
     def iscrosspol(self):
         """True if model is crosspol"""
         return len(set(self.pol)) == 2
@@ -191,6 +239,7 @@ class Model:
             resolution = 'low'
         else:
             resolution = 'high'
+
         lut = self.to_lut(resolution=resolution, units='dB')
         ds_lut = lut.to_dataset(promote_attrs=True)
         ds_lut.sigma0_model.attrs.clear()
@@ -212,7 +261,7 @@ class Model:
 
         ds_lut.to_netcdf(file)
 
-    @abstractmethod
+    @ abstractmethod
     def __call__(self, inc, wspd, phi=None, broadcast=False):
         """
 
@@ -274,7 +323,7 @@ class LutModel(Model):
         all_1d = False
         try:
             all_1d = all(v.ndim == 1 for v in [
-                         inc, wspd, phi] if v is not None)
+                inc, wspd, phi] if v is not None)
         except AttributeError:
             all_1d = False
 
@@ -308,7 +357,7 @@ class NcLutModel(LutModel):
 
     _priority = 10
 
-    @property
+    @ property
     def short_name(self):
         return self._short_name
 
@@ -347,7 +396,7 @@ class NcLutModel(LutModel):
         return lut
 
 
-def register_all_nc_luts(topdir):
+def register_nc_luts(topdir, gmf_names=None, **kwargs):
     """
     Register all netcdf luts found under `topdir`.
 
@@ -358,15 +407,18 @@ def register_all_nc_luts(topdir):
     topdir: str
         top dir path to netcdf luts.
 
+        gmf_names (list, optional): List of names to filter the registrated gmfs.
+            If None, all registrated gmfs are processed.
+
     Examples
     --------
     register a subset of sarwing luts
 
-    >>> xsarsea.windspeed.register_all_nc_luts(xsarsea.get_test_file('nc_luts_subset'))
+    >>> xsarsea.windspeed.register_nc_luts(xsarsea.get_test_file('nc_luts_subset'))
 
     register all sarwing lut from ifremer path
 
-    >>> xsarsea.windspeed.register_all_sarwing_luts('/home/datawork-cersat-public/cache/project/sarwing/xsardata/nc_luts')
+    >>> xsarsea.windspeed.register_sarwing_luts('/home/datawork-cersat-public/cache/project/sarwing/xsardata/nc_luts')
 
     Notes
     _____
@@ -380,8 +432,9 @@ def register_all_nc_luts(topdir):
     """
     for path in glob.glob(os.path.join(topdir, "%s*.nc" % NcLutModel._name_prefix)):
         path = os.path.abspath(os.path.join(topdir, path))
-
-        sarwing_model = NcLutModel(path)
+        name = os.path.basename(path).replace('.nc', '')
+        if gmf_names is None or name in gmf_names:
+            ncLutModel = NcLutModel(path)
 
 
 def available_models(pol=None):
@@ -408,8 +461,10 @@ def available_models(pol=None):
         avail_models.loc[name, 'pol'] = model.pol
         avail_models.loc[name, 'priority'] = model._priority
         avail_models.loc[name, 'short_name'] = model.short_name
+        avail_models.loc[name, 'resolution'] = getattr(
+            model, 'resolution', None)
 
-    aliased = avail_models.sort_values('priority', ascending=False).drop_duplicates('short_name').rename(
+    aliased = avail_models.sort_values('priority', ascending=True).drop_duplicates('short_name').rename(
         columns=dict(short_name='alias')).drop(columns='priority')
 
     non_aliased = avail_models.drop(aliased.index).drop(

@@ -5,7 +5,7 @@ import xarray as xr
 import dask.array as da
 
 
-@windspeed.gmfs.GmfModel.register(inc_range=[17., 50.], wspd_range=[3., 80.], pol='VH', units='linear')
+@windspeed.gmfs.GmfModel.register(inc_range=[17., 50.], wspd_range=[3., 80.], pol='VH', units='linear', defer=True)
 def gmf_dummy(inc, wspd, phi=None):
     a0 = 0.00013106836021008122
     a1 = -4.530598283705591e-06
@@ -28,11 +28,11 @@ def test_available_models():
 
     sarwing_luts_subset_path = xsarsea.utils.get_test_file(
         'sarwing_luts_subset')
-    windspeed.register_all_sarwing_luts(sarwing_luts_subset_path)
+    windspeed.register_sarwing_luts(sarwing_luts_subset_path)
     assert 'sarwing_lut_cmodms1ahw' in windspeed.available_models().index
 
     nc_luts_path = xsarsea.utils.get_test_file('xsarsea_luts')
-    windspeed.models.register_all_nc_luts(nc_luts_path)
+    windspeed.models.register_nc_luts(nc_luts_path)
     assert 'nc_lut_sarwing_lut_cmod5n' in windspeed.available_models().index
 
     assert 'sarwing_lut_cmodms1ahw' in windspeed.available_models().index
@@ -91,7 +91,7 @@ def test_inversion():
     ])
 
     sarwing_luts_subset_path = xsarsea.get_test_file('sarwing_luts_subset')
-    windspeed.sarwing_luts.register_all_sarwing_luts(sarwing_luts_subset_path)
+    windspeed.sarwing_luts.register_sarwing_luts(sarwing_luts_subset_path)
 
     nesz_cross_flat = windspeed.nesz_flattening(
         sarwing_ds.owiNesz_cross, sarwing_ds.owiIncidenceAngle)

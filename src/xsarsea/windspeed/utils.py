@@ -1,6 +1,9 @@
 import os
+from pathlib import Path
 import warnings
 import numpy as np
+import yaml
+from importlib_resources import files
 
 import logging
 logger = logging.getLogger('xsarsea.windspeed')
@@ -121,3 +124,28 @@ def nesz_flattening(noise, inc):
 
     # incidence is almost constant along line dim, so we can make it 1D
     return np.apply_along_axis(_noise_flattening_1row, 1, noise, np.nanmean(inc, axis=0))
+
+
+def _load_config_luts(config_path):
+    """
+    load config from default xsarsea/windspeed.config_luts_default_direct_01_01_10.yml file or user ~/.xsarsea/config.yml
+    Returns
+    -------
+    dict
+    """
+
+    user_config_file = Path(config_path)
+    default_config_file = files('xsarsea').joinpath("windspeed").joinpath(
+        'config_luts_default_direct_01_01_10.yml')
+
+    if user_config_file.exists():
+        config_file = user_config_file
+    else:
+        # logger.info(f"Using default config file {default_config_file}")
+        # config_file = default_config_file
+        raise FileNotFoundError(f"Config file {user_config_file} not found")
+    config = yaml.load(
+        config_file.open(),
+        Loader=yaml.FullLoader)
+
+    return config
