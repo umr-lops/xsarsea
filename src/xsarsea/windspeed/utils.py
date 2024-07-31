@@ -37,6 +37,7 @@ def get_dsig(name, inc, sigma0_cr, nesz_cr):
         def sigmoid(x, c0, c1, d0, d1):
             sig = d0 + d1 / (1 + np.exp(-c0*(x-c1)))
             return sig
+        
         poptsig = np.array([1.57952257, 25.61843791,  1.46852088,  1.4058646])
         c = sigmoid(inc, *poptsig)
         return (1 / np.sqrt(b*(sigma0_cr / nesz_cr)**c))

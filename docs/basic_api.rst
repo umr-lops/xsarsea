@@ -27,13 +27,14 @@ windspeed.models
 ----------------
 
 .. automodule:: xsarsea.windspeed.models
-    :members:
+    :members: NcLutModel
 
 windspeed.gmfs
 --------------
 
 .. automodule:: xsarsea.windspeed.gmfs
-    :members:
+    :members: GmfModel, cmod7Model
+
 
 
 

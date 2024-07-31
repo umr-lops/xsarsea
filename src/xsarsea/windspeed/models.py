@@ -32,6 +32,7 @@ class Model:
         self.phi_range = kwargs.pop('phi_range', None)
         self.wspd_range = kwargs.pop('wspd_range', None)
         self.__dict__.update(kwargs)
+        self.resolution = kwargs.pop('resolution', None)
 
         if not hasattr(self, 'inc_range'):
             self.inc_range = [17., 50.]
@@ -126,7 +127,7 @@ class Model:
             do_interp = (
                 self.inc_step_lr != kwargs.get("inc_step_lr", self.inc_step_lr) or
                 self.wspd_step_lr != kwargs.get(
-                    "wspd_step_lr", self.wspd_step_lr)  
+                    "wspd_step_lr", self.wspd_step_lr)
             )
             if self.iscopol:
                 do_interp = do_interp or self.phi_step_lr != kwargs.get(
@@ -461,8 +462,6 @@ def available_models(pol=None):
         avail_models.loc[name, 'pol'] = model.pol
         avail_models.loc[name, 'priority'] = model._priority
         avail_models.loc[name, 'short_name'] = model.short_name
-        avail_models.loc[name, 'resolution'] = getattr(
-            model, 'resolution', None)
 
     aliased = avail_models.sort_values('priority', ascending=True).drop_duplicates('short_name').rename(
         columns=dict(short_name='alias')).drop(columns='priority')
