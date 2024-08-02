@@ -5,7 +5,7 @@ import xarray as xr
 
 
 @timing(logger=logger.info)
-def sigma0_detrend(sigma0, inc_angle, wind_speed_gmf=10., wind_dir_gmf=45., model='gmf_cmodifr2'):
+def sigma0_detrend(sigma0, inc_angle, wind_speed_gmf=np.array([10.]), wind_dir_gmf=np.array([45.]), model='gmf_cmod5n'):
     """compute `sigma0_detrend` from `sigma0` and `inc_angle`
 
     Parameters

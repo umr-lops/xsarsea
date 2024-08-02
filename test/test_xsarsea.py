@@ -4,7 +4,8 @@ import numpy as np
 import xarray as xr
 import dask.array as da
 
-@windspeed.gmfs.GmfModel.register(inc_range=[17., 50.], wspd_range=[3., 80.], pol='VH', units='linear')
+
+@windspeed.gmfs.GmfModel.register(inc_range=[17., 50.], wspd_range=[3., 80.], pol='VH', units='linear', defer=True)
 def gmf_dummy(inc, wspd, phi=None):
     a0 = 0.00013106836021008122
     a1 = -4.530598283705591e-06
@@ -19,17 +20,19 @@ def gmf_dummy(inc, wspd, phi=None):
 
     return sig
 
+
 def test_available_models():
     models = windspeed.available_models().index
     assert 'gmf_cmod5n' in models
     assert 'gmf_dummy' in models
 
-    sarwing_luts_subset_path = xsarsea.utils.get_test_file('sarwing_luts_subset')
-    windspeed.register_all_sarwing_luts(sarwing_luts_subset_path)
+    sarwing_luts_subset_path = xsarsea.utils.get_test_file(
+        'sarwing_luts_subset')
+    windspeed.register_sarwing_luts(sarwing_luts_subset_path)
     assert 'sarwing_lut_cmodms1ahw' in windspeed.available_models().index
 
     nc_luts_path = xsarsea.utils.get_test_file('xsarsea_luts')
-    windspeed.models.register_all_nc_luts(nc_luts_path)
+    windspeed.models.register_nc_luts(nc_luts_path)
     assert 'nc_lut_sarwing_lut_cmod5n' in windspeed.available_models().index
 
     assert 'sarwing_lut_cmodms1ahw' in windspeed.available_models().index
@@ -63,7 +66,8 @@ def test_models():
             res = model(inc, wspd, phi)
 
             # dask check
-            da_inc, da_wspd, da_phi = [da.from_array(v) for v in [inc, wspd, phi]]
+            da_inc, da_wspd, da_phi = [
+                da.from_array(v) for v in [inc, wspd, phi]]
             xr_inc = xr.DataArray(da_inc, dims=['line', 'sample'])
             xr_wspd = xr.DataArray(da_wspd, dims=['line', 'sample'])
             xr_phi = xr.DataArray(da_phi, dims=['line', 'sample'])
@@ -73,11 +77,11 @@ def test_models():
             pass
 
 
-
-
 def test_inversion():
-    sarwing_owi_file = xsarsea.get_test_file('s1a-iw-owi-xx-20210909t130650-20210909t130715-039605-04AE83.nc')
-    sarwing_ds = xsarsea.read_sarwing_owi(sarwing_owi_file).isel(line=slice(0, 50), sample=slice(0, 60))
+    sarwing_owi_file = xsarsea.get_test_file(
+        's1a-iw-owi-xx-20210909t130650-20210909t130715-039605-04AE83.nc')
+    sarwing_ds = xsarsea.read_sarwing_owi(sarwing_owi_file).isel(
+        line=slice(0, 50), sample=slice(0, 60))
 
     owi_ecmwf_wind = sarwing_ds.owiEcmwfWindSpeed * np.exp(
         1j * xsarsea.dir_geo_to_sample(sarwing_ds.owiEcmwfWindDirection, sarwing_ds.owiHeading))
@@ -87,9 +91,10 @@ def test_inversion():
     ])
 
     sarwing_luts_subset_path = xsarsea.get_test_file('sarwing_luts_subset')
-    windspeed.sarwing_luts.register_all_sarwing_luts(sarwing_luts_subset_path)
+    windspeed.sarwing_luts.register_sarwing_luts(sarwing_luts_subset_path)
 
-    nesz_cross_flat = windspeed.nesz_flattening(sarwing_ds.owiNesz_cross, sarwing_ds.owiIncidenceAngle)
+    nesz_cross_flat = windspeed.nesz_flattening(
+        sarwing_ds.owiNesz_cross, sarwing_ds.owiIncidenceAngle)
     dsig_cr = (1.25 / (sarwing_ds.owiNrcs_cross / nesz_cross_flat)) ** 4.
 
     windspeed_co, windspeed_dual = windspeed.invert_from_model(
@@ -102,7 +107,6 @@ def test_inversion():
 
     assert isinstance(windspeed_co, xr.DataArray)
     assert isinstance(windspeed_dual, xr.DataArray)
-
 
     # pure numpy
     windspeed_co, windspeed_dual = windspeed.invert_from_model(
@@ -138,8 +142,7 @@ def test_inversion():
     assert isinstance(windspeed_dual.data, np.ndarray)
 
 
-#if __name__ == "__main__":
+# if __name__ == "__main__":
 #    test_available_models()
 #    test_models()
 #    test_inversion()
-

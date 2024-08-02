@@ -14,8 +14,16 @@ from importlib_resources import files
 
 logger = logging.getLogger('xsarsea')
 logger.addHandler(logging.NullHandler())
+"""
+logger.setLevel(logging.DEBUG)
 
-
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.DEBUG)
+formatter = logging.Formatter(
+    '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+console_handler.setFormatter(formatter)
+logger.addHandler(console_handler)
+"""
 mem_monitor = True
 
 try:
@@ -25,10 +33,9 @@ except ImportError:
     mem_monitor = False
 
 
-
 def _load_config():
     """
-    load config from default xsar/config.yml file or user ~/.xsar/config.yml
+    load config from default xsarsea/config.yml file or user ~/.xsarsea/config.yml
     Returns
     -------
     dict
@@ -47,7 +54,7 @@ def _load_config():
     return config
 
 
-def get_test_file(fname, iszip = True):
+def get_test_file(fname, iszip=True):
     """
     get test file from  https://cyclobs.ifremer.fr/static/sarwing_datarmor/xsardata/
     file is unzipped if needed and extracted to `config['data_dir']`
@@ -67,7 +74,7 @@ def get_test_file(fname, iszip = True):
         path to file, relative to `config['data_dir']`
 
     """
-    config = _load_config() 
+    config = _load_config()
     res_path = config['data_dir']
     base_url = 'https://cyclobs.ifremer.fr/static/sarwing_datarmor/xsardata'
     file_url = '%s/%s.zip' % (base_url, fname)
@@ -76,28 +83,32 @@ def get_test_file(fname, iszip = True):
         import urllib
         file_url = '%s/%s' % (base_url, fname)
         warnings.warn("Downloading %s" % file_url)
-        urllib.request.urlretrieve(file_url,os.path.join(config['data_dir'],fname))
+        urllib.request.urlretrieve(
+            file_url, os.path.join(config['data_dir'], fname))
 
-    else : 
+    else:
         if not os.path.exists(os.path.join(res_path, fname)):
             warnings.warn("Downloading %s" % file_url)
             with fsspec.open(
                     'filecache::%s' % file_url,
-                    https={'client_kwargs': {'timeout': aiohttp.ClientTimeout(total=3600)}},
-                    filecache={'cache_storage': os.path.join(os.path.join(config['data_dir'], 'fsspec_cache'))}
+                    https={'client_kwargs': {
+                        'timeout': aiohttp.ClientTimeout(total=3600)}},
+                    filecache={'cache_storage': os.path.join(
+                        os.path.join(config['data_dir'], 'fsspec_cache'))}
             ) as f:
 
-                    warnings.warn("Unzipping %s" % os.path.join(res_path, fname))
-                    with zipfile.ZipFile(f, 'r') as zip_ref:
-                        zip_ref.extractall(res_path)
-        
+                warnings.warn("Unzipping %s" % os.path.join(res_path, fname))
+                with zipfile.ZipFile(f, 'r') as zip_ref:
+                    zip_ref.extractall(res_path)
+
     return os.path.join(res_path, fname)
+
 
 def timing(logger=logger.debug):
     """provide a @timing decorator() for functions, that log time spent in it"""
 
     def decorator(f):
-        #@wraps(f)
+        # @wraps(f)
         def wrapper(*args, **kwargs):
             mem_str = ''
             process = None

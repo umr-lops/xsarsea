@@ -8,8 +8,8 @@ from .models import LutModel
 
 class SarwingLutModel(LutModel):
 
-    _name_prefix = 'sarwing_lut_'
-    _priority = 1
+    _name_prefix = 'sarwing_lut__'
+    _priority = 10
 
     def __init__(self, name, path, **kwargs):
         super().__init__(name, **kwargs)
@@ -70,93 +70,57 @@ class SarwingLutModel(LutModel):
         return da_sigma0_db.transpose(*final_dims)
 
 
-def register_all_sarwing_luts(topdir):
+def register_sarwing_luts(path):
     """
-    Register all sarwing luts found under `topdir`.
+    Register LUTs from a specified path. The path can be a directory containing multiple LUTs or a single LUT file.
 
-    This function return nothing. See `xsarsea.windspeed.available_models` to see registered models.
-
-
+    This function returns nothing. See `xsarsea.windspeed.available_models` to see registered models.
 
     Parameters
     ----------
-    topdir: str
-        top dir path to sarwing luts.
+    path : str
+        Path to a LUT or a directory containing multiple LUTs.
 
     Examples
     --------
-    register a subset of sarwing luts
+    Register a single LUT:
 
-    >>> xsarsea.windspeed.register_all_sarwing_luts(xsarsea.get_test_file('sarwing_luts_subset'))
+    >>> xsarsea.windspeed.register_sarwing_luts(xsarsea.get_test_file('sarwing_luts_subset/GMF_cmodms1ahw'))
 
-    register all sarwing lut from ifremer path
+    Register all LUTs from a directory:
 
-    >>> xsarsea.windspeed.register_all_sarwing_luts('/home/datawork-cersat-public/cache/project/sarwing/GMFS/v1.6')
+    >>> xsarsea.windspeed.register_sarwing_luts('/home/datawork-cersat-public/cache/project/sarwing/GMFS/v1.6')
 
     Notes
-    _____
-    Sarwing lut can be downloaded from https://cyclobs.ifremer.fr/static/sarwing_datarmor/xsardata/sarwing_luts
+    -----
+    LUTs can be downloaded from https://cyclobs.ifremer.fr/static/sarwing_datarmor/xsardata/sarwing_luts
 
     See Also
     --------
     xsarsea.windspeed.available_models
     xsarsea.windspeed.gmfs.GmfModel.register
-
     """
-    # TODO: polratio not handled
-    for path in os.listdir(topdir):
-        sarwing_name = os.path.basename(path)
-        path = os.path.abspath(os.path.join(topdir, path))
-        name = sarwing_name.replace('GMF_', SarwingLutModel._name_prefix)
 
-        # guess available pols from filenames
-        if os.path.exists(os.path.join(path, 'wind_speed_and_direction.pkl')):
+    def register_lut(file_path):
+        sarwing_name = os.path.basename(file_path)
+        name = sarwing_name.replace('GMF_', SarwingLutModel._name_prefix)
+        # Guess available pols from filenames
+        if os.path.exists(os.path.join(file_path, 'wind_speed_and_direction.pkl')):
             pol = 'VV'
-        elif os.path.exists(os.path.join(path, 'wind_speed.pkl')):
+        elif os.path.exists(os.path.join(file_path, 'wind_speed.pkl')):
             pol = 'VH'
         else:
             pol = None
 
-        sarwing_model = SarwingLutModel(name, path, pol=pol)
+        sarwing_model = SarwingLutModel(name, file_path, pol=pol)
 
-
-def register_one_sarwing_lut(path):
-    """
-    Register a single sarwing lut.
-
-    This function return nothing. See `xsarsea.windspeed.available_models` to see registered models.
-
-    Parameters
-    ----------
-    path: str
-        path to sarwing lut.
-
-    Examples
-    --------
-    register a single sarwing lut
-
-    >>> xsarsea.windspeed.register_one_sarwing_lut(xsarsea.get_test_file('sarwing_luts_subset/GMF_cmodms1ahw'))
-
-    Notes
-    _____
-    Sarwing lut can be downloaded from https://cyclobs.ifremer.fr/static/sarwing_datarmor/xsardata/sarwing_luts
-
-    See Also
-    --------
-    xsarsea.windspeed.available_models
-    xsarsea.windspeed.gmfs.GmfModel.register
-
-    """
-    sarwing_name = os.path.basename(path)
-    name = sarwing_name.replace('GMF_', SarwingLutModel._name_prefix)
-
-    # guess available pols from filenames
-    if os.path.exists(os.path.join(path, 'wind_speed_and_direction.pkl')):
-        pol = 'VV'
-    elif os.path.exists(os.path.join(path, 'wind_speed.pkl')):
-        pol = 'VH'
+    last_folder_name = os.path.basename(os.path.normpath(path))
+    if last_folder_name.startswith('GMF_'):
+        register_lut(path)
     else:
-        pol = None
-
-    sarwing_model = SarwingLutModel(name, path, pol=pol)
-    return sarwing_model
+        if os.path.isdir(path):
+            for filename in os.listdir(path):
+                file_path = os.path.join(path, filename)
+                # Handle directories within the top directory
+                if os.path.isdir(file_path) and filename.startswith('GMF_'):
+                    register_lut(file_path)

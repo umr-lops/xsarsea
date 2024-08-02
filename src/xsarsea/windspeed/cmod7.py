@@ -61,10 +61,10 @@ class Cmod7Model(LutModel):
         self.phi_range = self.phi_range_lr
 
         da_sigma0_db = xr.DataArray(
-            10*np.log10(sigma0), dims=dims, coords=coords)
+            (sigma0), dims=dims, coords=coords)
 
         da_sigma0_db.name = 'sigma0_gmf'
-        da_sigma0_db.attrs['units'] = 'dB'
+        da_sigma0_db.attrs['units'] = 'linear'
         da_sigma0_db.attrs['model'] = self.name
         da_sigma0_db.attrs['resolution'] = 'low'
 
