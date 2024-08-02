@@ -1,10 +1,8 @@
-import os
-from pathlib import Path
 import warnings
 import numpy as np
 import yaml
 from importlib_resources import files
-
+import os
 import logging
 logger = logging.getLogger('xsarsea.windspeed')
 # logger.addHandler(logging.NullHandler())
@@ -37,7 +35,7 @@ def get_dsig(name, inc, sigma0_cr, nesz_cr):
         def sigmoid(x, c0, c1, d0, d1):
             sig = d0 + d1 / (1 + np.exp(-c0*(x-c1)))
             return sig
-        
+
         poptsig = np.array([1.57952257, 25.61843791,  1.46852088,  1.4058646])
         c = sigmoid(inc, *poptsig)
         return (1 / np.sqrt(b*(sigma0_cr / nesz_cr)**c))
@@ -135,18 +133,18 @@ def _load_config_luts(config_path):
     dict
     """
 
-    user_config_file = Path(config_path)
+    user_config_file = open(config_path, 'r')
     default_config_file = files('xsarsea').joinpath("windspeed").joinpath(
         'config_luts_default_direct_01_01_10.yml')
 
-    if user_config_file.exists():
+    if os.exists(user_config_file.exists):
         config_file = user_config_file
     else:
         # logger.info(f"Using default config file {default_config_file}")
         # config_file = default_config_file
         raise FileNotFoundError(f"Config file {user_config_file} not found")
     config = yaml.load(
-        config_file.open(),
+        open(config_file),
         Loader=yaml.FullLoader)
 
     return config

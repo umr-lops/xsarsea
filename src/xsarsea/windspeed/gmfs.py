@@ -1,5 +1,4 @@
 import numpy as np
-import warnings
 from ..utils import timing
 from .utils import logger
 from functools import lru_cache
@@ -7,7 +6,6 @@ from numba import njit, vectorize, guvectorize, float64, float32
 import xarray as xr
 import dask.array as da
 from .models import Model
-import time
 
 
 class GmfModel(Model):
