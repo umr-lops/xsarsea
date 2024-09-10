@@ -258,8 +258,9 @@ class GmfModel(Model):
         # if all scalar, will return scalar
         all_scalar = all(np.isscalar(v)
                          for v in [inc, wspd, phi] if v is not None)
-        logger.debug("Initial input shapes, inc: %s, wspd: %s, phi: %s",
-                     inc.shape, wspd.shape, phi.shape if phi is not None else "None")
+        # logger.debug("Initial input shapes, inc: %s, wspd: %s, phi: %s",
+        #             inc.shape, wspd.shape, phi.shape if phi is not None else "None")
+        
 
         # if all 1d, will return 2d or 3d shape('incidence', 'wspd', 'phi'), unless broadcast is True
         all_1d = all(hasattr(v, 'ndim') and v.ndim == 1 for v in [

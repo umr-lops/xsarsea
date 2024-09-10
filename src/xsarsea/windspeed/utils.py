@@ -46,11 +46,11 @@ def get_dsig(name, inc, sigma0_cr, nesz_cr):
         return (1 / np.sqrt(b*(sigma0_cr / nesz_cr)**c))
 
     elif name == "sarwing_lut_cmodms1ahw":
-        return 1.25 / (sigma0_cr / nesz_cr) ** 4.
+        return (1.25 / (sigma0_cr / nesz_cr)) ** 4.
 
     else:
         raise ValueError(
-            "dsig names different than 'gmf_s1_v2' or 'gmf_rs2_v2' or 'gmf_cmodms1ahw' are not handled. You can compute your own dsig_cr.")
+            "dsig names different than 'gmf_s1_v2' or 'gmf_rs2_v2' or 'sarwing_lut_cmodms1ahw' are not handled. You can compute your own dsig_cr.")
 
 
 def nesz_flattening(noise, inc):
