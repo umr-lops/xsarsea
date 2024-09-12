@@ -81,6 +81,7 @@ class GmfModel(Model):
                     cls._name_prefix, gmf_name))
 
             wspd_range = kwargs.pop('wspd_range', None)
+            
             if wspd_range is None:
                 if len(set(pol)) == 1:
                     # copol

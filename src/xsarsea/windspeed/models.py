@@ -35,8 +35,8 @@ class Model:
         self.resolution = kwargs.pop('resolution', None)
 
         if not hasattr(self, 'inc_range'):
-            self.inc_range = [17., 50.]
-
+            # self.inc_range = [17., 50.]
+            self.inc_range = [16., 66.]
         # steps for generated luts
         self.inc_step_lr = kwargs.pop(
             'inc_step_lr', 1.0)
