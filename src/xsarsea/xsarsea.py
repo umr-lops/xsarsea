@@ -26,7 +26,15 @@ def sigma0_detrend(sigma0, inc_angle, wind_speed_gmf=np.array([10.]), wind_dir_g
     """
     model = get_model(model)
 
+    if wind_speed_gmf.ndim > 1 or wind_dir_gmf.ndim > 1:
+        raise ValueError("wind_speed_gmf and wind_dir_gmf must be 0D or 1D")
+    for var in [wind_speed_gmf, wind_dir_gmf]:
+        if var.ndim == 1 and var.size > 1:
+            raise ValueError(
+                "wind_speed_gmf and wind_dir_gmf size must be 1 or 0")
+
     # get model for one line (all incidences)
+    """
     try:
         # if using dask, model is unpicklable. The workaround is to use map_blocks
         sigma0_gmf_sample = inc_angle.isel(line=0).map_blocks(
@@ -37,8 +45,15 @@ def sigma0_detrend(sigma0, inc_angle, wind_speed_gmf=np.array([10.]), wind_dir_g
     except AttributeError:
         # this should be the standard way
         # see https://github.com/dask/distributed/issues/3450#issuecomment-585255484
-        sigma0_gmf_sample = model(inc_angle.isel(
-            line=0), wind_speed_gmf, wind_dir_gmf, broadcast=True)
+    """
+    sigma0_gmf_sample = model(inc_angle.isel(
+        line=0), wind_speed_gmf, wind_dir_gmf, broadcast=True)
+
+    for var in ["wspd", "phi", "incidence"]:
+        if var in sigma0_gmf_sample.dims:
+            sigma0_gmf_sample = sigma0_gmf_sample.squeeze(var)
+        if var in sigma0_gmf_sample.coords:
+            sigma0_gmf_sample = sigma0_gmf_sample.drop_vars(var)
 
     gmf_ratio_sample = sigma0_gmf_sample / np.nanmean(sigma0_gmf_sample)
     detrended = sigma0 / gmf_ratio_sample.broadcast_like(sigma0)

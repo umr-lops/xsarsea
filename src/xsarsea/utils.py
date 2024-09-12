@@ -3,7 +3,6 @@ import warnings
 import fsspec
 import aiohttp
 import zipfile
-from pathlib import Path
 import yaml
 import time
 import logging
@@ -40,16 +39,16 @@ def _load_config():
     -------
     dict
     """
-    user_config_file = Path('~/.xsarsea/config.yml').expanduser()
+    user_config_file = os.path.expanduser('~/.xsarsea/config.yml')
     default_config_file = files('xsarsea').joinpath('config.yml')
 
-    if user_config_file.exists():
+    if os.path.exists(user_config_file):
         config_file = user_config_file
     else:
         config_file = default_config_file
 
     config = yaml.load(
-        config_file.open(),
+        open(config_file, 'r'),
         Loader=yaml.FullLoader)
     return config
 

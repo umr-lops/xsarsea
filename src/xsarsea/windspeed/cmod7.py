@@ -1,8 +1,8 @@
 import os
 import xarray as xr
-from .utils import logger
+from xsarsea.windspeed.utils import logger
 import numpy as np
-from .models import LutModel
+from xsarsea.windspeed.models import LutModel
 
 
 class Cmod7Model(LutModel):
