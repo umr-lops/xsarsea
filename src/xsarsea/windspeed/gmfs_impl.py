@@ -194,7 +194,7 @@ def gmf_cmodifr2(inc_angle, wind_speed, wind_dir):
 #    return sig
 
 
-@GmfModel.register(wspd_range=[3., 80.], inc_range=[17., 50.], pol='VH', units='linear', defer=True)
+@GmfModel.register(wspd_range=[3., 80.], pol='VH', units='linear', defer=True)
 def gmf_rs2_v2(incidence, speed, phi=None):
     """
     Radarsat-2 VH GMF : relation between sigma0, incidence and windspeed. 
@@ -249,7 +249,7 @@ def gmf_rs2_v2(incidence, speed, phi=None):
     return sig_Final
 
 
-@GmfModel.register(wspd_range=[3., 80.], inc_range=[17., 50.], pol='VH', units='linear', defer=True)
+@GmfModel.register(wspd_range=[3., 80.], pol='VH', units='linear', defer=True)
 def gmf_s1_v2(incidence, speed, phi=None):
     """
     Sentinel-1 VH GMF : relation between sigma0, incidence and windspeed. 
