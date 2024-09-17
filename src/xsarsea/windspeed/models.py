@@ -273,7 +273,7 @@ class Model:
         wspd: array-like
             windspeed
         phi: array-like or None
-            wind direction, in **gmf convention**
+            wind direction relative to antenna
         broadcast: bool
             | If True, input arrays will be broadcasted to the same dimensions, and output will have the same dimension.
             | This option is only available for :func:`~xsarsea.windspeed.gmfs.GmfModel`
