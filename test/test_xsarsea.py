@@ -84,7 +84,7 @@ def test_inversion():
         line=slice(0, 50), sample=slice(0, 60))
 
     owi_ecmwf_wind = sarwing_ds.owiEcmwfWindSpeed * np.exp(
-        1j * xsarsea.dir_geo_to_sample(sarwing_ds.owiEcmwfWindDirection, sarwing_ds.owiHeading))
+        1j * xsarsea.dir_meteo_to_sample(sarwing_ds.owiEcmwfWindDirection, sarwing_ds.owiHeading))
     sarwing_ds = xr.merge([
         sarwing_ds,
         owi_ecmwf_wind.to_dataset(name='owi_ancillary_wind'),
