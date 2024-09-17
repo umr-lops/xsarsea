@@ -167,7 +167,7 @@ def dir_to_180(angle):
 
     Parameters
     ----------
-    angle_360: float
+    angle: float
         angle in degrees
 
     Returns
@@ -185,7 +185,7 @@ def dir_to_360(angle):
 
     Parameters
     ----------
-    angle_180: float
+    angle: float
         angle in degrees
 
     Returns
