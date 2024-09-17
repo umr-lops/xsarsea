@@ -12,7 +12,11 @@ https://www.climate-service-center.de/imperia/md/content/gkss/institut_fuer_kues
 __all__ = ['Gradients', 'Gradients2D',
            'circ_smooth', 'PlotGradients', 'circ_hist']
 
-import cv2
+try:
+    import cv2
+except:
+    import cv2
+
 import numpy as np
 from scipy import signal, ndimage
 import xarray as xr
