@@ -23,8 +23,7 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
         sigma0 in cross pol for dualpol invertion
     ancillary_wind=: xarray.DataArray (numpy.complex28)
         ancillary wind
-
-            | (for example ecmwf winds), in **model convention**
+            | (for example ecmwf winds), in **antenna convention**
     model=: str or tuple
         model to use.
 
@@ -46,8 +45,7 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
     -------
     xarray.DataArray or tuple
         If available (copol or dualpol), the returned array is `np.complex64`, with the angle of the returned array is
-        inverted direction in **gmf convention** (use `-np.conj(result))` to get it in standard convention)
-
+        inverted direction in **antenna convention**
     See Also
     --------
     xsarsea.windspeed.available_models
@@ -169,12 +167,6 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
             # invert from gmf for 1d vector (float) input.
             # this function will be vectorized with 'numba.guvectorize' or 'numpy.frompyfunc'
             # set debug=True below to force 'numpy.frompyfunc', so you can debug this code
-
-            # gmf and lut doesn't have the same direction convention than xsarsea in the sample direction
-            # for xsarsea, positive sample means in the sample increasing direction
-            # for gmf and lut, positive means in the sample decreasing direction
-            # we switch ancillary wind to the gmf convention
-            # ancillary_wind_1d = -np.conj(ancillary_wind_1d)
 
             for i in range(len(inc_1d)):
                 one_inc = inc_1d[i]
