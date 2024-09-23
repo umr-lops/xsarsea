@@ -397,7 +397,7 @@ class NcLutModel(LutModel):
         return lut
 
 
-def register_nc_luts(topdir, gmf_names=None, **kwargs):
+def register_nc_luts(topdir, gmf_names=None):
     """
     Register all netcdf luts found under `topdir`.
 
@@ -518,3 +518,32 @@ def get_model(name):
             raise KeyError('model %s not found' % name)
 
     return model
+
+
+def register_luts(topdir=None, topdir_cmod7=None):
+    """
+    Register gmfModel luts and ncLutModel luts
+
+    Parameters
+    ----------
+    topdir: str
+        top dir path to nc luts.
+    
+    topdir_cmod7: str
+        top dir path to cmod7 luts.
+
+    kwargs: dict
+        kwargs to pass to register_nc_luts
+    """
+    
+    # register gmf luts
+    import xsarsea.windspeed as windspeed
+    windspeed.GmfModel.activate_gmfs_impl()
+
+    # register nc luts
+    if topdir != None:
+        register_nc_luts(topdir)
+
+    # register cmod7
+    if topdir_cmod7 != None:
+        windspeed.register_cmod7(topdir_cmod7)
