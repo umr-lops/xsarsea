@@ -23,7 +23,7 @@ def gmf_cmod5_generic(neutral=False):
                       6.2437, 2.3893, 0.3249, 4.159, 1.693])
         name = 'gmf_cmod5n'
 
-    @GmfModel.register(name, wspd_range=[0.2, 50.], pol='VV', units='linear', defer=True)
+    @GmfModel.register(name, wspd_range=[0.2, 50.], pol='VV', units='linear', defer=False)
     def gmf_cmod5(inc, wspd, phi):
         zpow = 1.6
         thetm = 40.
@@ -81,7 +81,7 @@ gmf_cmod5_generic(neutral=False)
 gmf_cmod5_generic(neutral=True)
 
 
-@GmfModel.register(wspd_range=[0.2, 50.], pol='VV', units='linear', defer=True)
+@GmfModel.register(wspd_range=[0.2, 50.], pol='VV', units='linear', defer=False)
 def gmf_cmodifr2(inc_angle, wind_speed, wind_dir):
 
     C = np.zeros(26)
@@ -194,7 +194,7 @@ def gmf_cmodifr2(inc_angle, wind_speed, wind_dir):
 #    return sig
 
 
-@GmfModel.register(wspd_range=[3., 80.], pol='VH', units='linear', defer=True)
+@GmfModel.register(wspd_range=[3., 80.], pol='VH', units='linear', defer=False)
 def gmf_rs2_v2(incidence, speed, phi=None):
     """
     Radarsat-2 VH GMF : relation between sigma0, incidence and windspeed. 
@@ -249,7 +249,7 @@ def gmf_rs2_v2(incidence, speed, phi=None):
     return sig_Final
 
 
-@GmfModel.register(wspd_range=[3., 80.], pol='VH', units='linear', defer=True)
+@GmfModel.register(wspd_range=[3., 80.], pol='VH', units='linear', defer=False)
 def gmf_s1_v2(incidence, speed, phi=None):
     """
     Sentinel-1 VH GMF : relation between sigma0, incidence and windspeed. 
@@ -304,7 +304,7 @@ def gmf_s1_v2(incidence, speed, phi=None):
     return sig_Final
 
 
-@GmfModel.register(wspd_range=[3., 80.], pol='VH', units='linear', defer=True)
+@GmfModel.register(wspd_range=[3., 80.], pol='VH', units='linear', defer=False)
 def gmf_rcm_noaa(incidence, speed, phi=None):
     """
     Radarsat Consteallation Mission VH GMF : relation between sigma0, incidence and windspeed. 

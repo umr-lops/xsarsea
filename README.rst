@@ -46,4 +46,4 @@ ________________
 Documentation and examples
 --------------------------
 
-https://cyclobs.ifremer.fr/static/sarwing_datarmor/xsarsea
+https://cerweb.ifremer.fr/datarmor/doc_sphinx/xsarsea/

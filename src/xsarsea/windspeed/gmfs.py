@@ -81,7 +81,7 @@ class GmfModel(Model):
                     cls._name_prefix, gmf_name))
 
             wspd_range = kwargs.pop('wspd_range', None)
-            
+
             if wspd_range is None:
                 if len(set(pol)) == 1:
                     # copol
@@ -261,7 +261,6 @@ class GmfModel(Model):
                          for v in [inc, wspd, phi] if v is not None)
         # logger.debug("Initial input shapes, inc: %s, wspd: %s, phi: %s",
         #             inc.shape, wspd.shape, phi.shape if phi is not None else "None")
-        
 
         # if all 1d, will return 2d or 3d shape('incidence', 'wspd', 'phi'), unless broadcast is True
         all_1d = all(hasattr(v, 'ndim') and v.ndim == 1 for v in [

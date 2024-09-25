@@ -417,13 +417,10 @@ def register_nc_luts(topdir, gmf_names=None):
 
     >>> xsarsea.windspeed.register_nc_luts(xsarsea.get_test_file('nc_luts_subset'))
 
-    register all sarwing lut from ifremer path
+    register all pickle lut from ifremer path
 
-    >>> xsarsea.windspeed.register_sarwing_luts('/home/datawork-cersat-public/cache/project/sarwing/xsardata/nc_luts')
+    >>> xsarsea.windspeed.register_pickle_luts('/home/datawork-cersat-public/cache/project/sarwing/xsardata/nc_luts')
 
-    Notes
-    _____
-    Sarwing lut can be downloaded from https://cyclobs.ifremer.fr/static/sarwing_datarmor/xsardata/nc_luts
 
     See Also
     --------
@@ -528,14 +525,14 @@ def register_luts(topdir=None, topdir_cmod7=None):
     ----------
     topdir: str
         top dir path to nc luts.
-    
+
     topdir_cmod7: str
         top dir path to cmod7 luts.
 
     kwargs: dict
         kwargs to pass to register_nc_luts
     """
-    
+
     # register gmf luts
     import xsarsea.windspeed as windspeed
     windspeed.GmfModel.activate_gmfs_impl()
@@ -547,3 +544,4 @@ def register_luts(topdir=None, topdir_cmod7=None):
     # register cmod7
     if topdir_cmod7 != None:
         windspeed.register_cmod7(topdir_cmod7)
+    

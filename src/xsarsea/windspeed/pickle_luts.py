@@ -6,7 +6,7 @@ import numpy as np
 from .models import LutModel
 
 
-class SarwingLutModel(LutModel):
+class PickleLutModel(LutModel):
 
     _name_prefix = 'sarwing_lut__'
     _priority = 10
@@ -19,7 +19,7 @@ class SarwingLutModel(LutModel):
         if not os.path.isdir(self.path):
             raise FileNotFoundError(self.path)
 
-        logger.info('load sarwing lut from %s' % self.path)
+        logger.info('load pickle lut from %s' % self.path)
 
         sigma0_db_path = os.path.join(self.path, 'sigma.npy')
         sigma0_db = np.ascontiguousarray(np.transpose(np.load(sigma0_db_path)))
@@ -70,7 +70,7 @@ class SarwingLutModel(LutModel):
         return da_sigma0_db.transpose(*final_dims)
 
 
-def register_sarwing_luts(path):
+def register_pickle_luts(path):
     """
     Register LUTs from a specified path. The path can be a directory containing multiple LUTs or a single LUT file.
 
@@ -85,11 +85,11 @@ def register_sarwing_luts(path):
     --------
     Register a single LUT:
 
-    >>> xsarsea.windspeed.register_sarwing_luts(xsarsea.get_test_file('sarwing_luts_subset/GMF_cmodms1ahw'))
+    >>> xsarsea.windspeed.register_pickle_luts(xsarsea.get_test_file('sarwing_luts_subset/GMF_cmodms1ahw'))
 
     Register all LUTs from a directory:
 
-    >>> xsarsea.windspeed.register_sarwing_luts('/home/datawork-cersat-public/cache/project/sarwing/GMFS/v1.6')
+    >>> xsarsea.windspeed.register_pickle_luts('/home/datawork-cersat-public/cache/project/sarwing/GMFS/v1.6')
 
     Notes
     -----
@@ -102,8 +102,8 @@ def register_sarwing_luts(path):
     """
 
     def register_lut(file_path):
-        sarwing_name = os.path.basename(file_path)
-        name = sarwing_name.replace('GMF_', SarwingLutModel._name_prefix)
+        name = os.path.basename(file_path)
+        name = name.replace('GMF_', PickleLutModel._name_prefix)
         # Guess available pols from filenames
         if os.path.exists(os.path.join(file_path, 'wind_speed_and_direction.pkl')):
             pol = 'VV'
@@ -112,7 +112,7 @@ def register_sarwing_luts(path):
         else:
             pol = None
 
-        sarwing_model = SarwingLutModel(name, file_path, pol=pol)
+        pickleLutmodel = PickleLutModel(name, file_path, pol=pol)
 
     last_folder_name = os.path.basename(os.path.normpath(path))
     if last_folder_name.startswith('GMF_'):
