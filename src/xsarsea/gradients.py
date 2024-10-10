@@ -105,7 +105,7 @@ class Gradients2D:
                 exclude_dims=set(self._window_dims.values()),
                 output_core_dims=[['angles'], []],
                 vectorize=True,
-                output_dtypes=[np.float, np.float]
+                output_dtypes=[np.float64, np.float64]
             )
             grad_hist = grad_hist.rename(
                 'weight').assign_coords(angles=angles_bins)
@@ -807,7 +807,7 @@ def gradient_histogram(g2, c, angles_bins):
     k_all = np.round((angle - angles_start) / angles_step)
 
     # output array
-    grads = np.zeros_like(angles_bins, dtype=np.float)
+    grads = np.zeros_like(angles_bins, dtype=np.float64)
 
     # filter nan
     abs_g2 = np.abs(g2)
@@ -862,7 +862,7 @@ def circ_smooth(hist):
             input_core_dims=[["angles"], ["kernel_len"]],
             output_core_dims=[['angles']],
             vectorize=True,
-            output_dtypes=[np.float],
+            output_dtypes=[np.float64],
         )
 
     # unwrap

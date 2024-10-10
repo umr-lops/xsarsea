@@ -5,7 +5,7 @@ import xarray as xr
 import dask.array as da
 
 
-@windspeed.gmfs.GmfModel.register(inc_range=[17., 50.], wspd_range=[3., 80.], pol='VH', units='linear', defer=True)
+@windspeed.gmfs.GmfModel.register(inc_range=[17., 50.], wspd_range=[3., 80.], pol='VH', units='linear', defer=False)
 def gmf_dummy(inc, wspd, phi=None):
     a0 = 0.00013106836021008122
     a1 = -4.530598283705591e-06
@@ -91,7 +91,7 @@ def test_inversion():
     ])
 
     sarwing_luts_subset_path = xsarsea.get_test_file('sarwing_luts_subset')
-    windspeed.sarwing_luts.register_sarwing_luts(sarwing_luts_subset_path)
+    windspeed.pickle_luts.register_sarwing_luts(sarwing_luts_subset_path)
 
     nesz_cross_flat = windspeed.nesz_flattening(
         sarwing_ds.owiNesz_cross, sarwing_ds.owiIncidenceAngle)

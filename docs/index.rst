@@ -29,11 +29,11 @@ Those examples show how to:
 
 * :doc:`examples/streaks`
 
-* :doc:`examples/windspeed_inversion`
-
 * :doc:`examples/windspeed_retrieval_L1`
 
 * :doc:`examples/gmfs_and_luts`
+
+* :doc:`examples/create_hh_lut`
 
 Help & Reference
 ................
@@ -66,8 +66,8 @@ Last documentation build: |today|
    examples/xsarsea
    examples/streaks
    examples/windspeed_retrieval_L1
-   examples/windspeed_inversion
    examples/gmfs_and_luts
+   examples/create_hh_lut
 
 .. toctree::
    :maxdepth: 1
