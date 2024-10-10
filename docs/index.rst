@@ -33,6 +33,8 @@ Those examples show how to:
 
 * :doc:`examples/gmfs_and_luts`
 
+* :doc:`examples/create_hh_lut`
+
 Help & Reference
 ................
 
@@ -65,6 +67,7 @@ Last documentation build: |today|
    examples/streaks
    examples/windspeed_retrieval_L1
    examples/gmfs_and_luts
+   examples/create_hh_lut
 
 .. toctree::
    :maxdepth: 1
