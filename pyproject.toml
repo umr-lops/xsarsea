@@ -1,0 +1,84 @@
+[project]
+name = "xsarsea"
+requires-python = ">= 3.10"
+license = { text = "MIT" }
+authors = [
+  { name = "Olivier Archer", email = "olivier.archer@ifremer.fr" },
+]
+description = "Python xarray library to compute geophysical parameters (such as wind, waves or currents) from radar quantities"
+readme = "README.md"
+keywords = [
+  "xarray",
+  "earth-observation",
+  "remote-sensing",
+  "satellite-imagery",
+    "ocean",
+    "wind",
+    "waves",
+  "sar",
+  "synthetic-aperture-radar",
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Intended Audience :: Science/Research",
+  "Topic :: Scientific/Engineering",
+]
+dynamic = ["version"]
+dependencies = [
+  "xarray>=2024.10.0",
+  'numpy',
+'opencv-python',
+'importlib-resources',
+'fsspec',
+'aiohttp',
+'numba',
+'scipy',
+'pyyaml',
+'typer',
+'netCDF4',
+'matplotlib',
+'xrft'
+]
+
+[project.urls]
+homepage = "https://github.com/umr-lops/xsarsea.readthedocs.io"
+documentation = "https://xsarsea.readthedocs.io"
+repository = "https://github.com/umr-lops/xsarsea"
+changelog = "https://xsarsea.readthedocs.io/en/latest/changelog.html"
+
+[project.scripts]
+
+[build-system]
+requires = ["setuptools>=64.0", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["xsarsea"]
+package-dir = {"" = "src"}
+
+[tool.setuptools_scm]
+fallback_version = "999"
+
+[tool.isort]
+profile = "black"
+skip_gitignore = true
+float_to_top = true
+default_section = "THIRDPARTY"
+known_first_party = "xsarsea"
+
+[tool.black]
+line-length = 100
+
+[tool.coverage.run]
+source = ["xsarsea"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = ["pragma: no cover", "if TYPE_CHECKING"]
