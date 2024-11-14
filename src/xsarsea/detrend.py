@@ -1,5 +1,5 @@
 import numpy as np
-from .utils import timing, logger, get_test_file
+from xsarsea.utils import timing, logger, get_test_file
 from xsarsea.windspeed.models import get_model
 import xarray as xr
 
