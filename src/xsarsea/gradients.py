@@ -246,7 +246,7 @@ class StackedGradients:
 class Gradients:
     """Gradients class to compute weighted direction histogram at multiscale and multi resolution """
 
-    def __init__(self, sigma0, windows_sizes=[1600], downscales_factors=[1], window_step=1):
+    def __init__(self, sigma0, windows_sizes=[1600], downscales_factors=[1], window_step=1, downsize_method="cv2"):
         """
 
         Parameters
@@ -288,7 +288,7 @@ class Gradients:
         # append all gradients
         for p in sigma0.pol.values:
             for df in downscales_factors:
-                sigma0_resampled = Gradients._sigma0_resample(sigma0.sel(pol=p), df) \
+                sigma0_resampled = Gradients._sigma0_resample(sigma0.sel(pol=p), df, method=downsize_method) \
                     .assign_coords(downscale_factor=df)
                 for ws in windows_sizes:
                     self.gradients_list.append(
@@ -333,13 +333,63 @@ class Gradients:
         return hist
 
     @staticmethod
-    def _sigma0_resample(sigma0, factor):
-        if factor == 1:
-            return sigma0
-        __sigma0 = sigma0.isel(line=slice(0, None, factor),
-                               sample=slice(0, None, factor)).copy(True)
-        __sigma0.values[::] = cv2.resize(
-            sigma0.values, __sigma0.shape[::-1], cv2.INTER_AREA)
+    def _sigma0_resample(sigma0, factor, method="cv2"):
+
+        if method == "cv2":
+            if factor == 1:
+                return sigma0
+
+            def compute_coords(coords, factor):
+                n = (len(coords) // factor) * factor
+                coords_trimmed = coords[:n]
+                coords_reshaped = coords_trimmed.reshape(-1, factor)
+                return coords_reshaped.mean(axis=1)
+
+            target_line = int(np.floor(sigma0.sizes['line'] / factor))
+            target_sample = int(np.floor(sigma0.sizes['sample'] / factor))
+
+            # Redimensionner en utilisant les dimensions cibles calculées
+            resized_values = cv2.resize(
+                sigma0.values, (target_sample, target_line), interpolation=cv2.INTER_AREA)
+
+            # Calcul des coordonnées de centre de chaque nouvelle cellule
+            line_coords = compute_coords(sigma0.line.values, factor)
+            sample_coords = compute_coords(sigma0.sample.values, factor)
+            other_coords = {coord: sigma0.coords[coord]
+                            for coord in sigma0.coords if coord not in ['line', 'sample']}
+
+            # Créer un nouveau DataArray avec les valeurs redimensionnées et les coordonnées recalculées
+            return xr.DataArray(resized_values, dims=['line', 'sample'],
+                                coords={'line': line_coords,
+                                        'sample': sample_coords, **other_coords},
+                                attrs=sigma0.attrs)
+        if method == "cv2_old":
+            if factor == 1:
+                return sigma0
+            __sigma0 = sigma0.isel(line=slice(0, None, factor),
+                                   sample=slice(0, None, factor)).copy(True)
+            __sigma0.values[::] = cv2.resize(
+                sigma0.values, __sigma0.shape[::-1], cv2.INTER_AREA)
+        elif method == "coarsen":
+            __sigma0 = sigma0.coarsen(
+                {'line': factor, 'sample': factor}, boundary='trim').mean()
+        elif method == "coarsen_rms":
+            def rms_func(array, axis=None, **kwargs):
+                # Aplatir le tableau en conservant les dimensions spécifiées par axis
+                if axis is not None:
+                    # Calculer la moyenne quadratique (RMS) en utilisant l'axe spécifié
+                    return np.sqrt(np.nanmean(array**2, axis=axis))
+                else:
+                    # Si l'axe n'est pas spécifié, faire un RMS global sur le tableau aplati
+                    array = array.flatten()
+                    valid_pixels = array[~np.isnan(array)]  # Supprimer les NaN
+                    return np.sqrt((valid_pixels ** 2).mean())
+
+            __sigma0 = sigma0.coarsen(
+                line=factor, sample=factor, boundary='trim').reduce(rms_func)
+        else:
+            raise ValueError(
+                "method must be 'cv2' or 'coarsen' or 'coarsen_rms'")
         return __sigma0
 
 
@@ -633,7 +683,7 @@ def convolve2d(in1, in2, boundary='symm', fillvalue=0, dask=True):
 def smoothing(image):
     # filtre gaussien
 
-    B2 = np.mat('[1,2,1; 2,4,2; 1,2,1]', float) * 1 / 16
+    B2 = np.asmatrix('[1,2,1; 2,4,2; 1,2,1]', float) * 1 / 16
     B2 = np.array(B2)
 
     _image = convolve2d(image, B2, boundary='symm')
@@ -657,7 +707,7 @@ def R2(image):
         resampled
     """
 
-    B2 = np.mat('[1,2,1; 2,4,2; 1,2,1]', float) * 1 / 16
+    B2 = np.asmatrix('[1,2,1; 2,4,2; 1,2,1]', float) * 1 / 16
     B2 = np.array(B2)
     B4 = signal.convolve(B2, B2)
 
@@ -690,11 +740,11 @@ def Mean(image):
     xarray.DataArray
         smoothed
     """
-    B2 = np.mat('[1,2,1; 2,4,2; 1,2,1]', float) * 1 / 16
+    B2 = np.asmatrix('[1,2,1; 2,4,2; 1,2,1]', float) * 1 / 16
     B2 = np.array(B2)
     B4 = signal.convolve(B2, B2)
 
-    B22 = np.mat(
+    B22 = np.asmatrix(
         '[1,0,2,0,1;0,0,0,0,0;2,0,4,0,2;0,0,0,0,0;1,0,2,0,1]', float) * 1/16
     B42 = signal.convolve(B22, B22)
 

@@ -8,8 +8,7 @@ import glob
 import netCDF4
 import logging
 import pandas as pd
-from .utils import _load_config_luts
-logger = logging.getLogger('xsarsea.windspeed')
+logger = logging.getLogger('xsarsea.windspeed.models')
 
 
 class Model:
@@ -544,4 +543,3 @@ def register_luts(topdir=None, topdir_cmod7=None):
     # register cmod7
     if topdir_cmod7 != None:
         windspeed.register_cmod7(topdir_cmod7)
-    

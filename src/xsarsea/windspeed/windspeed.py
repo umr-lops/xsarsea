@@ -4,8 +4,11 @@ import numpy as np
 import warnings
 import xarray as xr
 from ..utils import timing
-from .utils import logger
 from .models import get_model
+import logging
+
+logger = logging.getLogger('xsarsea.windspeed')
+logger.setLevel(logging.DEBUG)
 
 
 @timing(logger.debug)
@@ -285,6 +288,9 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
                 __invert_from_model_1d(*args_flat, out_co, out_cr)
                 return out_co.reshape(ori_shape), out_cr.reshape(ori_shape)
         else:
+            logger.debug(
+                'using guvectorize')
+
             # fastmath can be used, but we will need nan handling
             __invert_from_model_vect = timing(logger=logger.debug)(
                 guvectorize(
@@ -333,6 +339,8 @@ def invert_from_model(inc, sigma0, sigma0_dual=None, /, ancillary_wind=None, dsi
                     raise TypeError
 
             except (ImportError, TypeError):
+                logger.debug('Finally invert with numpy')
+
                 # use numpy array, but store in xarray
                 da_ws_co.data, da_ws_cr.data = _invert_from_model_numpy(
                     np.asarray(inc),
