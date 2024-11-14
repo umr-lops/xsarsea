@@ -28,7 +28,7 @@ def test_available_models():
 
     sarwing_luts_subset_path = xsarsea.utils.get_test_file(
         'sarwing_luts_subset')
-    windspeed.register_sarwing_luts(sarwing_luts_subset_path)
+    windspeed.register_nc_luts(sarwing_luts_subset_path)
     assert 'sarwing_lut_cmodms1ahw' in windspeed.available_models().index
 
     nc_luts_path = xsarsea.utils.get_test_file('xsarsea_luts')
@@ -91,7 +91,7 @@ def test_inversion():
     ])
 
     sarwing_luts_subset_path = xsarsea.get_test_file('sarwing_luts_subset')
-    windspeed.pickle_luts.register_sarwing_luts(sarwing_luts_subset_path)
+    windspeed.pickle_luts.register_pickle_luts(sarwing_luts_subset_path)
 
     nesz_cross_flat = windspeed.nesz_flattening(
         sarwing_ds.owiNesz_cross, sarwing_ds.owiIncidenceAngle)
@@ -141,8 +141,3 @@ def test_inversion():
     assert isinstance(windspeed_co.data, np.ndarray)
     assert isinstance(windspeed_dual.data, np.ndarray)
 
-
-# if __name__ == "__main__":
-#    test_available_models()
-#    test_models()
-#    test_inversion()

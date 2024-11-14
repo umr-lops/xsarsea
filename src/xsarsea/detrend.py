@@ -1,11 +1,18 @@
 import numpy as np
-from xsarsea.utils import timing, logger, get_test_file
-from xsarsea.windspeed.models import get_model
 import xarray as xr
+
+from xsarsea.utils import logger, timing
+from xsarsea.windspeed.models import get_model
 
 
 @timing(logger=logger.info)
-def sigma0_detrend(sigma0, inc_angle, wind_speed_gmf=np.array([10.]), wind_dir_gmf=np.array([45.]), model='gmf_cmod5n'):
+def sigma0_detrend(
+    sigma0,
+    inc_angle,
+    wind_speed_gmf=np.array([10.0]),
+    wind_dir_gmf=np.array([45.0]),
+    model="gmf_cmod5n",
+):
     """compute `sigma0_detrend` from `sigma0` and `inc_angle`
 
     Parameters
@@ -30,8 +37,7 @@ def sigma0_detrend(sigma0, inc_angle, wind_speed_gmf=np.array([10.]), wind_dir_g
         raise ValueError("wind_speed_gmf and wind_dir_gmf must be 0D or 1D")
     for var in [wind_speed_gmf, wind_dir_gmf]:
         if var.ndim == 1 and var.size > 1:
-            raise ValueError(
-                "wind_speed_gmf and wind_dir_gmf size must be 1 or 0")
+            raise ValueError("wind_speed_gmf and wind_dir_gmf size must be 1 or 0")
 
     # get model for one line (all incidences)
     """
@@ -46,8 +52,7 @@ def sigma0_detrend(sigma0, inc_angle, wind_speed_gmf=np.array([10.]), wind_dir_g
         # this should be the standard way
         # see https://github.com/dask/distributed/issues/3450#issuecomment-585255484
     """
-    sigma0_gmf_sample = model(inc_angle.isel(
-        line=0), wind_speed_gmf, wind_dir_gmf, broadcast=True)
+    sigma0_gmf_sample = model(inc_angle.isel(line=0), wind_speed_gmf, wind_dir_gmf, broadcast=True)
 
     for var in ["wspd", "phi", "incidence"]:
         if var in sigma0_gmf_sample.dims:
@@ -58,7 +63,7 @@ def sigma0_detrend(sigma0, inc_angle, wind_speed_gmf=np.array([10.]), wind_dir_g
     gmf_ratio_sample = sigma0_gmf_sample / np.nanmean(sigma0_gmf_sample)
     detrended = sigma0 / gmf_ratio_sample.broadcast_like(sigma0)
 
-    detrended.attrs['comment'] = 'detrended with model %s' % model.name
+    detrended.attrs["comment"] = f"detrended with model {model.name}"
 
     return detrended
 
@@ -78,13 +83,12 @@ def read_sarwing_owi(owi_file):
     """
 
     sarwing_ds = xr.open_dataset(owi_file)
-    sarwing_ds = xr.merge([sarwing_ds, xr.open_dataset(
-        owi_file, group='owiInversionTables_UV')])
-    sarwing_ds = sarwing_ds.rename_dims(
-        {'owiAzSize': 'line', 'owiRaSize': 'sample'})
-    sarwing_ds = sarwing_ds.drop_vars(['owiCalConstObsi', 'owiCalConstInci'])
+    sarwing_ds = xr.merge([sarwing_ds, xr.open_dataset(owi_file, group="owiInversionTables_UV")])
+    sarwing_ds = sarwing_ds.rename_dims({"owiAzSize": "line", "owiRaSize": "sample"})
+    sarwing_ds = sarwing_ds.drop_vars(["owiCalConstObsi", "owiCalConstInci"])
     sarwing_ds = sarwing_ds.assign_coords(
-        {'line': np.arange(len(sarwing_ds.line)), 'sample': np.arange(len(sarwing_ds.sample))})
+        {"line": np.arange(len(sarwing_ds.line)), "sample": np.arange(len(sarwing_ds.sample))}
+    )
 
     return sarwing_ds
 

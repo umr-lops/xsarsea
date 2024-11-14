@@ -1,11 +1,13 @@
-import numpy as np
-from ..utils import timing
-from .utils import logger
 from functools import lru_cache
-from numba import njit, vectorize, guvectorize, float64, float32
-import xarray as xr
+
 import dask.array as da
-from .models import Model
+import numpy as np
+import xarray as xr
+from numba import float32, float64, guvectorize, njit, vectorize
+
+from xsarsea.utils import timing
+from xsarsea.windspeed.models import Model
+from xsarsea.windspeed.utils import logger
 
 
 class GmfModel(Model):
@@ -13,13 +15,13 @@ class GmfModel(Model):
     GmfModel class for handling model from analitycal functions. See :func:`~Model`
     """
 
-    _name_prefix = 'gmf_'
+    _name_prefix = "gmf_"
     _priority = 3
     _registry = {}
     _deferred_registrations = []
 
     @classmethod
-    def register(cls, name=None, pol=None, units='linear', defer=True, **kwargs):
+    def register(cls, name=None, pol=None, units="linear", defer=True, **kwargs):
         """
         | provide a decorator for registering a gmf function.
         | The decorated function should be able to handle float as input.
@@ -73,30 +75,30 @@ class GmfModel(Model):
 
 
         """
+
         def inner(func):
             gmf_name = name or func.__name__
 
             if not gmf_name.startswith(cls._name_prefix):
-                raise ValueError("gmf function must start with '%s'. Got %s" % (
-                    cls._name_prefix, gmf_name))
+                raise ValueError(
+                    f"gmf function must start with '{cls._name_prefix}'. Got {gmf_name}"
+                )
 
-            wspd_range = kwargs.pop('wspd_range', None)
+            wspd_range = kwargs.pop("wspd_range", None)
 
             if wspd_range is None:
                 if len(set(pol)) == 1:
                     # copol
-                    wspd_range = [0.2, 50.]
+                    wspd_range = [0.2, 50.0]
                 else:
                     # crosspol
-                    wspd_range = [3.0, 80.]
+                    wspd_range = [3.0, 80.0]
 
                     # Store configuration in a deferred list instead of immediate registration
             if defer:
-                cls._deferred_registrations.append(
-                    (func, gmf_name, wspd_range, pol, units, kwargs))
+                cls._deferred_registrations.append((func, gmf_name, wspd_range, pol, units, kwargs))
             else:
-                cls._register_function(
-                    func, gmf_name, wspd_range, pol, units, **kwargs)
+                cls._register_function(func, gmf_name, wspd_range, pol, units, **kwargs)
 
             return func
 
@@ -113,51 +115,55 @@ class GmfModel(Model):
         Process all deferred registrations based on the provided config and optional name filter.
 
         Parameters
-            gmfs_names (list, optional): List of names to filter the registrated gmfs. 
+            gmfs_names (list, optional): List of names to filter the registrated gmfs.
                 If None, all registrated gmfs are processed.
         """
 
         for func, name, wspd_range, pol, units, reg_kwargs in cls._deferred_registrations:
             if gmfs_names is None or name in gmfs_names:
                 combined_kwargs = {**reg_kwargs, **kwargs}
-                cls._register_function(
-                    func, name, wspd_range, pol, units, **combined_kwargs)
+                cls._register_function(func, name, wspd_range, pol, units, **combined_kwargs)
 
-    def __init__(self, name, gmf_pyfunc_scalar, wspd_range=[0.2, 50.], pol=None, units=None, **kwargs):
+    def __init__(
+        self, name, gmf_pyfunc_scalar, wspd_range=[0.2, 50.0], pol=None, units=None, **kwargs
+    ):
         # register gmf_pyfunc_scalar as model name
 
         # check the gmf with scalar inputs
         # No try/expect. let TypeError raise if gmf use numpy arrays
-        sigma0_gmf = gmf_pyfunc_scalar(35., 0.2, 90.)
+        sigma0_gmf = gmf_pyfunc_scalar(35.0, 0.2, 90.0)
         sigma0_gmf = [sigma0_gmf]
 
         # check if the gmf accepts phi
         try:
-            gmf_pyfunc_scalar(35., 0.2, None)
+            gmf_pyfunc_scalar(35.0, 0.2, None)
             phi_range = None
-            logger.debug("%s doesn't needs phi" % name)
+            logger.debug(f"{name} doesn't needs phi")
         except TypeError:
             # gmf needs phi
             # guess the range [0., 180.] or [0., 360.]
             # if phi is [0, 180], opposite dir will give the same sigma0
             phi_list = [0, 90, 180, 270]
-            sigma0_gmf = [np.abs(gmf_pyfunc_scalar(
-                35., 0.2, phi) - gmf_pyfunc_scalar(35., 0.2, -phi)) for phi in phi_list]
+            sigma0_gmf = [
+                np.abs(gmf_pyfunc_scalar(35.0, 0.2, phi) - gmf_pyfunc_scalar(35.0, 0.2, -phi))
+                for phi in phi_list
+            ]
 
             if min(sigma0_gmf) < 1e-15:
                 # modulo 180
-                logger.debug("%s needs phi %% 180" % name)
-                phi_range = [0., 180.]
+                logger.debug(f"{name} needs phi % 180")
+                phi_range = [0.0, 180.0]
             else:
-                logger.debug("%s needs phi %% 360" % name)
-                phi_range = [0., 360.]
+                logger.debug(f"{name} needs phi % 360")
+                phi_range = [0.0, 360.0]
 
         # we provide a very small windspeed. if units is dB, sigma0 should be negative.
-        if (units == 'dB' and min(sigma0_gmf) > 0) or (units == 'linear' and min(sigma0_gmf) < 0):
-            logger.info("Possible bad units '%s'  for gmf %s" % (units, name))
+        if (units == "dB" and min(sigma0_gmf) > 0) or (units == "linear" and min(sigma0_gmf) < 0):
+            logger.info(f"Possible bad units '{units}'  for gmf {name}")
 
-        super().__init__(name, units=units, pol=pol,
-                         wspd_range=wspd_range, phi_range=phi_range, **kwargs)
+        super().__init__(
+            name, units=units, pol=pol, wspd_range=wspd_range, phi_range=phi_range, **kwargs
+        )
 
         self._gmf_pyfunc_scalar = gmf_pyfunc_scalar
 
@@ -167,7 +173,7 @@ class GmfModel(Model):
 
     @timing(logger.debug)
     @lru_cache
-    def _gmf_function(self, ftype='numba_vectorize'):
+    def _gmf_function(self, ftype="numba_vectorize"):
         """
          get vectorized function for gmf
 
@@ -196,33 +202,36 @@ class GmfModel(Model):
         gmf_function = None
         if ftype is None:
             gmf_function = self._gmf_pyfunc_scalar
-        elif ftype == 'numba_njit':
-            gmf_function = njit([float64(float64, float64, float64)], nogil=True, inline='never')(
-                self._gmf_pyfunc_scalar)
-        elif ftype == 'numba_vectorize':
+        elif ftype == "numba_njit":
+            gmf_function = njit([float64(float64, float64, float64)], nogil=True, inline="never")(
+                self._gmf_pyfunc_scalar
+            )
+        elif ftype == "numba_vectorize":
             gmf_function = vectorize(
-                [
-                    float64(float64, float64, float64),
-                    float32(float32, float32, float64)
-                ], target='parallel', nopython=True)(self._gmf_pyfunc_scalar)
-        elif ftype == 'numba_guvectorize':
-            func_njit = self._gmf_function(ftype='numba_njit')
+                [float64(float64, float64, float64), float32(float32, float32, float64)],
+                target="parallel",
+                nopython=True,
+            )(self._gmf_pyfunc_scalar)
+        elif ftype == "numba_guvectorize":
+            func_njit = self._gmf_function(ftype="numba_njit")
 
             @guvectorize(
                 [
                     (float64[:], float64[:], float64[:], float64[:, :, :]),
-                    (float32[:], float32[:], float32[:], float32[:, :, :])
-                ], '(n),(m),(p)->(n,m,p)', target='cpu')
+                    (float32[:], float32[:], float32[:], float32[:, :, :]),
+                ],
+                "(n),(m),(p)->(n,m,p)",
+                target="cpu",
+            )
             def func(inc, wspd, phi, sigma0_out):
                 for i_phi, one_phi in enumerate(phi):
                     for i_wspd, one_wspd in enumerate(wspd):
                         for i_inc, one_inc in enumerate(inc):
-                            sigma0_out[i_inc, i_wspd, i_phi] = func_njit(
-                                one_inc, one_wspd, one_phi)
+                            sigma0_out[i_inc, i_wspd, i_phi] = func_njit(one_inc, one_wspd, one_phi)
 
             gmf_function = func
         else:
-            raise TypeError('ftype "%s" not known' % ftype)
+            raise TypeError(f'ftype "{ftype}" not known')
 
         return gmf_function
 
@@ -238,18 +247,18 @@ class GmfModel(Model):
 
         if numba:
             if ndim == 0:
-                ftype = 'numba_njit'
+                ftype = "numba_njit"
             elif ndim == 1:
-                ftype = 'numba_guvectorize'
+                ftype = "numba_guvectorize"
             else:
-                ftype = 'numba_vectorize'
+                ftype = "numba_vectorize"
         else:
             if ndim == 0:
                 ftype = None
             elif ndim == 1:
-                ftype = 'guvectorize'
+                ftype = "guvectorize"
             else:
-                ftype = 'vectorize'
+                ftype = "vectorize"
 
         gmf_func = self._gmf_function(ftype=ftype)
         return gmf_func
@@ -257,23 +266,22 @@ class GmfModel(Model):
     @timing()
     def __call__(self, inc, wspd, phi=None, broadcast=False, numba=True):
         # if all scalar, will return scalar
-        all_scalar = all(np.isscalar(v)
-                         for v in [inc, wspd, phi] if v is not None)
+        all_scalar = all(np.isscalar(v) for v in [inc, wspd, phi] if v is not None)
         # logger.debug("Initial input shapes, inc: %s, wspd: %s, phi: %s",
         #             inc.shape, wspd.shape, phi.shape if phi is not None else "None")
 
         # if all 1d, will return 2d or 3d shape('incidence', 'wspd', 'phi'), unless broadcast is True
-        all_1d = all(hasattr(v, 'ndim') and v.ndim == 1 for v in [
-                     inc, wspd, phi] if v is not None)
+        all_1d = all(hasattr(v, "ndim") and v.ndim == 1 for v in [inc, wspd, phi] if v is not None)
 
         # if dask, will use da.map_blocks
-        dask_used = any(hasattr(v, 'data') and isinstance(
-            v.data, da.Array) for v in [inc, wspd, phi])
+        dask_used = any(
+            hasattr(v, "data") and isinstance(v.data, da.Array) for v in [inc, wspd, phi]
+        )
         # template, if available
         sigma0_gmf = None
 
         # if dims >1, will assume broadcastable
-        if any(hasattr(v, 'ndim') and v.ndim > 1 for v in [inc, wspd, phi] if v is not None):
+        if any(hasattr(v, "ndim") and v.ndim > 1 for v in [inc, wspd, phi] if v is not None):
             broadcast = True
 
         has_phi = phi is not None
@@ -290,8 +298,7 @@ class GmfModel(Model):
 
             inc_b, wspd_b, phi_b = broadcast_arrays(inc, wspd, phi)
 
-            gmf_func = self._gmf_function(
-                ftype='numba_vectorize' if numba else 'vectorize')
+            gmf_func = self._gmf_function(ftype="numba_vectorize" if numba else "vectorize")
 
             # find datarray in inputs that looks like th result
             for v in (inc, wspd, phi):
@@ -308,36 +315,33 @@ class GmfModel(Model):
                 # fallback to pure numpy for the result
                 sigma0_gmf = sigma0_gmf_data
         elif all_1d or all_scalar:
-            gmf_func = self._get_function_for_args(
-                inc, wspd, phi=phi, numba=numba)
+            gmf_func = self._get_function_for_args(inc, wspd, phi=phi, numba=numba)
             if all_scalar:
                 sigma0_gmf = gmf_func(inc, wspd, phi)
             elif all_1d:
-                default_dims = {
-                    'incidence': inc,
-                    'wspd': wspd,
-                    'phi': phi
-                }
-                dims = [v.dims[0] if hasattr(
-                    v, 'dims') else default for default, v in default_dims.items()]
-                coords = {dim: default_dims[v]
-                          for dim, v in zip(dims, default_dims.keys())}
+                default_dims = {"incidence": inc, "wspd": wspd, "phi": phi}
+                dims = [
+                    v.dims[0] if hasattr(v, "dims") else default
+                    for default, v in default_dims.items()
+                ]
+                coords = {dim: default_dims[v] for dim, v in zip(dims, default_dims.keys())}
                 sigma0_gmf = xr.DataArray(
-                    np.empty(tuple(len(v) for v in coords.values())), dims=dims, coords=coords)
+                    np.empty(tuple(len(v) for v in coords.values())), dims=dims, coords=coords
+                )
                 sigma0_gmf.data = gmf_func(inc, wspd, phi)
 
         else:
-            raise ValueError('Non 1d shape must all have the same shape')
+            raise ValueError("Non 1d shape must all have the same shape")
 
         if not has_phi:
             sigma0_gmf = np.squeeze(sigma0_gmf, -1)
             try:
-                sigma0_gmf = sigma0_gmf.drop_vars('phi')
+                sigma0_gmf = sigma0_gmf.drop_vars("phi")
             except AttributeError:
                 pass
 
         try:
-            sigma0_gmf.attrs['units'] = self.units
+            sigma0_gmf.attrs["units"] = self.units
         except AttributeError:
             pass
 
@@ -346,48 +350,46 @@ class GmfModel(Model):
     @timing(logger=logger.debug)
     def _raw_lut(self, **kwargs):
 
-        resolution = kwargs.pop('resolution', 'low')  # low res by default
-        if resolution not in ['low', 'high', None]:
-            raise ValueError(
-                'kwargs resolution must be "low" or "high" or None, or not provided')
+        resolution = kwargs.pop("resolution", "low")  # low res by default
+        if resolution not in ["low", "high", None]:
+            raise ValueError('kwargs resolution must be "low" or "high" or None, or not provided')
 
         if resolution is None:
             if self.iscopol:
                 # low resolution by default if phi (copol)
-                resolution = 'low'
+                resolution = "low"
             else:
-                resolution = 'high'
+                resolution = "high"
 
-        if resolution == 'low':
+        if resolution == "low":
             # the lut is generated at low res, for improved performance
             # self.to_lut() will interp it to high res
-            inc_step = kwargs.pop('inc_step_lr', self.inc_step_lr)
-            wspd_step = kwargs.pop('wspd_step_lr', self.wspd_step_lr)
-            phi_step = kwargs.pop('phi_step_lr', self.phi_step_lr)
+            inc_step = kwargs.pop("inc_step_lr", self.inc_step_lr)
+            wspd_step = kwargs.pop("wspd_step_lr", self.wspd_step_lr)
+            phi_step = kwargs.pop("phi_step_lr", self.phi_step_lr)
             self.inc_step_lr = inc_step
             self.wspd_step_lr = wspd_step
             self.phi_step_lr = phi_step
-        elif resolution == 'high':
-            inc_step = kwargs.pop('inc_step', self.inc_step)
-            wspd_step = kwargs.pop('wspd_step', self.wspd_step)
-            phi_step = kwargs.pop('phi_step', self.phi_step)
+        elif resolution == "high":
+            inc_step = kwargs.pop("inc_step", self.inc_step)
+            wspd_step = kwargs.pop("wspd_step", self.wspd_step)
+            phi_step = kwargs.pop("phi_step", self.phi_step)
             self.inc_step = inc_step
             self.wspd_step = wspd_step
             self.phi_step = phi_step
 
-        logger.debug('_raw_lut gmf at res %s, inc_step = %s , wspd_step = %s, phi_step = %s' % (
-            resolution, inc_step, wspd_step, phi_step))
+        logger.debug(
+            f"_raw_lut gmf at res {resolution}, inc_step = {inc_step} , wspd_step = {wspd_step}, phi_step = {phi_step}"
+        )
 
-        inc, wspd, phi = [
-            r and np.linspace(r[0], r[1], num=int(
-                np.round((r[1] - r[0]) / step) + 1))
+        inc, wspd, phi = (
+            r and np.linspace(r[0], r[1], num=int(np.round((r[1] - r[0]) / step) + 1))
             for r, step in zip(
-                [self.inc_range, self.wspd_range, self.phi_range],
-                [inc_step, wspd_step, phi_step]
+                [self.inc_range, self.wspd_range, self.phi_range], [inc_step, wspd_step, phi_step]
             )
-        ]
+        )
 
         lut = self.__call__(inc, wspd, phi)
-        lut.attrs['resolution'] = resolution
+        lut.attrs["resolution"] = resolution
 
         return lut

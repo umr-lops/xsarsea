@@ -1,28 +1,16 @@
-import os
-import warnings
-import fsspec
-import aiohttp
-import zipfile
-import yaml
-import time
 import logging
+import os
+import time
 import warnings
+import zipfile
 
+import aiohttp
+import fsspec
+import yaml
 from importlib_resources import files
 
-
-logger = logging.getLogger('xsarsea')
+logger = logging.getLogger("xsarsea")
 logger.addHandler(logging.NullHandler())
-"""
-logger.setLevel(logging.DEBUG)
-
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.DEBUG)
-formatter = logging.Formatter(
-    '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-console_handler.setFormatter(formatter)
-logger.addHandler(console_handler)
-"""
 mem_monitor = True
 
 try:
@@ -39,17 +27,15 @@ def _load_config():
     -------
     dict
     """
-    user_config_file = os.path.expanduser('~/.xsarsea/config.yml')
-    default_config_file = files('xsarsea').joinpath('config.yml')
+    user_config_file = os.path.expanduser("~/.xsarsea/config.yml")
+    default_config_file = files("xsarsea").joinpath("config.yml")
 
     if os.path.exists(user_config_file):
         config_file = user_config_file
     else:
         config_file = default_config_file
 
-    config = yaml.load(
-        open(config_file, 'r'),
-        Loader=yaml.FullLoader)
+    config = yaml.load(open(config_file), Loader=yaml.FullLoader)
     return config
 
 
@@ -74,33 +60,34 @@ def get_test_file(fname, iszip=True):
 
     """
     config = _load_config()
-    res_path = config['data_dir']
-    base_url = 'https://cyclobs.ifremer.fr/static/sarwing_datarmor/xsardata'
-    file_url = '%s/%s.zip' % (base_url, fname)
+    res_path = config["data_dir"]
+    base_url = "https://cyclobs.ifremer.fr/static/sarwing_datarmor/xsardata"
+    file_url = f"{base_url}/{fname}.zip"
 
     if not os.path.exists(os.path.join(res_path, fname)):
 
         if not iszip:
             import urllib
-            file_url = '%s/%s' % (base_url, fname)
-            warnings.warn("Downloading %s" % file_url)
-            urllib.request.urlretrieve(
-                file_url, os.path.join(res_path, fname))
+
+            file_url = f"{base_url}/{fname}"
+            warnings.warn(f"Downloading {file_url}")
+            urllib.request.urlretrieve(file_url, os.path.join(res_path, fname))
 
         else:
             if not os.path.exists(os.path.join(res_path, fname)):
-                warnings.warn("Downloading %s" % file_url)
+                warnings.warn(f"Downloading {file_url}")
                 with fsspec.open(
-                        'filecache::%s' % file_url,
-                        https={'client_kwargs': {
-                            'timeout': aiohttp.ClientTimeout(total=3600)}},
-                        filecache={'cache_storage': os.path.join(
-                            os.path.join(config['data_dir'], 'fsspec_cache'))}
+                    f"filecache::{file_url}",
+                    https={"client_kwargs": {"timeout": aiohttp.ClientTimeout(total=3600)}},
+                    filecache={
+                        "cache_storage": os.path.join(
+                            os.path.join(config["data_dir"], "fsspec_cache")
+                        )
+                    },
                 ) as f:
 
-                    warnings.warn("Unzipping %s" %
-                                  os.path.join(res_path, fname))
-                    with zipfile.ZipFile(f, 'r') as zip_ref:
+                    warnings.warn(f"Unzipping {os.path.join(res_path, fname)}")
+                    with zipfile.ZipFile(f, "r") as zip_ref:
                         zip_ref.extractall(res_path)
 
     return os.path.join(res_path, fname)
@@ -112,7 +99,7 @@ def timing(logger=logger.debug):
     def decorator(f):
         # @wraps(f)
         def wrapper(*args, **kwargs):
-            mem_str = ''
+            mem_str = ""
             process = None
             if mem_monitor:
                 process = Process(os.getpid())
@@ -122,10 +109,11 @@ def timing(logger=logger.debug):
             endtime = time.time()
             if mem_monitor:
                 endrss = process.memory_info().rss
-                mem_str = 'mem: %+.1fMb' % ((endrss - startrss) / (1024 ** 2))
-            logger(
-                'timing %s : %.2fs. %s' % (f.__name__, endtime - starttime, mem_str))
+                mem_str = "mem: %+.1fMb" % ((endrss - startrss) / (1024**2))
+            logger(f"timing {f.__name__} : {endtime - starttime:.2f}s. {mem_str}")
             return result
+
         wrapper.__doc__ = f.__doc__
         return wrapper
+
     return decorator
