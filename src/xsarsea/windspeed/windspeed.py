@@ -3,7 +3,7 @@ import warnings
 
 import numpy as np
 import xarray as xr
-from numba import complex128, float64, guvectorize, vectorize, void
+from numba import complex128, float64, guvectorize, void
 
 from xsarsea.utils import timing
 from xsarsea.windspeed.models import get_model
