@@ -361,7 +361,8 @@ class NcLutModel(LutModel):
     def __init__(self, path, **kwargs):
         name = os.path.splitext(os.path.basename(path))[0]
         # we do not want to read full dataset at this step, we just want global attributes
-        with netCDF4.Dataset(path) as ncfile:
+        # with netCDF4.Dataset(path) as ncfile:
+        with xr.open_dataset(path) as ncfile:
             for attr in [
                 "units",
                 "pol",
@@ -375,7 +376,8 @@ class NcLutModel(LutModel):
                 "phi_step",
             ]:
                 try:
-                    kwargs[attr] = ncfile.getncattr(attr)
+                    # kwargs[attr] = ncfile.getncattr(attr)
+                    kwargs[attr] = ncfile.attrs[attr]
                     if isinstance(kwargs[attr], np.ndarray):
                         kwargs[attr] = list(kwargs[attr])
                 except AttributeError:
