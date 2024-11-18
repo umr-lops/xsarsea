@@ -26,16 +26,17 @@ def test_available_models():
     assert 'gmf_cmod5n' in models
     assert 'gmf_dummy' in models
 
-    sarwing_luts_subset_path = xsarsea.utils.get_test_file(
-        'sarwing_luts_subset')
-    windspeed.register_nc_luts(sarwing_luts_subset_path)
-    assert 'sarwing_lut_cmodms1ahw' in windspeed.available_models().index
+    nc_luts_subset_path = xsarsea.utils.get_test_file(
+        'nc_luts_reduce')
+    windspeed.register_nc_luts(nc_luts_subset_path)
+    # windspeed.register_nc_luts(nc_luts_path)
+    assert 'nc_lut_cmodms1ahw' in windspeed.available_models().index
 
     nc_luts_path = xsarsea.utils.get_test_file('xsarsea_luts')
     windspeed.models.register_nc_luts(nc_luts_path)
     assert 'nc_lut_sarwing_lut_cmod5n' in windspeed.available_models().index
 
-    assert 'sarwing_lut_cmodms1ahw' in windspeed.available_models().index
+    assert 'nc_lut_cmodms1ahw' in windspeed.available_models().index
 
 
 def test_models():
@@ -103,7 +104,7 @@ def test_inversion():
         sarwing_ds.owiNrcs_cross,
         ancillary_wind=sarwing_ds.owi_ancillary_wind,
         dsig_cr=dsig_cr,
-        model=('gmf_cmod5n', 'sarwing_lut_cmodms1ahw'))
+        model=('gmf_cmod5n', 'nc_lut_cmodms1ahw'))
 
     assert isinstance(windspeed_co, xr.DataArray)
     assert isinstance(windspeed_dual, xr.DataArray)
@@ -115,7 +116,7 @@ def test_inversion():
         np.asarray(sarwing_ds.owiNrcs_cross),
         ancillary_wind=np.asarray(sarwing_ds.owi_ancillary_wind),
         dsig_cr=np.asarray(dsig_cr),
-        model=('gmf_cmod5n', 'sarwing_lut_cmodms1ahw'))
+        model=('gmf_cmod5n', 'nc_lut_cmodms1ahw'))
 
     assert isinstance(windspeed_co, np.ndarray)
     assert isinstance(windspeed_dual, np.ndarray)
@@ -130,7 +131,7 @@ def test_inversion():
         sarwing_ds.owiNrcs_cross,
         ancillary_wind=sarwing_ds.owi_ancillary_wind,
         dsig_cr=dsig_cr,
-        model=('gmf_cmod5n', 'sarwing_lut_cmodms1ahw'))
+        model=('gmf_cmod5n', 'nc_lut_cmodms1ahw'))
 
     assert isinstance(windspeed_co.data, da.Array)
     assert isinstance(windspeed_dual.data, da.Array)

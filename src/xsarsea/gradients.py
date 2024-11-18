@@ -637,7 +637,7 @@ def convolve2d(in1, in2, boundary="symm", fillvalue=0, dask=True):
 def smoothing(image):
     # filtre gaussien
 
-    B2 = np.mat("[1,2,1; 2,4,2; 1,2,1]", float) * 1 / 16
+    B2 = np.asmatrix("[1,2,1; 2,4,2; 1,2,1]", float) * 1 / 16
     B2 = np.array(B2)
 
     _image = convolve2d(image, B2, boundary="symm")
@@ -661,7 +661,7 @@ def R2(image):
         resampled
     """
 
-    B2 = np.mat("[1,2,1; 2,4,2; 1,2,1]", float) * 1 / 16
+    B2 = np.asmatrix("[1,2,1; 2,4,2; 1,2,1]", float) * 1 / 16
     B2 = np.array(B2)
     B4 = signal.convolve(B2, B2)
 
@@ -694,11 +694,11 @@ def Mean(image):
     xarray.DataArray
         smoothed
     """
-    B2 = np.mat("[1,2,1; 2,4,2; 1,2,1]", float) * 1 / 16
+    B2 = np.asmatrix("[1,2,1; 2,4,2; 1,2,1]", float) * 1 / 16
     B2 = np.array(B2)
     B4 = signal.convolve(B2, B2)
 
-    B22 = np.mat("[1,0,2,0,1;0,0,0,0,0;2,0,4,0,2;0,0,0,0,0;1,0,2,0,1]", float) * 1 / 16
+    B22 = np.asmatrix("[1,0,2,0,1;0,0,0,0,0;2,0,4,0,2;0,0,0,0,0;1,0,2,0,1]", float) * 1 / 16
     B42 = signal.convolve(B22, B22)
 
     _image = convolve2d(image, B4, boundary="symm")
