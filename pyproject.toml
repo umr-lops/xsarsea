@@ -39,9 +39,7 @@ dependencies = [
   'scipy',
   'pyyaml',
   'typer',
-  'netCDF4',
   'matplotlib',
-  'xrft',
 ]
 
 [project.urls]

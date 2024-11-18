@@ -1,0 +1,17 @@
+name: xsarsea-tests
+channels:
+  - conda-forge
+dependencies:
+  - ipython
+  - pre-commit
+  - pytest
+  - pytest-reportlog
+  - pytest-cov
+  - numpy
+  - toolz
+  - cytoolz
+  - python-dateutil
+  - construct
+  - xarray
+  - pandas
+  - aiohttp
