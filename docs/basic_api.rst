@@ -37,7 +37,3 @@ windspeed.gmfs
 
 .. automodule:: xsarsea.windspeed.cmod7
     :members: Cmod7Model
-
-
-
-

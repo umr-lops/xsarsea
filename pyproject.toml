@@ -41,6 +41,11 @@ dependencies = [
   'typer',
   'matplotlib',
 ]
+[project.optional-dependencies]
+XSAR = ["xsar"]
+RS2 = ["xradarsat2"]
+RCM = ["xarray-safe-rcm"]
+S1 = ["xarray-safe-s1"]
 
 [project.urls]
 homepage = "https://github.com/umr-lops/xsarsea.readthedocs.io"
