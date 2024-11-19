@@ -1,10 +1,12 @@
+import logging
+import os
 import warnings
+
 import numpy as np
 import yaml
 from importlib_resources import files
-import os
-import logging
-logger = logging.getLogger('xsarsea.windspeed')
+
+logger = logging.getLogger("xsarsea.windspeed")
 # logger.addHandler(logging.NullHandler())
 # logger must print
 logger.setLevel(logging.DEBUG)
@@ -33,27 +35,28 @@ def get_dsig(name, inc, sigma0_cr, nesz_cr):
         b = 1
 
         def sigmoid(x, c0, c1, d0, d1):
-            sig = d0 + d1 / (1 + np.exp(-c0*(x-c1)))
+            sig = d0 + d1 / (1 + np.exp(-c0 * (x - c1)))
             return sig
 
-        poptsig = np.array([1.57952257, 25.61843791,  1.46852088,  1.4058646])
+        poptsig = np.array([1.57952257, 25.61843791, 1.46852088, 1.4058646])
         c = sigmoid(inc, *poptsig)
-        return (1 / np.sqrt(b*(sigma0_cr / nesz_cr)**c))
+        return 1 / np.sqrt(b * (sigma0_cr / nesz_cr) ** c)
 
     elif name == "gmf_rs2_v2":
         b = 1
         c = 8
-        return (1 / np.sqrt(b*(sigma0_cr / nesz_cr)**c))
+        return 1 / np.sqrt(b * (sigma0_cr / nesz_cr) ** c)
 
     elif name == "sarwing_lut_cmodms1ahw":
-        return (1.25 / (sigma0_cr / nesz_cr)) ** 4.
+        return (1.25 / (sigma0_cr / nesz_cr)) ** 4.0
 
     elif name == "nc_lut_cmodms1ahw":
-        return (1.25 / (sigma0_cr / nesz_cr)) ** 4.
+        return (1.25 / (sigma0_cr / nesz_cr)) ** 4.0
 
     else:
         raise ValueError(
-            "dsig names different than 'gmf_s1_v2' or 'gmf_rs2_v2' or 'sarwing_lut_cmodms1ahw' or 'nc_lut_cmodms1ahw' are not handled. You can compute your own dsig_cr.")
+            "dsig names different than 'gmf_s1_v2' or 'gmf_rs2_v2' or 'sarwing_lut_cmodms1ahw' or 'nc_lut_cmodms1ahw' are not handled. You can compute your own dsig_cr."
+        )
 
 
 def nesz_flattening(noise, inc):
@@ -77,7 +80,7 @@ def nesz_flattening(noise, inc):
     Compute `dsig_cr` keyword for `xsarsea.windspeed.invert_from_model`
 
     >>> nesz_flat = nesz_flattening(nesz_cr, inc)
-    >>> dsig_cr = (1.25 / (sigma0_cr / nesz_flat )) ** 4.
+    >>> dsig_cr = (1.25 / (sigma0_cr / nesz_flat)) ** 4.0
 
     See Also
     --------
@@ -86,11 +89,10 @@ def nesz_flattening(noise, inc):
     """
 
     if noise.ndim != 2:
-        raise IndexError('Only 2D noise allowed')
+        raise IndexError("Only 2D noise allowed")
 
     with warnings.catch_warnings():
-        warnings.filterwarnings(
-            'ignore', message='.*empty.*', category=RuntimeWarning)
+        warnings.filterwarnings("ignore", message=".*empty.*", category=RuntimeWarning)
         noise_mean = np.nanmean(noise, axis=0)
 
     try:
@@ -110,17 +112,16 @@ def nesz_flattening(noise, inc):
         # to dB
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            noise_db = 10. * np.log10(noise_flat)
+            noise_db = 10.0 * np.log10(noise_flat)
 
         try:
-            _coef = np.polyfit(inc_row[np.isfinite(noise_db)],
-                               noise_db[np.isfinite(noise_db)], 1)
+            _coef = np.polyfit(inc_row[np.isfinite(noise_db)], noise_db[np.isfinite(noise_db)], 1)
         except TypeError:
             # noise is all nan
             return np.full(noise_row.shape, np.nan)
 
         # flattened, to linear
-        noise_flat = 10. ** ((inc_row * _coef[0] + _coef[1] - 1.0) / 10.)
+        noise_flat = 10.0 ** ((inc_row * _coef[0] + _coef[1] - 1.0) / 10.0)
 
         return noise_flat
 
@@ -136,9 +137,10 @@ def _load_config_luts(config_path):
     dict
     """
 
-    user_config_file = open(config_path, 'r')
-    default_config_file = files('xsarsea').joinpath("windspeed").joinpath(
-        'config_luts_default_direct_01_01_10.yml')
+    user_config_file = open(config_path)
+    default_config_file = (
+        files("xsarsea").joinpath("windspeed").joinpath("config_luts_default_direct_01_01_10.yml")
+    )
 
     if os.exists(user_config_file.exists):
         config_file = user_config_file
@@ -146,8 +148,6 @@ def _load_config_luts(config_path):
         # logger.info(f"Using default config file {default_config_file}")
         # config_file = default_config_file
         raise FileNotFoundError(f"Config file {user_config_file} not found")
-    config = yaml.load(
-        open(config_file),
-        Loader=yaml.FullLoader)
+    config = yaml.load(open(config_file), Loader=yaml.FullLoader)
 
     return config

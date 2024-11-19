@@ -81,4 +81,3 @@ Last documentation build: |today|
 .. _xsar: https://cyclobs.ifremer.fr/static/sarwing_datarmor/xsar
 .. _Detrend sigma0: examples/xsarsea.ipynb#Sigma0-detrending
 .. _Wind streaks direction: examples/streaks.ipynb#Streaks-analysis
-

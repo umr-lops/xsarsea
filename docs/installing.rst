@@ -4,10 +4,10 @@
 Installation
 #############
 
-Although `xsar`_ is not a required dependancy, `xsar`_ installation is recomended.
+Although `xsar`_ is not a required dependency, `xsar`_ installation is recomended.
 All examples in this documentation will use `xsar`_.
 
-Before installing, be sure to activate the xsar conda environement:
+Before installing, be sure to activate the xsar conda environment:
 
 .. code-block:: shell
 
