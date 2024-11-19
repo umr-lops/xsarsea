@@ -91,8 +91,8 @@ def test_inversion():
         owi_ecmwf_wind.to_dataset(name='owi_ancillary_wind'),
     ])
 
-    sarwing_luts_subset_path = xsarsea.get_test_file('sarwing_luts_subset')
-    windspeed.pickle_luts.register_pickle_luts(sarwing_luts_subset_path)
+    nc_luts_subset_path = xsarsea.get_test_file('nc_luts_reduce')
+    windspeed.pickle_luts.register_pickle_luts(nc_luts_subset_path)
 
     nesz_cross_flat = windspeed.nesz_flattening(
         sarwing_ds.owiNesz_cross, sarwing_ds.owiIncidenceAngle)
