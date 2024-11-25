@@ -17,3 +17,7 @@ dependencies:
   - aiohttp
   - fsspec
   - dask
+  - numba
+  - opencv-python
+  - pyyaml
+  - matplotlib
