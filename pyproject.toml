@@ -41,6 +41,7 @@ dependencies = [
   'typer',
   'dask',
   'matplotlib',
+  'h5netcdf'
 ]
 [project.optional-dependencies]
 XSAR = ["xsar"]
