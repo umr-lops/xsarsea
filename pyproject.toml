@@ -39,6 +39,7 @@ dependencies = [
   'scipy',
   'pyyaml',
   'typer',
+  'dask',
   'matplotlib',
 ]
 [project.optional-dependencies]
