@@ -7,8 +7,10 @@ import zipfile
 import aiohttp
 import fsspec
 import yaml
-from importlib_resources import files
-
+try:
+    from importlib_resources import files
+except:
+    from importlib.resources import files # new syntaxe
 logger = logging.getLogger("xsarsea")
 logger.addHandler(logging.NullHandler())
 mem_monitor = True

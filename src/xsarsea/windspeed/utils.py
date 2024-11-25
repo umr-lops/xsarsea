@@ -4,7 +4,10 @@ import warnings
 
 import numpy as np
 import yaml
-from importlib_resources import files
+try:
+    from importlib_resources import files
+except:
+    from importlib.resources import files # new syntaxe
 
 logger = logging.getLogger("xsarsea.windspeed")
 # logger.addHandler(logging.NullHandler())
