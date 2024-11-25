@@ -33,8 +33,7 @@ windspeed.gmfs
 --------------
 
 .. automodule:: xsarsea.windspeed.gmfs
-    :members: GmfModel, cmod7Model
+    :members: GmfModel
 
-
-
-
+.. automodule:: xsarsea.windspeed.cmod7
+    :members: Cmod7Model
