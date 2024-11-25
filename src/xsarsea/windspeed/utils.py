@@ -3,7 +3,12 @@ import os
 import warnings
 
 import numpy as np
-from importlib_resources import files
+
+import yaml
+try:
+    from importlib_resources import files
+except:
+    from importlib.resources import files # new syntaxe
 
 import logging
 logger = logging.getLogger('xsarsea.windspeed.utils')

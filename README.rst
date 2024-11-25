@@ -4,9 +4,6 @@ xsarsea
 .. image:: https://img.shields.io/pypi/v/xsarsea.svg
         :target: https://pypi.python.org/pypi/xsarsea
 
-.. image:: https://img.shields.io/travis/umr-lops/xsarsea.svg
-        :target: https://travis-ci.com/umr-lops/xsarsea
-
 .. image:: https://readthedocs.org/projects/xsarsea/badge/?version=latest
         :target: https://xsarsea.readthedocs.io/en/latest/?version=latest
         :alt: Documentation Status
