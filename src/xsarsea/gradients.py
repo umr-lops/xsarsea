@@ -327,14 +327,31 @@ class Gradients:
 
     @staticmethod
     def _sigma0_resample(sigma0, factor):
+
         if factor == 1:
             return sigma0
-        __sigma0 = sigma0.isel(line=slice(0, None, factor), sample=slice(0, None, factor)).copy(
-            True
-        )
-        __sigma0.values[::] = cv2.resize(sigma0.values, __sigma0.shape[::-1], cv2.INTER_AREA)
-        return __sigma0
 
+        def compute_coords(coords, factor):
+            n = (len(coords) // factor) * factor
+            coords_trimmed = coords[:n]
+            coords_reshaped = coords_trimmed.reshape(-1, factor)
+            return coords_reshaped.mean(axis=1)
+
+        target_line = int(np.floor(sigma0.sizes['line'] / factor))
+        target_sample = int(np.floor(sigma0.sizes['sample'] / factor))
+
+        resized_values = cv2.resize(
+            sigma0.values, (target_sample, target_line), interpolation=cv2.INTER_AREA)
+
+        line_coords = compute_coords(sigma0.line.values, factor)
+        sample_coords = compute_coords(sigma0.sample.values, factor)
+        other_coords = {coord: sigma0.coords[coord]
+                        for coord in sigma0.coords if coord not in ['line', 'sample']}
+
+        return xr.DataArray(resized_values, dims=['line', 'sample'],
+                            coords={'line': line_coords,
+                                    'sample': sample_coords, **other_coords},
+                            attrs=sigma0.attrs)
 
 class PlotGradients:
     """Plotting class"""
@@ -637,7 +654,8 @@ def convolve2d(in1, in2, boundary="symm", fillvalue=0, dask=True):
 def smoothing(image):
     # filtre gaussien
 
-    B2 = np.asmatrix("[1,2,1; 2,4,2; 1,2,1]", float) * 1 / 16
+    B2 = np.asmatrix('[1,2,1; 2,4,2; 1,2,1]', float) * 1 / 16
+
     B2 = np.array(B2)
 
     _image = convolve2d(image, B2, boundary="symm")
@@ -661,7 +679,8 @@ def R2(image):
         resampled
     """
 
-    B2 = np.asmatrix("[1,2,1; 2,4,2; 1,2,1]", float) * 1 / 16
+    B2 = np.asmatrix('[1,2,1; 2,4,2; 1,2,1]', float) * 1 / 16
+
     B2 = np.array(B2)
     B4 = signal.convolve(B2, B2)
 
@@ -694,11 +713,13 @@ def Mean(image):
     xarray.DataArray
         smoothed
     """
-    B2 = np.asmatrix("[1,2,1; 2,4,2; 1,2,1]", float) * 1 / 16
+    B2 = np.asmatrix('[1,2,1; 2,4,2; 1,2,1]', float) * 1 / 16
     B2 = np.array(B2)
     B4 = signal.convolve(B2, B2)
 
-    B22 = np.asmatrix("[1,0,2,0,1;0,0,0,0,0;2,0,4,0,2;0,0,0,0,0;1,0,2,0,1]", float) * 1 / 16
+    B22 = np.asmatrix(
+        '[1,0,2,0,1;0,0,0,0,0;2,0,4,0,2;0,0,0,0,0;1,0,2,0,1]', float) * 1/16
+
     B42 = signal.convolve(B22, B22)
 
     _image = convolve2d(image, B4, boundary="symm")

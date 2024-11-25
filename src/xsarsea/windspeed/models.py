@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-logger = logging.getLogger("xsarsea.windspeed")
+logger = logging.getLogger('xsarsea.windspeed.models')
 
 
 class Model:
