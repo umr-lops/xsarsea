@@ -38,14 +38,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Strip python version
-        run: cat environment.yml | egrep -vw python > environment-nopython.yml
-      - uses: conda-incubator/setup-miniconda@v3
+        run: cat ci/requirements/environment.yaml | egrep -vw python > environment-nopython.yml
+      - uses: mamba-org/setup-micromamba@v2
         with:
-          auto-update-conda: true
-          activate-environment: xsarsea
-          environment-file: environment-nopython.yml
-          condarc-file: condarc.yml
-          python-version: ${{ matrix.python-version }}
+          environment-file: ${{ env.CONDA_ENV_FILE }}
+          environment-name: xsarsea-tests
+          cache-environment: true
+          cache-environment-key: "${{runner.os}}-${{runner.arch}}-py${{matrix.python-version}}-${{env.TODAY}}-${{hashFiles(env.CONDA_ENV_FILE)}}"
+          create-args: >-
+            python=${{matrix.python-version}}
 
       - name: install xsarsea from feedstock
         run: | 
