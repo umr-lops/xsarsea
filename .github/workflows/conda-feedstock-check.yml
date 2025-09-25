@@ -13,7 +13,7 @@ jobs:
 # from https://michaelheap.com/dynamic-matrix-generation-github-actions/
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - id: get-matrix
         run: |
           echo "get matrix for event ${{ github.event_name }}"
