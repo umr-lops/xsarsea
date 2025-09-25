@@ -48,6 +48,11 @@ jobs:
           create-args: >-
             python=${{matrix.python-version}}
 
+      - name: Activate environment
+        run: |
+          source ~/.bashrc
+          conda activate xsarsea-tests
+
       - name: install xsarsea from feedstock
         run: | 
           conda install -c conda-forge xsarsea
