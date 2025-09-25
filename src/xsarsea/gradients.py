@@ -9,7 +9,8 @@ https://www.climate-service-center.de/imperia/md/content/gkss/institut_fuer_kues
 
 """
 
-__all__ = ["Gradients", "Gradients2D", "circ_smooth", "PlotGradients", "circ_hist"]
+__all__ = ["Gradients", "Gradients2D",
+           "circ_smooth", "PlotGradients", "circ_hist"]
 
 try:
     import cv2
@@ -66,7 +67,8 @@ class Gradients2D:
         windows_at: dict
         """
         if window_step is not None and windows_at is not None:
-            raise ValueError("window_step and window_at are mutually exclusive")
+            raise ValueError(
+                "window_step and window_at are mutually exclusive")
         if window_step is None and windows_at is None:
             window_step = 1
         self.sigma0 = sigma0
@@ -90,7 +92,8 @@ class Gradients2D:
         direction histogram as a xarray.Dataset, for all windows from `self.stepping_gradients`.
         This is the main attribute needed by user.
         """
-        angles_bins = np.linspace(-np.pi / 2, np.pi / 2, self.n_angles + 1)  # one extra bin
+        angles_bins = np.linspace(-np.pi / 2, np.pi / 2,
+                                  self.n_angles + 1)  # one extra bin
         # suppress extra bin (middle)
         angles_bins = (angles_bins[1:] + angles_bins[:-1]) / 2
         with warnings.catch_warnings():
@@ -111,11 +114,13 @@ class Gradients2D:
                 vectorize=True,
                 output_dtypes=[np.float64, np.float64],
             )
-            grad_hist = grad_hist.rename("weight").assign_coords(angles=angles_bins)
+            grad_hist = grad_hist.rename(
+                "weight").assign_coords(angles=angles_bins)
             ratio = ratio.rename("used_ratio").fillna(0)
         _histogram = xr.merge((grad_hist, ratio))
         # normalize histogram so values are independents from window size
-        window_pixels = mul(*(stepping_gradients[k].size for k in self._window_dims.values()))
+        window_pixels = mul(
+            *(stepping_gradients[k].size for k in self._window_dims.values()))
         _histogram["weight"] = _histogram["weight"] / window_pixels
         return _histogram
 
@@ -148,7 +153,8 @@ class Gradients2D:
         lg = self.local_gradients
         # self.window_size is in asample coordinate, and we want it in pixels of lg
         window_size = np.mean(
-            tuple(self.window_size / np.unique(np.diff(ax))[0] for ax in [lg.line, lg.sample])
+            tuple(self.window_size / np.unique(np.diff(ax))
+                  [0] for ax in [lg.line, lg.sample])
         )
         window = {k: int(window_size) for k in self._spatial_dims}
         return lg.rolling(window, center=True).construct(self._window_dims)
@@ -179,7 +185,8 @@ class Gradients2D:
 
             step_size = int(window_size * self.window_step)
 
-            ds = self.sigma0.isel(line=slice(0, None, step_size), sample=slice(0, None, step_size))
+            ds = self.sigma0.isel(line=slice(
+                0, None, step_size), sample=slice(0, None, step_size))
 
             self._windows_at = {"line": ds.line, "sample": ds.sample}
         return self._windows_at
@@ -288,7 +295,8 @@ class Gradients:
                 )
                 for ws in windows_sizes:
                     self.gradients_list.append(
-                        Gradients2D(sigma0_resampled.assign_coords(window_size=ws), window_size=ws)
+                        Gradients2D(sigma0_resampled.assign_coords(
+                            window_size=ws), window_size=ws)
                     )
 
         # 1st gradient define windows_at from window_step for all others gradients
@@ -327,13 +335,31 @@ class Gradients:
 
     @staticmethod
     def _sigma0_resample(sigma0, factor):
+
         if factor == 1:
             return sigma0
-        __sigma0 = sigma0.isel(line=slice(0, None, factor), sample=slice(0, None, factor)).copy(
-            True
-        )
-        __sigma0.values[::] = cv2.resize(sigma0.values, __sigma0.shape[::-1], cv2.INTER_AREA)
-        return __sigma0
+
+        def compute_coords(coords, factor):
+            n = (len(coords) // factor) * factor
+            coords_trimmed = coords[:n]
+            coords_reshaped = coords_trimmed.reshape(-1, factor)
+            return coords_reshaped.mean(axis=1)
+
+        target_line = int(np.floor(sigma0.sizes['line'] / factor))
+        target_sample = int(np.floor(sigma0.sizes['sample'] / factor))
+
+        resized_values = cv2.resize(
+            sigma0.values, (target_sample, target_line), interpolation=cv2.INTER_AREA)
+
+        line_coords = compute_coords(sigma0.line.values, factor)
+        sample_coords = compute_coords(sigma0.sample.values, factor)
+        other_coords = {coord: sigma0.coords[coord]
+                        for coord in sigma0.coords if coord not in ['line', 'sample']}
+
+        return xr.DataArray(resized_values, dims=['line', 'sample'],
+                            coords={'line': line_coords,
+                                    'sample': sample_coords, **other_coords},
+                            attrs=sigma0.attrs)
 
 
 class PlotGradients:
@@ -353,7 +379,8 @@ class PlotGradients:
         self._spatial_dims = ["sample", "line"]
         # non spatial dims, probably like  ['pol' 'window_dims' 'downscale_factor']
         self._non_spatial_dims = list(
-            set(gradients_hist.dims) - set(self._spatial_dims) - set(["angles"])
+            set(gradients_hist.dims) -
+            set(self._spatial_dims) - set(["angles"])
         )
 
         # list of dicts, where keys are from self._non_spatial_dims, and values are all possible values for key
@@ -361,7 +388,8 @@ class PlotGradients:
         self.combine_all = [
             dict(zip(self._non_spatial_dims, comb))
             for comb in list(
-                product(*[self.gradients_hist[k].values for k in self._non_spatial_dims])
+                product(
+                    *[self.gradients_hist[k].values for k in self._non_spatial_dims])
             )
         ]
 
@@ -433,10 +461,12 @@ class PlotGradients:
             for st in self.styles_names:
                 label = self.peak[st].dims[0]
                 for item in self.peak[st]:
-                    style = {"line_dash": "solid", "line_width": 1, "line_color": "k"}
+                    style = {"line_dash": "solid",
+                             "line_width": 1, "line_color": "k"}
                     style.update({st: item.item()})
                     legends.append(
-                        hv.Curve(dummy_line, label=f"{label} {item[label].item()}")
+                        hv.Curve(
+                            dummy_line, label=f"{label} {item[label].item()}")
                         .redim.label(x="sample", y="line")
                         .opts(**style)
                     )
@@ -447,7 +477,8 @@ class PlotGradients:
         if tap:
             line = self.peak.line.values[self.peak.line.size // 2]
             sample = self.peak.sample.values[self.peak.sample.size // 2]
-            self._mouse_stream = hv.streams.Tap(x=sample, y=line, source=self._vectorfield)
+            self._mouse_stream = hv.streams.Tap(
+                x=sample, y=line, source=self._vectorfield)
             return self._vectorfield * hv.DynamicMap(
                 self._get_windows, streams=[self._mouse_stream]
             )
@@ -468,7 +499,8 @@ class PlotGradients:
             # called by hv streams (like a mouse tap)
             sample = data[0]
             line = data[1]
-        nearest_center = self.peak.sel(line=line, sample=sample, method="nearest", tolerance=1e6)
+        nearest_center = self.peak.sel(
+            line=line, sample=sample, method="nearest", tolerance=1e6)
         line = nearest_center.line.values.item()
         sample = nearest_center.sample.values.item()
         return sample, line
@@ -492,7 +524,8 @@ class PlotGradients:
                 np.diff(
                     np.array(
                         [
-                            [self.gradients_hist[ax].isel({ax: i}).item() for i in [0, 1]]
+                            [self.gradients_hist[ax].isel(
+                                {ax: i}).item() for i in [0, 1]]
                             for ax in ["line", "sample"]
                         ]
                     )
@@ -508,12 +541,14 @@ class PlotGradients:
                 sample + ws / 2,
             )
             try:
-                style = self._get_style(self.gradients_hist.sel(window_size=ws))
+                style = self._get_style(
+                    self.gradients_hist.sel(window_size=ws))
             except (IndexError, KeyError):
                 style = {}
             windows_list.append(
                 hv.Path(
-                    [[(xmin, amin), (xmin, amax), (xmax, amax), (xmax, amin), (xmin, amin)]]
+                    [[(xmin, amin), (xmin, amax), (xmax, amax),
+                      (xmax, amin), (xmin, amin)]]
                 ).opts(**style)
             )
 
@@ -531,7 +566,8 @@ class PlotGradients:
         sample, line = self._get_xline(sample=sample, line=line)
 
         # get histogram
-        hist_at = self.gradients_hist.sel(line=line, sample=sample, method="nearest", tolerance=500)
+        hist_at = self.gradients_hist.sel(
+            line=line, sample=sample, method="nearest", tolerance=500)
 
         hp_list = []
         for sel_one2D in self.combine_all:
@@ -627,9 +663,11 @@ def convolve2d(in1, in2, boundary="symm", fillvalue=0, dask=True):
             all chunks must be >= {str(in2.shape)}.
             """
             )
-        res.data = in1.data.map_overlap(_conv2d, depth=in2.shape, boundary=boundary_map[boundary])
+        res.data = in1.data.map_overlap(
+            _conv2d, depth=in2.shape, boundary=boundary_map[boundary])
     else:
-        res.data = signal.convolve2d(in1.data, in2, mode="same", boundary=boundary)
+        res.data = signal.convolve2d(
+            in1.data, in2, mode="same", boundary=boundary)
 
     return res
 
@@ -637,7 +675,8 @@ def convolve2d(in1, in2, boundary="symm", fillvalue=0, dask=True):
 def smoothing(image):
     # filtre gaussien
 
-    B2 = np.asmatrix("[1,2,1; 2,4,2; 1,2,1]", float) * 1 / 16
+    B2 = np.asmatrix('[1,2,1; 2,4,2; 1,2,1]', float) * 1 / 16
+
     B2 = np.array(B2)
 
     _image = convolve2d(image, B2, boundary="symm")
@@ -661,7 +700,8 @@ def R2(image):
         resampled
     """
 
-    B2 = np.asmatrix("[1,2,1; 2,4,2; 1,2,1]", float) * 1 / 16
+    B2 = np.asmatrix('[1,2,1; 2,4,2; 1,2,1]', float) * 1 / 16
+
     B2 = np.array(B2)
     B4 = signal.convolve(B2, B2)
 
@@ -694,19 +734,22 @@ def Mean(image):
     xarray.DataArray
         smoothed
     """
-    B2 = np.asmatrix("[1,2,1; 2,4,2; 1,2,1]", float) * 1 / 16
+    B2 = np.asmatrix('[1,2,1; 2,4,2; 1,2,1]', float) * 1 / 16
     B2 = np.array(B2)
     B4 = signal.convolve(B2, B2)
 
-    B22 = np.asmatrix("[1,0,2,0,1;0,0,0,0,0;2,0,4,0,2;0,0,0,0,0;1,0,2,0,1]", float) * 1 / 16
+    B22 = np.asmatrix(
+        '[1,0,2,0,1;0,0,0,0,0;2,0,4,0,2;0,0,0,0,0;1,0,2,0,1]', float) * 1/16
+
     B42 = signal.convolve(B22, B22)
 
     _image = convolve2d(image, B4, boundary="symm")
-    num = convolve2d(np.ones_like(_image), B4, boundary="symm")
+
+    num = convolve2d(xr.ones_like(_image), B4, boundary="symm")
     image = _image / num
 
     _image = convolve2d(image, B42, boundary="symm")
-    num = convolve2d(np.ones_like(_image), B4, boundary="symm")
+    num = convolve2d(xr.ones_like(_image), B4, boundary="symm")
     image = _image / num
 
     return image
@@ -854,7 +897,8 @@ def circ_smooth(hist):
     Bx = np.array([1, 2, 1], float) * 1 / 4
     Bx2 = np.array([1, 0, 2, 0, 1], float) * 1 / 4
     Bx4 = np.array([1, 0, 0, 0, 2, 0, 0, 0, 1], float) * 1 / 4
-    Bx8 = np.array([1, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 1], float) * 1 / 4
+    Bx8 = np.array([1, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0,
+                   0, 0, 0, 0, 0, 1], float) * 1 / 4
     Bs = [Bx, Bx2, Bx4, Bx8]
 
     # circular wrap
@@ -898,7 +942,8 @@ def circ_hist(hist_at):
     hist_at = hist_at * np.exp(1j * hist_at.angles)
 
     # central symmetry, to get 360°
-    hist_at = xr.concat([hist_at, -hist_at], "angles").drop_vars(["line", "sample"])
+    hist_at = xr.concat([hist_at, -hist_at],
+                        "angles").drop_vars(["line", "sample"])
     hist_at["angles"] = np.angle(hist_at)
     hist_at["sample_g"] = np.real(hist_at)
     hist_at["line_g"] = np.imag(hist_at)
@@ -907,6 +952,7 @@ def circ_hist(hist_at):
     circ_hist_pts = hist_at.to_dataframe("tmp")[["line_g", "sample_g"]]
 
     # close path
-    circ_hist_pts = pd.concat([circ_hist_pts, pd.DataFrame(circ_hist_pts.iloc[0]).T])
+    circ_hist_pts = pd.concat(
+        [circ_hist_pts, pd.DataFrame(circ_hist_pts.iloc[0]).T])
 
     return circ_hist_pts

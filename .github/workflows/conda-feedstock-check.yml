@@ -1,3 +1,28 @@
+name: Conda feedstock test
+
+# this workflow generate the documentation, using conda-feedstock
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '00 23 * * 0'
+
+
+jobs:
+  dynamic-matrix:
+# from https://michaelheap.com/dynamic-matrix-generation-github-actions/
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: get-matrix
+        run: |
+          echo "get matrix for event ${{ github.event_name }}"
+          echo "::echo::on"
+          python .github/actions/dynamic_matrix.py ${{ github.event_name }}
+    outputs:
+      os_matrix: ${{ steps.get-matrix.outputs.os_matrix }}
+      python_version_matrix: ${{ steps.get-matrix.outputs.python_version_matrix }}
+
   build:
     needs: dynamic-matrix
     strategy:
@@ -8,59 +33,28 @@
     runs-on: ${{ matrix.os }}
     defaults:
       run:
-        # Keep the default shell as bash -l {0} for consistency,
-        # but ensure conda is initialized correctly.
         shell: bash -l {0}
     name: python ${{ matrix.python-version }} on ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Strip python version
-        run: cat environment.yml | egrep -vw python > environment-nopython.yml
-      - uses: conda-incubator/setup-miniconda@v3
+        run: cat ci/requirements/environment.yaml | egrep -vw python > environment-nopython.yml
+      - uses: mamba-org/setup-micromamba@v2
         with:
-          auto-update-conda: true
-          activate-environment: xsarsea
-          environment-file: environment-nopython.yml
-          condarc-file: condarc.yml
-          python-version: ${{ matrix.python-version }}
-          # Crucially, tell miniconda to initialize the shell for bash
-          # This will modify the .bashrc or similar for subsequent interactive shells
-          # Also, ensure base environment is not auto-activated if you want to use 'xsarsea'
-          # but `activate-environment` will handle that.
-          auto-activate-base: false # We want to activate 'xsarsea', not base
-          # Add this to ensure conda init is run for bash
-          # This is often needed on non-linux systems or specific bash setups
-          # Though `activate-environment` should handle it.
-          # The key is to make sure the environment is sourced for *each* new bash shell.
-          # If this still fails, you might need to source manually.
+          environment-file: ${{ env.CONDA_ENV_FILE }}
+          environment-name: xsarsea-tests
+          cache-environment: true
+          cache-environment-key: "${{runner.os}}-${{runner.arch}}-py${{matrix.python-version}}-${{env.TODAY}}-${{hashFiles(env.CONDA_ENV_FILE)}}"
+          create-args: >-
+            python=${{matrix.python-version}}
 
-      - name: Initialize Conda and Activate Environment (if not already active)
-        # This step ensures that if the previous step didn't fully initialize conda for new bash sessions,
-        # we do it explicitly. The `conda-incubator/setup-miniconda` should handle this,
-        # but if `conda` is still not found, this is a robust fallback.
-        # This is especially relevant if `setup-miniconda` doesn't persist the PATH modification across `run` steps
-        # when `shell: bash -l {0}` is used, creating a new login shell for each `run`.
+      - name: Activate environment
         run: |
-          # Source miniconda.sh to put conda in PATH if it's not already there.
-          # The exact path might vary, but it's usually in MAMBA_ROOT_PREFIX/etc/profile.d/conda.sh
-          # The setup-miniconda action usually sets MAMBA_ROOT_PREFIX
-          if [ -d "${MAMBA_ROOT_PREFIX}" ]; then
-            source "${MAMBA_ROOT_PREFIX}/etc/profile.d/conda.sh"
-            conda activate xsarsea
-          else
-            echo "MAMBA_ROOT_PREFIX not found, attempting generic conda init"
-            # Fallback for generic conda init if MAMBA_ROOT_PREFIX isn't set
-            # This is less reliable but can be a last resort.
-            # Find conda.sh if it exists globally or in a common place
-            if [ -f "/opt/conda/etc/profile.d/conda.sh" ]; then
-              source "/opt/conda/etc/profile.d/conda.sh"
-              conda activate xsarsea
-            fi
-          fi
-        # Make this a separate step to debug if `conda` is still not found here.
+          source ~/.bashrc
+          conda activate xsarsea-tests
 
       - name: install xsarsea from feedstock
-        run: |
+        run: | 
           conda install -c conda-forge xsarsea
           (cd docs ; pip install -r ../requirements.txt)
 
@@ -74,3 +68,4 @@
         run: |
           cd docs
           make html
+
