@@ -1,24 +1,16 @@
 import logging
-import os
 import warnings
 
 import numpy as np
 
-import yaml
-try:
-    from importlib_resources import files
-except:
-    from importlib.resources import files  # new syntaxe
-
-import logging
-logger = logging.getLogger('xsarsea.windspeed.utils')
+logger = logging.getLogger("xsarsea.windspeed.utils")
 logger.setLevel(logging.INFO)
 
 
 def get_dsig_wspd(name, U_crosspol, SNR_cr):
     def alpha(U_crosspol, SNR_cr, b, c0_base, gamma, k, Umax=30):
         c0 = c0_base - gamma * SNR_cr
-        x = (U_crosspol - c0)
+        x = U_crosspol - c0
         alpha_core = 1 / (1 + np.exp(-b * x))
         drop = 1 / (1 + np.exp((U_crosspol - Umax) * k))
         return np.clip(alpha_core * drop, 0, 1)
@@ -124,8 +116,7 @@ def nesz_flattening(noise, inc):
         raise IndexError("Only 2D noise allowed")
 
     with warnings.catch_warnings():
-        warnings.filterwarnings(
-            "ignore", message=".*empty.*", category=RuntimeWarning)
+        warnings.filterwarnings("ignore", message=".*empty.*", category=RuntimeWarning)
         noise_mean = np.nanmean(noise, axis=0)
 
     try:
@@ -148,8 +139,7 @@ def nesz_flattening(noise, inc):
             noise_db = 10.0 * np.log10(noise_flat)
 
         try:
-            _coef = np.polyfit(
-                inc_row[np.isfinite(noise_db)], noise_db[np.isfinite(noise_db)], 1)
+            _coef = np.polyfit(inc_row[np.isfinite(noise_db)], noise_db[np.isfinite(noise_db)], 1)
         except TypeError:
             # noise is all nan
             return np.full(noise_row.shape, np.nan)

@@ -16,7 +16,7 @@ __all__ = [
     "gmfs",
     "gmfs_impl",
     "get_dsig",
-    "get_dsig_wspd"
+    "get_dsig_wspd",
 ]
 
 from xsarsea.windspeed import gmfs, gmfs_impl
@@ -30,5 +30,5 @@ from xsarsea.windspeed.models import (
     register_nc_luts,
 )
 from xsarsea.windspeed.pickle_luts import register_pickle_luts
-from xsarsea.windspeed.utils import get_dsig, nesz_flattening, get_dsig_wspd
+from xsarsea.windspeed.utils import get_dsig, get_dsig_wspd, nesz_flattening
 from xsarsea.windspeed.windspeed import invert_from_model

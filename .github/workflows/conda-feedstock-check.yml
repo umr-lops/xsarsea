@@ -1,46 +1,46 @@
 build:
-    needs: dynamic-matrix
-    strategy:
-      fail-fast: false
-      matrix:
-        os: ${{ fromJson(needs.dynamic-matrix.outputs.os_matrix) }}
-        python-version: ${{ fromJson(needs.dynamic-matrix.outputs.python_version_matrix) }}
-    runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        shell: bash -l {0}
-    name: python ${{ matrix.python-version }} on ${{ matrix.os }}
-    env:
-      CONDA_ENV_FILE: ci/requirements/environment.yaml # Define this once here
-    steps:
-      - uses: actions/checkout@v5
-      - name: Strip python version
-        run: cat ci/requirements/environment.yaml | egrep -vw python > environment-nopython.yml
-      - uses: mamba-org/setup-micromamba@v2
-        with:
-          environment-file: environment-nopython.yml # Use the stripped environment file
-          environment-name: xsarsea-tests
-          cache-environment: true
-          cache-environment-key: "${{runner.os}}-${{runner.arch}}-py${{matrix.python-version}}-${{env.TODAY}}-${{hashFiles('environment-nopython.yml')}}"
-          create-args: >-
-            python=${{matrix.python-version}}
+  needs: dynamic-matrix
+  strategy:
+    fail-fast: false
+    matrix:
+      os: ${{ fromJson(needs.dynamic-matrix.outputs.os_matrix) }}
+      python-version: ${{ fromJson(needs.dynamic-matrix.outputs.python_version_matrix) }}
+  runs-on: ${{ matrix.os }}
+  defaults:
+    run:
+      shell: bash -l {0}
+  name: python ${{ matrix.python-version }} on ${{ matrix.os }}
+  env:
+    CONDA_ENV_FILE: ci/requirements/environment.yaml # Define this once here
+  steps:
+    - uses: actions/checkout@v5
+    - name: Strip python version
+      run: cat ci/requirements/environment.yaml | egrep -vw python > environment-nopython.yml
+    - uses: mamba-org/setup-micromamba@v2
+      with:
+        environment-file: environment-nopython.yml # Use the stripped environment file
+        environment-name: xsarsea-tests
+        cache-environment: true
+        cache-environment-key: "${{runner.os}}-${{runner.arch}}-py${{matrix.python-version}}-${{env.TODAY}}-${{hashFiles('environment-nopython.yml')}}"
+        create-args: >-
+          python=${{matrix.python-version}}
 
-      # You no longer need the "Activate environment" step.
-      # The environment should already be active after setup-micromamba.
+    # You no longer need the "Activate environment" step.
+    # The environment should already be active after setup-micromamba.
 
-      - name: install xsarsea from feedstock
-        run: |
-          # The environment should be active at this point
-          conda install -c conda-forge xsarsea
-          (cd docs ; pip install -r ../requirements.txt)
+    - name: install xsarsea from feedstock
+      run: |
+        # The environment should be active at this point
+        conda install -c conda-forge xsarsea
+        (cd docs ; pip install -r ../requirements.txt)
 
-      - name: List Packages
-        run: |
-          python -V
-          conda info
-          conda list
+    - name: List Packages
+      run: |
+        python -V
+        conda info
+        conda list
 
-      - name: Documentation test
-        run: |
-          cd docs
-          make html
+    - name: Documentation test
+      run: |
+        cd docs
+        make html
