@@ -50,9 +50,9 @@ def test_invert_from_model_copol(mock_dataset):
     with patch("xsarsea.windspeed.invert_from_model") as mock_invert:
         mock_invert.return_value = np.ones((10, 10)) * 5
         result = windspeed.invert_from_model(
-            mock_dataset.incidence,
-            mock_dataset.sigma0_ocean.isel(pol=0),
-            ancillary_wind=mock_dataset["ancillary_wind"],
+            mock_dataset.incidence.values,
+            mock_dataset.sigma0_ocean.isel(pol=0).values,
+            ancillary_wind=mock_dataset["ancillary_wind"].values,
 
             model="cmod5n",
         )
@@ -65,8 +65,8 @@ def test_invert_from_model_crosspol(mock_dataset):
         GMF_VH_NAME = "gmf_s1_v2"
         mock_invert.return_value = np.ones((10, 10)) * 7
         result = windspeed.invert_from_model(
-            mock_dataset.incidence,
-            mock_dataset.sigma0_ocean.isel(pol=1),
+            mock_dataset.incidence.values,
+            mock_dataset.sigma0_ocean.isel(pol=1).values,
             model=GMF_VH_NAME,
             # dsig_cr=mock_dataset['dsig_cr']
         )
@@ -81,10 +81,10 @@ def test_invert_from_model_dualpol(mock_dataset):
         model=(GMF_VV_NAME,GMF_VH_NAME)
         mock_invert.return_value = (np.ones((10, 10)) * 6, np.ones((10, 10)) * 8)
         result_co, result_dual = windspeed.invert_from_model(
-            mock_dataset.incidence,
-            mock_dataset.sigma0_ocean.isel(pol=0),
-            mock_dataset.sigma0_ocean.isel(pol=1),
-            ancillary_wind=mock_dataset['ancillary_wind'],
+            mock_dataset.incidence.values,
+            mock_dataset.sigma0_ocean.isel(pol=0).values,
+            mock_dataset.sigma0_ocean.isel(pol=1).values,
+            ancillary_wind=mock_dataset['ancillary_wind'].values,
             model=model,
         )
         assert result_co.shape == (10, 10)
