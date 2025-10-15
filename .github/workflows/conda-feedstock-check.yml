@@ -1,29 +1,4 @@
-name: Conda feedstock test
-
-# this workflow generate the documentation, using conda-feedstock
-
-on:
-  workflow_dispatch:
-  schedule:
-    - cron: '00 23 * * 0'
-
-
-jobs:
-  dynamic-matrix:
-# from https://michaelheap.com/dynamic-matrix-generation-github-actions/
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - id: get-matrix
-        run: |
-          echo "get matrix for event ${{ github.event_name }}"
-          echo "::echo::on"
-          python .github/actions/dynamic_matrix.py ${{ github.event_name }}
-    outputs:
-      os_matrix: ${{ steps.get-matrix.outputs.os_matrix }}
-      python_version_matrix: ${{ steps.get-matrix.outputs.python_version_matrix }}
-
-  build:
+build:
     needs: dynamic-matrix
     strategy:
       fail-fast: false
@@ -35,26 +10,27 @@ jobs:
       run:
         shell: bash -l {0}
     name: python ${{ matrix.python-version }} on ${{ matrix.os }}
+    env:
+      CONDA_ENV_FILE: ci/requirements/environment.yaml # Define this once here
     steps:
       - uses: actions/checkout@v5
       - name: Strip python version
         run: cat ci/requirements/environment.yaml | egrep -vw python > environment-nopython.yml
       - uses: mamba-org/setup-micromamba@v2
         with:
-          environment-file: ${{ env.CONDA_ENV_FILE }}
+          environment-file: environment-nopython.yml # Use the stripped environment file
           environment-name: xsarsea-tests
           cache-environment: true
-          cache-environment-key: "${{runner.os}}-${{runner.arch}}-py${{matrix.python-version}}-${{env.TODAY}}-${{hashFiles(env.CONDA_ENV_FILE)}}"
+          cache-environment-key: "${{runner.os}}-${{runner.arch}}-py${{matrix.python-version}}-${{env.TODAY}}-${{hashFiles('environment-nopython.yml')}}"
           create-args: >-
             python=${{matrix.python-version}}
 
-      - name: Activate environment
-        run: |
-          source ~/.bashrc
-          conda activate xsarsea-tests
+      # You no longer need the "Activate environment" step.
+      # The environment should already be active after setup-micromamba.
 
       - name: install xsarsea from feedstock
-        run: | 
+        run: |
+          # The environment should be active at this point
           conda install -c conda-forge xsarsea
           (cd docs ; pip install -r ../requirements.txt)
 
@@ -68,4 +44,3 @@ jobs:
         run: |
           cd docs
           make html
-
