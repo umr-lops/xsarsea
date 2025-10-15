@@ -14,8 +14,8 @@ def mock_dataset():
     line = np.arange(10)
     sample = np.arange(10)
     incidence = np.ones((10, 10)) * 30
-    sigma0_vv = np.ones((10, 10)) * 10
-    sigma0_vh = np.ones((10, 10)) * 5
+    sigma0_vv = np.ones((10, 10)) * 0.1
+    sigma0_vh = np.ones((10, 10)) * 0.15
 
      # Module aléatoire entre 5 et 15, angle aléatoire entre 0 et 360°
     # module = np.random.uniform(5, 15, (10, 10))
@@ -50,14 +50,14 @@ def test_invert_from_model_copol(mock_dataset):
     with patch("xsarsea.windspeed.invert_from_model") as mock_invert:
         mock_invert.return_value = np.ones((10, 10)) * 5
         result = windspeed.invert_from_model(
-            mock_dataset.incidence.values,
-            mock_dataset.sigma0_ocean.isel(pol=0).values,
-            ancillary_wind=mock_dataset["ancillary_wind"].values,
+            mock_dataset.incidence,
+            mock_dataset.sigma0_ocean.isel(pol=0),
+            ancillary_wind=mock_dataset["ancillary_wind"],
 
             model="cmod5n",
         )
         assert result.shape == (10, 10)
-        assert np.allclose(result.real, 31.2)
+        assert np.allclose(result.real, 6.49960225)
 
 def test_invert_from_model_crosspol(mock_dataset):
     """Test inversion en mode crosspol (VH)."""
@@ -65,8 +65,8 @@ def test_invert_from_model_crosspol(mock_dataset):
         GMF_VH_NAME = "gmf_s1_v2"
         mock_invert.return_value = np.ones((10, 10)) * 7
         result = windspeed.invert_from_model(
-            mock_dataset.incidence.values,
-            mock_dataset.sigma0_ocean.isel(pol=1).values,
+            mock_dataset.incidence,
+            mock_dataset.sigma0_ocean.isel(pol=1),
             model=GMF_VH_NAME,
             # dsig_cr=mock_dataset['dsig_cr']
         )
@@ -81,16 +81,16 @@ def test_invert_from_model_dualpol(mock_dataset):
         model=(GMF_VV_NAME,GMF_VH_NAME)
         mock_invert.return_value = (np.ones((10, 10)) * 6, np.ones((10, 10)) * 8)
         result_co, result_dual = windspeed.invert_from_model(
-            mock_dataset.incidence.values,
-            mock_dataset.sigma0_ocean.isel(pol=0).values,
-            mock_dataset.sigma0_ocean.isel(pol=1).values,
-            ancillary_wind=mock_dataset['ancillary_wind'].values,
+            mock_dataset.incidence,
+            mock_dataset.sigma0_ocean.isel(pol=0),
+            mock_dataset.sigma0_ocean.isel(pol=1),
+            ancillary_wind=mock_dataset['ancillary_wind'],
             model=model,
         )
         assert result_co.shape == (10, 10)
         assert result_dual.shape == (10, 10)
-        assert np.allclose(result_co.real, 31.2)
-        assert np.allclose(result_dual.real, 80)
+        assert np.allclose(result_co.real, 6.49960225)
+        assert np.allclose(result_dual.real, 48.14520185)
 
 
 
