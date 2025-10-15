@@ -10,8 +10,8 @@ import yaml
 
 try:
     from importlib_resources import files
-except:
-    from importlib.resources import files # new syntaxe
+except ImportError:
+    from importlib.resources import files  # new syntaxe
 logger = logging.getLogger("xsarsea")
 logger.addHandler(logging.NullHandler())
 

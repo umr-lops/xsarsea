@@ -13,7 +13,7 @@ CMOD, sigma0 detrend, and others sar processing tools over ocean.
 Installation
 ------------
 
-`xsarsea` is supposed to use  [xsar](https://github.com/umr-lops/xsar) objects to map SAR products into `xarray` Datasets. 
+`xsarsea` is supposed to use  [xsar](https://github.com/umr-lops/xsar) objects to map SAR products into `xarray` Datasets.
 
 now you can install xsarsea
 

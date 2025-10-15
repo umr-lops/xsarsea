@@ -18,9 +18,9 @@
 # -- Project information -----------------------------------------------------
 import xsarsea
 
-project = 'xsarsea'
-copyright = '2022, Ifremer LOPS/SIAM'
-author = 'Olivier Archer, Alexandre Levieux'
+project = "xsarsea"
+copyright = "2022, Ifremer LOPS/SIAM"
+author = "Olivier Archer, Alexandre Levieux"
 version = xsarsea.__version__
 
 # -- General configuration ---------------------------------------------------
@@ -29,19 +29,19 @@ version = xsarsea.__version__
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
-    'sphinx.ext.autodoc',
-    'sphinx.ext.napoleon',
-    'sphinx_rtd_theme',
-    'nbsphinx',
-    'jupyter_sphinx',
-    'sphinxcontrib.programoutput'
+    "sphinx.ext.autodoc",
+    "sphinx.ext.napoleon",
+    "sphinx_rtd_theme",
+    "nbsphinx",
+    "jupyter_sphinx",
+    "sphinxcontrib.programoutput",
 ]
 
 # order by source
-autodoc_member_order = 'bysource'
+autodoc_member_order = "bysource"
 
 # document class and __init__ method
-autoclass_content = 'both'
+autoclass_content = "both"
 
 # Napoleon settings
 napoleon_google_docstring = True
@@ -59,12 +59,12 @@ napoleon_type_aliases = None
 
 
 # Add any paths that contain templates here, relative to this directory.
-templates_path = ['_templates']
+templates_path = ["_templates"]
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
+exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 
 # -- Options for HTML output -------------------------------------------------
@@ -73,20 +73,20 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 # a list of builtin themes.
 #
 # html_theme = 'alabaster'
-html_theme = 'sphinx_rtd_theme'
+html_theme = "sphinx_rtd_theme"
 
-html_style = 'css/xsarsea.css'
+html_style = "css/xsarsea.css"
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ['_static']
+html_static_path = ["_static"]
 
 html_theme_options = {
-    'logo_only': False,
-    'display_version': True,
-    'navigation_depth': 4,  # FIXME: doesn't work as expeted: should expand side menu
-    'collapse_navigation': False # FIXME: same as above
+    "logo_only": False,
+    "display_version": True,
+    "navigation_depth": 4,  # FIXME: doesn't work as expeted: should expand side menu
+    "collapse_navigation": False,  # FIXME: same as above
 }
 
 # If true, links to the reST sources are added to the pages.
@@ -102,4 +102,4 @@ Download this notebook from github_.
 ----
 """
 
-today_fmt = '%b %d %Y at %H:%M'
+today_fmt = "%b %d %Y at %H:%M"

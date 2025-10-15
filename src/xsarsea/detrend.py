@@ -82,8 +82,10 @@ def read_sarwing_owi(owi_file):
         in xsar like format
     """
 
-    sarwing_ds = xr.open_dataset(owi_file)
-    sarwing_ds = xr.merge([sarwing_ds, xr.open_dataset(owi_file, group="owiInversionTables_UV")])
+    sarwing_ds = xr.open_dataset(owi_file, engine="h5netcdf")
+    sarwing_ds = xr.merge(
+        [sarwing_ds, xr.open_dataset(owi_file, engine="h5netcdf", group="owiInversionTables_UV")]
+    )
     sarwing_ds = sarwing_ds.rename_dims({"owiAzSize": "line", "owiRaSize": "sample"})
     sarwing_ds = sarwing_ds.drop_vars(["owiCalConstObsi", "owiCalConstInci"])
     sarwing_ds = sarwing_ds.assign_coords(

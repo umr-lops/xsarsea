@@ -1,18 +1,18 @@
+import logging
 import sys
 import warnings
 
 import numpy as np
 import xarray as xr
-
-import logging
 from numba import complex128, float64, guvectorize, void
 
 from xsarsea.utils import timing
 from xsarsea.windspeed.models import get_model
 from xsarsea.windspeed.utils import logger
 
-logger = logging.getLogger('xsarsea.windspeed')
+logger = logging.getLogger("xsarsea.windspeed")
 logger.setLevel(logging.DEBUG)
+
 
 @timing(logger.debug)
 def invert_from_model(
@@ -299,8 +299,7 @@ def invert_from_model(
                 return out_co.reshape(ori_shape), out_cr.reshape(ori_shape)
 
         else:
-            logger.debug(
-                'using guvectorize')
+            logger.debug("using guvectorize")
 
             # fastmath can be used, but we will need nan handling
             __invert_from_model_vect = timing(logger=logger.debug)(
@@ -367,7 +366,7 @@ def invert_from_model(
                     raise TypeError
 
             except (ImportError, TypeError):
-                logger.debug('Finally invert with numpy')
+                logger.debug("Finally invert with numpy")
 
                 # use numpy array, but store in xarray
                 da_ws_co.data, da_ws_cr.data = _invert_from_model_numpy(
@@ -394,7 +393,9 @@ def invert_from_model(
 
     if models[0] and models[0].iscopol:
         try:
-            ws_co.attrs["comment"] = f"wind speed and direction inverted from model {models[0].name} ({models[0].pol})"
+            ws_co.attrs["comment"] = (
+                f"wind speed and direction inverted from model {models[0].name} ({models[0].pol})"
+            )
             ws_co.attrs["model"] = models[0].name
             # ws_co.attrs['units'] = 'm/s'
         except AttributeError:
@@ -405,7 +406,9 @@ def invert_from_model(
         if sigma0_dual is None and models[1].iscrosspol:
             # crosspol only
             try:
-                ws_cr_or_dual.attrs["comment"] = f"wind speed inverted from model {models[1].name} ({models[1].pol})"
+                ws_cr_or_dual.attrs["comment"] = (
+                    f"wind speed inverted from model {models[1].name} ({models[1].pol})"
+                )
                 ws_cr_or_dual.attrs["model"] = models[1].name
                 ws_cr_or_dual.attrs["units"] = "m/s"
             except AttributeError:

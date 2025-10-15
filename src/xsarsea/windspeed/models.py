@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-logger = logging.getLogger('xsarsea.windspeed.models')
+logger = logging.getLogger("xsarsea.windspeed.models")
 
 
 class Model:
@@ -26,7 +26,7 @@ class Model:
 
     @abstractmethod
     def __init__(self, name, **kwargs):
-        logger.debug('name model : %s',name)
+        logger.debug("name model : %s", name)
         self.name = name
         self.pol = kwargs.pop("pol", None)
         self.units = kwargs.pop("units", None)
@@ -362,8 +362,8 @@ class NcLutModel(LutModel):
         name = os.path.splitext(os.path.basename(path))[0]
         # we do not want to read full dataset at this step, we just want global attributes
         # with netCDF4.Dataset(path) as ncfile:
-        logger.debug('path model : %s',path)
-        with xr.open_dataset(path) as ncfile:
+        logger.debug("path model : %s", path)
+        with xr.open_dataset(path, engine="h5netcdf") as ncfile:
 
             for attr in [
                 "units",
@@ -387,7 +387,7 @@ class NcLutModel(LutModel):
                         if "phi" not in attr:
                             raise AttributeError(f"Attr {attr} not found in {path}")
                 else:
-                    logger.debug('no %s attribute for model : %s',attr,name)
+                    logger.debug("no %s attribute for model : %s", attr, name)
         self._short_name = kwargs.pop("model")
         if kwargs["resolution"] == "low":
             kwargs["inc_step_lr"] = kwargs.pop("inc_step")
@@ -400,7 +400,7 @@ class NcLutModel(LutModel):
     def _raw_lut(self, **kwargs):
         if not os.path.isfile(self.path):
             raise FileNotFoundError(self.path)
-        ds_lut = xr.open_dataset(self.path)
+        ds_lut = xr.open_dataset(self.path, engine="h5netcdf")
 
         lut = ds_lut.sigma0_model
         lut.attrs["units"] = ds_lut.attrs["units"]
