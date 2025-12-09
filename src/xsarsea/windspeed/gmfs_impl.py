@@ -5,7 +5,7 @@ from xsarsea.windspeed.gmfs import GmfModel
 # analytical functions
 
 
-def gmf_cmod5_generic(neutral=False):
+def gmf_cmod5_generic(neutral=False, ZhangA=False):
     # return cmod5 or cmod5n (neutral) function
 
     # Coefficients and constants
@@ -81,7 +81,16 @@ def gmf_cmod5_generic(neutral=False):
             ]
         )
         name = "gmf_cmod5n"
+    pol="VV"
+    if ZhangA:
+        # cmod5 modify with a PR coefficient from ZhangA to be applied to HH, 
+        # without the need of luts.
+        ar = np.array([1.3794, -3.19e-2, 1.4e-3])
+        br = np.array([-0.1711, 2.6e-3])
+        name = "gmf_cmod5_pr_zhangA"
+        pol="HH"
 
+    @GmfModel.register(name, wspd_range=[0.2, 50.0], pol=pol, units="linear", defer=False)
     def gmf_cmod5(inc, wspd, phi):
         zpow = 1.6
         thetm = 40.0
@@ -129,21 +138,22 @@ def gmf_cmod5_generic(neutral=False):
 
         # Sigma0 according to Fourier terms
         sig = b0 * (1.0 + b1 * cosphi + b2 * (2.0 * cosphi**2.0 - 1.0)) ** zpow
+
+        if ZhangA:
+            ars2 = np.polynomial.polynomial.polyval(inc, ar)
+            brs2 = np.polynomial.polynomial.polyval(inc, br)
+            PR = ars2 * (wspd**brs2)
+            sig = sig/PR
+
         return sig
 
-    return gmf_cmod5, name
+    return gmf_cmod5
 
 
 # register gmfs gmf_cmod5 and gmf_cmod5n
-for neutral in [True, False]:
-    gmf, name = gmf_cmod5_generic(neutral=neutral)
-    GmfModel.register(
-        name,
-         wspd_range=[0.2, 50.0],
-         pol="VV",
-         units="linear",
-         defer=False
-    )(gmf)
+gmf_cmod5_generic(neutral=False)
+gmf_cmod5_generic(neutral=True)
+gmf_cmod5_generic(neutral=True, ZhangA = True)
 
 
 
@@ -642,36 +652,3 @@ def gmf_rs2_v4(incidence, speed, phi=None):
     sigmoid1 = 1 / (1 + np.exp(-c0 * (u10 - c1)))
     sigmoid2 = 1 / (1 + np.exp(-c2 * (u10 - c3)))
     return 10**((10 * np.log10(sig_Z1) * sigmoid1 + 10 * np.log10(sig_Z2) * sigmoid2) / 10)
-
-
-@GmfModel.register(wspd_range=[0.2, 50.0], pol="HH", units="linear", defer=False)
-def gmf_cmod5_pr_zhangA(inc, wspd, phi=None):
-    """
-    HH GMF : relation between sigma0, incidence and windspeed.
-    cmod5 modify with a PR coefficient from ZhangA to be applied to HH, without the need of luts.
-
-    Parameters
-    ----------
-    incidence: xarray.DataArray
-        incidence angle [deg]
-    speed: xarray.DataArray
-        wind speed [m/s]
-
-    Returns
-    -------
-    sigma0: xarray.DataArray
-        linear sigma0
-
-    """
-
-    gmf_cmod5, _ = gmf_cmod5_generic(neutral=True)
-    sigma_cmod5 = gmf_cmod5(inc, wspd, phi)
-
-    # PR ZhangA
-    ar = [1.3794, -3.19e-2, 1.4e-3]
-    br = [-0.1711, 2.6e-3]
-    ars2 = np.polynomial.polynomial.polyval(inc, ar)
-    brs2 = np.polynomial.polynomial.polyval(inc, br)
-    PR = ars2 * (wspd**brs2)
-
-    return sigma_cmod5 / PR
