@@ -8,10 +8,10 @@ from xsarsea.windspeed.gmfs import GmfModel
 def gmf_cmod5_generic(neutral=False, ZhangA=False):
     """
     Returns one of the GMF functions:
-    - CMOD5 (default) 
-    - CMOD5n (neutral=True)
+    - gmf_cmod5 (default)
+    - gmf_cmod5n (neutral=True)
     - gmf_cmod5_pr_zhangA (neutral=True, ZhangA=True)
-    
+
     If ZhangA=True, VV CMOD5 detrending method is adjusted to HH polarization using the ZhangA polarization ratio without LUTs.
     """
 
@@ -88,13 +88,13 @@ def gmf_cmod5_generic(neutral=False, ZhangA=False):
             ]
         )
         name = "gmf_cmod5n"
-    pol="VV"
+    pol = "VV"
     if ZhangA:
         # Polarization ratio coefficients from ZhangA
         ar = np.array([1.3794, -3.19e-2, 1.4e-3])
         br = np.array([-0.1711, 2.6e-3])
         name = "gmf_cmod5_pr_zhangA"
-        pol="HH"
+        pol = "HH"
 
     @GmfModel.register(name, wspd_range=[0.2, 50.0], pol=pol, units="linear", defer=False)
     def gmf_cmod5(inc, wspd, phi):
@@ -128,8 +128,7 @@ def gmf_cmod5_generic(neutral=False, ZhangA=False):
         b0 = (a3**gam) * 10.0 ** (a0 + a1 * wspd)
 
         # B1 term
-        b1 = c[15] * wspd * \
-            (0.5 + x - np.tanh(4.0 * (x + c[16] + c[17] * wspd)))
+        b1 = c[15] * wspd * (0.5 + x - np.tanh(4.0 * (x + c[16] + c[17] * wspd)))
         b1 = (c[14] * (1.0 + x) - b1) / (np.exp(0.34 * (wspd - c[18])) + 1.0)
 
         # B2 term
@@ -152,7 +151,7 @@ def gmf_cmod5_generic(neutral=False, ZhangA=False):
             PR = ars2 * (wspd**brs2)
 
             # Adjust sigma0 for HH polarization using the ZhangA polarization ratio PR
-            sig = sig/PR
+            sig = sig / PR
 
         return sig
 
@@ -162,8 +161,7 @@ def gmf_cmod5_generic(neutral=False, ZhangA=False):
 # register gmfs gmf_cmod5, gmf_cmod5n and gmf_cmod5_pr_zhangA
 gmf_cmod5_generic(neutral=False)
 gmf_cmod5_generic(neutral=True)
-gmf_cmod5_generic(neutral=True, ZhangA = True)
-
+gmf_cmod5_generic(neutral=True, ZhangA=True)
 
 
 @GmfModel.register(wspd_range=[0.2, 50.0], pol="VV", units="linear", defer=False)
