@@ -95,7 +95,7 @@ def gmf_cmod5_generic(neutral=False, ZhangA=False, Mouche=False):
         # Polarization ratio coefficients from ZhangA
         ar = np.array([1.3794, -3.19e-2, 1.4e-3])
         br = np.array([-0.1711, 2.6e-3])
-        name = "gmf_cmod5_pr_zhangA"
+        name = name + "_pr_zhangA"
         pol = "HH"
     if Mouche:
         # Polarization ratio coefficients from Mouche et al. (2005)
@@ -110,7 +110,7 @@ def gmf_cmod5_generic(neutral=False, ZhangA=False, Mouche=False):
         Api = 0.00598416
         Bpi = 0.140952
         Cpi = 0.992885
-        name = "gmf_cmod5_pr_mouche"
+        name = name + "_pr_mouche"
         pol = "HH"
 
     @GmfModel.register(name, wspd_range=[0.2, 50.0], pol=pol, units="linear", defer=False)
