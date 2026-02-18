@@ -110,7 +110,7 @@ def gmf_cmod5_generic(neutral=False, ZhangA=False, Mouche=False):
         Api = 0.00598416
         Bpi = 0.140952
         Cpi = 0.992885
-        name = name + "_pr_mouche"
+        name = name + "_pr_mouche1"
         pol = "HH"
 
     @GmfModel.register(name, wspd_range=[0.2, 50.0], pol=pol, units="linear", defer=False)
@@ -203,7 +203,7 @@ def gmf_cmod5_generic(neutral=False, ZhangA=False, Mouche=False):
     return gmf_cmod5
 
 
-# register gmfs gmf_cmod5, gmf_cmod5n, gmf_cmod5_pr_zhangA and gmf_cmod5_pr_mouche
+# register gmfs gmf_cmod5, gmf_cmod5n, gmf_cmod5n_pr_zhangA and gmf_cmod5n_pr_mouche1
 gmf_cmod5_generic(neutral=False)
 gmf_cmod5_generic(neutral=True)
 gmf_cmod5_generic(neutral=True, ZhangA=True)
