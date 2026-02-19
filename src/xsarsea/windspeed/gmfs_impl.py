@@ -5,14 +5,16 @@ from xsarsea.windspeed.gmfs import GmfModel
 # analytical functions
 
 
-def gmf_cmod5_generic(neutral=False, ZhangA=False):
+def gmf_cmod5_generic(neutral=False, ZhangA=False, Mouche=False):
     """
     Returns one of the GMF functions:
     - gmf_cmod5 (default)
     - gmf_cmod5n (neutral=True)
     - gmf_cmod5_pr_zhangA (neutral=True, ZhangA=True)
+    - gmf_cmod5_pr_mouche (neutral=True, Mouche=True)
 
-    If ZhangA=True, VV CMOD5 detrending method is adjusted to HH polarization using the ZhangA polarization ratio without LUTs.
+    If ZhangA=True, converts VV CMOD5 to HH polarization using sigma0_HH = sigma0_VV / PR_zhang.
+    If Mouche=True, converts VV CMOD5 to HH polarization using sigma0_HH = sigma0_VV / PR_mouche.
     """
 
     # Coefficients and constants
@@ -93,7 +95,22 @@ def gmf_cmod5_generic(neutral=False, ZhangA=False):
         # Polarization ratio coefficients from ZhangA
         ar = np.array([1.3794, -3.19e-2, 1.4e-3])
         br = np.array([-0.1711, 2.6e-3])
-        name = "gmf_cmod5_pr_zhangA"
+        name = name + "_pr_zhangA"
+        pol = "HH"
+    if Mouche:
+        # Polarization ratio coefficients from Mouche et al. (2005)
+        # Mouche, A., Hauser, D., Kudryavtsev, V., and Daloze, J.-F. (2005)
+        # Multi-polarisation ocean radar cross-section from envisat asar observations
+        A0 = 0.00650704
+        B0 = 0.128983
+        C0 = 0.992839
+        Api2 = 0.00782194
+        Bpi2 = 0.121405
+        Cpi2 = 0.992839
+        Api = 0.00598416
+        Bpi = 0.140952
+        Cpi = 0.992885
+        name = name + "_pr_mouche1"
         pol = "HH"
 
     @GmfModel.register(name, wspd_range=[0.2, 50.0], pol=pol, units="linear", defer=False)
@@ -128,7 +145,8 @@ def gmf_cmod5_generic(neutral=False, ZhangA=False):
         b0 = (a3**gam) * 10.0 ** (a0 + a1 * wspd)
 
         # B1 term
-        b1 = c[15] * wspd * (0.5 + x - np.tanh(4.0 * (x + c[16] + c[17] * wspd)))
+        b1 = c[15] * wspd * \
+            (0.5 + x - np.tanh(4.0 * (x + c[16] + c[17] * wspd)))
         b1 = (c[14] * (1.0 + x) - b1) / (np.exp(0.34 * (wspd - c[18])) + 1.0)
 
         # B2 term
@@ -147,10 +165,37 @@ def gmf_cmod5_generic(neutral=False, ZhangA=False):
         if ZhangA:
             ars2 = np.polynomial.polynomial.polyval(inc, ar)
             brs2 = np.polynomial.polynomial.polyval(inc, br)
-            # ZhangA polarisation ratio
+            # ZhangA polarisation ratio PR = f(inc, wspd)
             PR = ars2 * (wspd**brs2)
 
             # Adjust sigma0 for HH polarization using the ZhangA polarization ratio PR
+            sig = sig / PR
+
+        if Mouche:
+            # Alexis Mouche, D. Hauser,
+            # V. Kudryavtsev and JF. Daloze,
+            # "Multi polarization ocean radar
+            # cross-section from ENVISAT ASAR
+            # observations, airborne polarimetric
+            # radar measurements and empirical or
+            # semi-empirical models", ESA
+            # ERS/ENVISAT Symposium, Salzburg,
+            # September 2004
+
+            # Mouche polarisation ratio PR = f(inc, phi)
+            P0_theta = A0 * np.exp(B0 * inc) + C0
+            Ppi2_theta = Api2 * np.exp(Bpi2 * inc) + Cpi2
+            Ppi_theta = Api * np.exp(Bpi * inc) + Cpi
+
+            C0_theta = (P0_theta + Ppi_theta + 2 * Ppi2_theta) / 4
+            C1_theta = (P0_theta - Ppi_theta) / 2
+            C2_theta = (P0_theta + Ppi_theta - 2 * Ppi2_theta) / 4
+
+            PR = C0_theta + C1_theta * \
+                np.cos(np.deg2rad(phi)) + C2_theta * \
+                np.cos(2 * np.deg2rad(phi))
+
+            # Adjust sigma0 for HH polarization using the Mouche polarization ratio PR
             sig = sig / PR
 
         return sig
@@ -158,10 +203,11 @@ def gmf_cmod5_generic(neutral=False, ZhangA=False):
     return gmf_cmod5
 
 
-# register gmfs gmf_cmod5, gmf_cmod5n and gmf_cmod5_pr_zhangA
+# register gmfs gmf_cmod5, gmf_cmod5n, gmf_cmod5n_pr_zhangA and gmf_cmod5n_pr_mouche1
 gmf_cmod5_generic(neutral=False)
 gmf_cmod5_generic(neutral=True)
 gmf_cmod5_generic(neutral=True, ZhangA=True)
+gmf_cmod5_generic(neutral=True, Mouche=True)
 
 
 @GmfModel.register(wspd_range=[0.2, 50.0], pol="VV", units="linear", defer=False)
